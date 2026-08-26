@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build and tooling output
+dist/
+build/
+.vite/
+coverage/
+*.tsbuildinfo
+.cache/
+.tmp/
+tmp/
+
+# Test output
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+
+# Local runtime data
+data/
+backups/
+*.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Environment and logs
+.env
+.env.*
+!.env.example
+!.env.*.example
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

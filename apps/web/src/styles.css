@@ -1,0 +1,252 @@
+@import "@xyflow/react/dist/style.css";
+@import "tailwindcss";
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #07101f;
+  color: #e2e8f0;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+button,
+select {
+  font: inherit;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 100vh;
+  padding: 20px;
+  gap: 16px;
+}
+
+.app-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 8px 4px;
+}
+
+.app-header h1 {
+  margin: 4px 0;
+  font-size: clamp(1.5rem, 3vw, 2.5rem);
+}
+
+.app-header p {
+  margin: 0;
+  color: #94a3b8;
+}
+
+.app-header .app-eyebrow {
+  color: #22d3ee;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.app-controls {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.app-controls label {
+  display: grid;
+  gap: 5px;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.app-controls select,
+.app-controls output {
+  min-height: 38px;
+  border: 1px solid #334155;
+  border-radius: 9px;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 8px 10px;
+}
+
+.app-controls output {
+  display: grid;
+  place-items: center;
+  min-width: 110px;
+  color: #67e8f9;
+  font-size: 0.8rem;
+}
+
+.canvas-shell {
+  min-height: 620px;
+  overflow: hidden;
+  border: 1px solid #22304a;
+  border-radius: 18px;
+  background: #0b1424;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 25%);
+}
+
+.diagram-group {
+  width: 100%;
+  height: 100%;
+  border: 1px solid #475569;
+  border-radius: 16px;
+  background: rgb(15 23 42 / 72%);
+  box-shadow: inset 0 0 0 1px rgb(148 163 184 / 6%);
+}
+
+.diagram-group.is-collapsed {
+  background: #111f35;
+}
+
+.diagram-group__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 56px;
+  padding: 10px 14px;
+}
+
+.diagram-group__header h2,
+.diagram-kicker {
+  margin: 0;
+}
+
+.diagram-group__header h2 {
+  font-size: 0.95rem;
+}
+
+.diagram-kicker {
+  color: #67e8f9;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.diagram-group__toggle {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #475569;
+  border-radius: 8px;
+  background: #17243a;
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.diagram-group__summary {
+  margin: -4px 14px 0;
+  color: #94a3b8;
+  font-size: 0.72rem;
+}
+
+.diagram-table {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid #334155;
+  border-radius: 11px;
+  background: #101b2e;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 22%);
+}
+
+.diagram-table__header {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-height: 48px;
+  padding: 13px 14px;
+  border-bottom: 1px solid #29364d;
+}
+
+.diagram-table__header span {
+  color: #64748b;
+  font-size: 0.7rem;
+}
+
+.diagram-table__header strong {
+  color: #f8fafc;
+  font-size: 0.92rem;
+}
+
+.diagram-table__columns {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.diagram-table__columns li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 12px;
+  color: #cbd5e1;
+  font-size: 0.68rem;
+}
+
+.diagram-table__columns code {
+  color: #7dd3fc;
+  font-size: 0.62rem;
+}
+
+.diagram-table__key {
+  color: #fbbf24;
+  font-size: 0.58rem;
+  font-weight: 800;
+}
+
+.diagram-edge-label {
+  position: absolute;
+  border: 1px solid #475569;
+  border-radius: 999px;
+  background: #0f172a;
+  color: #67e8f9;
+  padding: 2px 6px;
+  font-size: 0.65rem;
+  font-weight: 800;
+}
+
+.react-flow__edge-path {
+  stroke: #64748b;
+  stroke-width: 1.5;
+}
+
+.react-flow__handle {
+  width: 7px;
+  height: 7px;
+  border: 1px solid #0f172a;
+  background: #22d3ee;
+}
+
+@media (max-width: 760px) {
+  .app-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .app-controls {
+    flex-wrap: wrap;
+  }
+}

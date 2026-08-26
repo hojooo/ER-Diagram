@@ -1,0 +1,21 @@
+{
+  "name": "@er-diagram/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@er-diagram/contracts": "workspace:*",
+    "@er-diagram/core": "workspace:*",
+    "@er-diagram/storage-sqlite": "workspace:*",
+    "fastify": "5.12.1"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  }
+}

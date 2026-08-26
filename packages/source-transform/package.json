@@ -1,0 +1,28 @@
+{
+  "name": "@er-diagram/source-transform",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@er-diagram/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@er-diagram/test-fixtures": "workspace:*",
+    "@types/node": "24.10.0",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  }
+}
