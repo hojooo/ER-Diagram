@@ -1,0 +1,189 @@
+{
+  "schemaVersion": 1,
+  "packages": [
+    {
+      "name": "@biomejs/biome",
+      "version": "2.5.10",
+      "licenseExpression": "MIT OR Apache-2.0",
+      "selectedLicense": "Apache-2.0",
+      "source": "https://github.com/biomejs/biome"
+    },
+    {
+      "name": "@dbml/core",
+      "version": "9.1.1",
+      "licenseExpression": "Apache-2.0",
+      "source": "https://github.com/holistics/dbml/tree/master/packages/dbml-core"
+    },
+    {
+      "name": "@dbml/parse",
+      "version": "9.1.1",
+      "licenseExpression": "Apache-2.0",
+      "source": "https://github.com/holistics/dbml/tree/master/packages/dbml-parse"
+    },
+    {
+      "name": "@playwright/test",
+      "version": "1.62.1",
+      "licenseExpression": "Apache-2.0",
+      "source": "https://github.com/microsoft/playwright",
+      "upstreamNotice": "NOTICE"
+    },
+    {
+      "name": "@tailwindcss/vite",
+      "version": "4.3.3",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/tailwindlabs/tailwindcss/tree/main/packages/@tailwindcss-vite"
+    },
+    {
+      "name": "@tanstack/react-query",
+      "version": "5.102.4",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/TanStack/query/tree/main/packages/react-query"
+    },
+    {
+      "name": "@testing-library/dom",
+      "version": "10.4.1",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/testing-library/dom-testing-library"
+    },
+    {
+      "name": "@testing-library/jest-dom",
+      "version": "7.0.1",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/testing-library/jest-dom"
+    },
+    {
+      "name": "@testing-library/react",
+      "version": "16.3.2",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/testing-library/react-testing-library"
+    },
+    {
+      "name": "@types/better-sqlite3",
+      "version": "9.6.0",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/better-sqlite3"
+    },
+    {
+      "name": "@types/node",
+      "version": "24.10.0",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node"
+    },
+    {
+      "name": "@types/react",
+      "version": "19.2.18",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react"
+    },
+    {
+      "name": "@types/react-dom",
+      "version": "19.2.5",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react-dom"
+    },
+    {
+      "name": "@vitejs/plugin-react",
+      "version": "6.1.0",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react"
+    },
+    {
+      "name": "@xyflow/react",
+      "version": "12.11.5",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/xyflow/xyflow/tree/main/packages/react"
+    },
+    {
+      "name": "better-sqlite3",
+      "version": "13.0.3",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/WiseLibs/better-sqlite3"
+    },
+    {
+      "name": "dependency-cruiser",
+      "version": "18.2.0",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/sverweij/dependency-cruiser"
+    },
+    {
+      "name": "drizzle-orm",
+      "version": "0.45.2",
+      "licenseExpression": "Apache-2.0",
+      "source": "https://github.com/drizzle-team/drizzle-orm"
+    },
+    {
+      "name": "elkjs",
+      "version": "0.12.0",
+      "licenseExpression": "EPL-2.0 OR GPL-3.0-or-later",
+      "selectedLicense": "EPL-2.0",
+      "source": "https://github.com/kieler/elkjs"
+    },
+    {
+      "name": "fastify",
+      "version": "5.12.1",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/fastify/fastify"
+    },
+    {
+      "name": "jsdom",
+      "version": "29.0.1",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/jsdom/jsdom"
+    },
+    {
+      "name": "monaco-editor",
+      "version": "0.56.0",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/microsoft/monaco-editor"
+    },
+    {
+      "name": "react",
+      "version": "19.2.8",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/react/react/tree/main/packages/react"
+    },
+    {
+      "name": "react-dom",
+      "version": "19.2.8",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/react/react/tree/main/packages/react-dom"
+    },
+    {
+      "name": "tailwindcss",
+      "version": "4.3.3",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/tailwindlabs/tailwindcss/tree/main/packages/tailwindcss"
+    },
+    {
+      "name": "typescript",
+      "version": "7.0.2",
+      "licenseExpression": "Apache-2.0",
+      "source": "https://github.com/microsoft/TypeScript",
+      "upstreamNotice": "NOTICE.txt"
+    },
+    {
+      "name": "vite",
+      "version": "8.2.2",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/vitejs/vite/tree/main/packages/vite"
+    },
+    {
+      "name": "vitest",
+      "version": "4.1.11",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/vitest-dev/vitest/tree/main/packages/vitest"
+    },
+    {
+      "name": "zod",
+      "version": "4.4.3",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/colinhacks/zod"
+    },
+    {
+      "name": "zustand",
+      "version": "5.0.15",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/pmndrs/zustand"
+    }
+  ]
+}

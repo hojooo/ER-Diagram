@@ -1,0 +1,45 @@
+{
+  "name": "er-diagram",
+  "version": "0.0.0",
+  "author": "hojooo",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": ">=24 <25",
+    "pnpm": ">=10 <11"
+  },
+  "scripts": {
+    "architecture:check": "node scripts/check-architecture.mjs",
+    "build": "pnpm -r --if-present build && pnpm workspace:imports:check",
+    "check": "pnpm docs:check && pnpm format:check && pnpm lint && pnpm typecheck",
+    "ci:verify": "pnpm check && pnpm architecture:check && pnpm test:unit && pnpm test:integration && pnpm build && pnpm licenses:check",
+    "docs:check": "node scripts/check-docs.mjs",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "licenses:check": "node --test scripts/check-licenses.test.mjs && node scripts/check-licenses.mjs",
+    "lint": "biome lint .",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests",
+    "test:perf": "node scripts/run-perf-tests.mjs",
+    "test:security": "vitest run --config vitest.security.config.ts --passWithNoTests",
+    "test:unit": "vitest run --config vitest.config.ts",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "workspace:imports:check": "node scripts/check-workspace-imports.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.10",
+    "@er-diagram/contracts": "workspace:*",
+    "@er-diagram/core": "workspace:*",
+    "@er-diagram/source-transform": "workspace:*",
+    "@er-diagram/storage-sqlite": "workspace:*",
+    "@er-diagram/test-fixtures": "workspace:*",
+    "@playwright/test": "1.62.1",
+    "@types/node": "24.10.0",
+    "dependency-cruiser": "18.2.0",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  }
+}
