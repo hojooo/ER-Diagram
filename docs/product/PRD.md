@@ -328,6 +328,36 @@ Project rename은 요청한 `expectedSchemaRevisionNo`가 current schema와 같�
 revision을 만들거나 `schemaRevisionNo`를 증가시키지 않는다. 같은 schema revision을 기준으로 한 rename
 끼리는 마지막으로 commit된 이름을 사용한다.
 
+#### 11.1.1 Project HTTP contract
+
+Project HTTP API는 `/api/v1` 아래에서 다음 resource contract를 사용한다.
+
+| Endpoint | 성공 응답 |
+| --- | --- |
+| `GET /projects` | `200`과 project summary 목록 |
+| `POST /projects` | `CREATE` 또는 `DUPLICATE` 요청, `201`과 project mutation 결과 |
+| `GET /projects/:projectId` | `200`과 current project state |
+| `PATCH /projects/:projectId` | rename 결과 `200` |
+| `DELETE /projects/:projectId` | 삭제 결과 `204` |
+| `PUT /projects/:projectId/draft` | draft 저장 결과 `200` |
+| `GET /projects/:projectId/revisions` | source를 제외한 revision summary 목록 `200` |
+| `POST /projects/:projectId/revisions/:revisionNo/restore` | 새 restore checkpoint 결과 `200` |
+
+`POST /projects`는 `operation`이 `CREATE`인 요청과 `DUPLICATE`인 요청을 strict discriminated
+union으로 구분한다. 모든 write request는 RFC UUID 형식의 `commandId`를 받고 응답의
+`x-command-id` header로 반환한다. M1에서는 command ID를 저장하거나 replay를 차단하지 않으며 durable
+idempotency는 visual command transaction과 함께 구현한다.
+
+서버는 caller가 보낸 request ID를 신뢰하지 않고 request마다 correlation ID를 생성한다. 모든 응답은
+`x-correlation-id` header를 가지며 오류 응답의 `correlationId`와 동일하다. stale schema write는
+`409`와 current revision을 반환한다. Invalid DBML project 생성, draft 저장, revision restore는 사용자의
+source를 보존한 성공 응답이며 diagnostics를 함께 반환한다. 유효한 source가 필수인 후속 visual·export
+operation의 semantic 실패와 구분한다.
+
+Revision 목록은 history navigation과 restore 선택에 필요한 identity, revision number, hash, validity,
+origin, parser provenance, diagnostic summary와 timestamp만 반환한다. 과거 source 전체를 한 목록 응답에
+반복하지 않는다.
+
 ### 11.2 DBML parsing과 source editor
 
 | ID | 우선순위 | 요구사항 | 수용 기준 |
