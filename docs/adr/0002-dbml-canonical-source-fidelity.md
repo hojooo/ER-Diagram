@@ -31,6 +31,20 @@ Canonical semantic projection은 별도 version을 가지며 version 1의 hash p
 
 Source 직접 편집의 rename은 diff 결과와 분리된 advisory candidate다. 같은 schema의 table 또는 같은 table의 column에서 이름과 identity-relative key를 제외한 전체 구조가 양쪽에서 각각 하나만 정확히 일치할 때만 `HIGH` confidence 후보를 만든다. 후보가 있어도 원래 ADD와 DELETE를 제거하거나 자동 `RENAME`으로 바꾸지 않는다. Ambiguous match, owner 이동, rename과 동시에 발생한 구조 변경은 rename으로 추론하지 않는다.
 
+Monaco model은 project별 in-memory URI를 사용하는 browser session의 ephemeral buffer다. Model 자체를
+정본이나 durable undo history로 간주하지 않으며 source, listener, marker와 editor instance는 workspace
+unmount 시 함께 폐기한다. Browser parser는 별도 module worker에서 실행하고 request generation,
+source hash, parser-input hash와 parser version이 현재 buffer와 모두 일치하는 결과만 반영한다. Worker
+crash, timeout 또는 protocol 오류는 worker를 격리해 재생성하되 source autosave를 막지 않으며 server의
+재검증과 revision transaction을 authoritative 결과로 유지한다.
+
+Source autosave는 750 ms debounce 후 시작하고 write를 직렬화한다. 저장 중 추가 edit는 최신 source
+하나로 합치며 성공 응답의 revision을 다음 write의 expected revision으로 사용한다. 응답의 project,
+source, hash, parser version과 revision 전이가 요청과 일치하지 않으면 cache를 갱신하지 않는다. Stale
+revision conflict에서는 local buffer를 보존하고 autosave를 멈춘 뒤 사용자가 최신 revision 기준 local
+draft 재시도 또는 확인을 거친 server draft load를 선택한다. 저장되지 않은 buffer의 navigation은 먼저
+pending save를 flush하고, 명시적 이탈 전에는 `Stay`를 기본으로 하는 확인 경계를 거친다.
+
 Visual mutation은 source position을 기준으로 가장 작은 `TextEdit[]`를 만든다. Edit는 offset 내림차순으로 적용하고 수정된 전체 source를 DBML v2로 다시 parse한다. Reparse 결과의 semantic diff가 command가 기대한 변경과 정확히 일치할 때만 source를 commit한다. 실패하면 원본을 유지하고 diagnostic을 반환한다.
 
 M0에서는 `CreateColumn` 한 종류로 이 경계를 증명한다. 대상 block 밖의 comment, partial, view와 formatting은 byte-identical이어야 하며 full-model DBML regeneration은 canonical source 갱신 경로로 사용하지 않는다.
@@ -56,6 +70,8 @@ Rename 추적은 쉬워지지만 표준 DBML 호환성을 깨뜨리고 사용자
 - Parser upgrade는 source rewrite가 아니라 explicit revalidation event가 된다.
 - Source transformer는 command별로 안전한 insertion/update range와 formatting rule을 구현해야 한다.
 - Source 직접 편집에서 rename을 확신할 수 없으면 layout identity는 delete+create로 처리할 수 있다.
+- Browser editor와 worker 상태를 잃어도 canonical source와 durable revision은 server에서 복구할 수 있다.
+- Revision conflict는 자동 overwrite보다 사용자 선택을 요구하므로 local edit 손실을 명시적으로 통제한다.
 
 ## Verification
 
@@ -65,3 +81,5 @@ Rename 추적은 쉬워지지만 표준 DBML 호환성을 깨뜨리고 사용자
 - formatting, comment, filepath와 무의미한 선언 순서가 달라도 hash와 diff가 같아야 한다.
 - exact·unique table/column rename만 advisory candidate가 되고 ADD/DELETE는 그대로 유지되어야 한다.
 - reparse 또는 semantic verification 실패 시 canonical source가 바뀌지 않아야 한다.
+- out-of-order worker/save 응답은 최신 Monaco buffer와 revision 기준을 덮지 않아야 한다.
+- invalid draft, worker failure와 revision conflict에서도 local source가 보존되어야 한다.

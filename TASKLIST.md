@@ -201,8 +201,8 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - 검증: `pnpm --filter @er-diagram/server test:integration projects`
 - [x] `M1-007` accessible Web shell과 Project Home
   - 검증: `pnpm --filter @er-diagram/web test test/project-home.test.tsx`
-- [ ] `M1-008` Monaco DBML editor, parser worker, 750 ms autosave와 stale-response guard
-  - 검증: `pnpm --filter @er-diagram/web test source-editor`
+- [x] `M1-008` Monaco DBML editor, parser worker, 750 ms autosave와 stale-response guard
+  - 검증: `pnpm --filter @er-diagram/web test test/source-editor.test.tsx`
 - [ ] `M1-009` table/column/PK/FK/ref base diagram과 source navigation
   - 검증: `pnpm --filter @er-diagram/web test diagram-base`
 - [ ] `M1-010` `TableGroup` compound node와 collapse edge aggregation

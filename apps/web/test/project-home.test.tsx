@@ -8,14 +8,17 @@ import { createMemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { App, createAppRoutes } from "../src/App.js";
-import { ProjectApiError } from "../src/projects/project-api.js";
 import type {
   CreateProjectInput,
   DeleteProjectInput,
   DuplicateProjectInput,
   ProjectApi,
   RenameProjectInput,
+  SaveDraftInput,
 } from "../src/projects/project-api.js";
+import { ProjectApiError } from "../src/projects/project-api.js";
+import type { SourceEditorComponent } from "../src/source-editor/editor-contract.js";
+import type { DbmlParserWorkerClient } from "../src/source-editor/parser-worker-client.js";
 
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-0123456789ab";
 const COPY_ID = "019d3f4e-7b6c-7def-9abc-0123456789ab";
@@ -96,6 +99,7 @@ class FakeProjectApi implements ProjectApi {
   readonly renameInputs: RenameProjectInput[] = [];
   readonly duplicateInputs: DuplicateProjectInput[] = [];
   readonly deleteInputs: DeleteProjectInput[] = [];
+  readonly saveDraftInputs: SaveDraftInput[] = [];
 
   async listProjects() {
     if (this.listError) throw this.listError;
@@ -148,6 +152,14 @@ class FakeProjectApi implements ProjectApi {
     return { state, diagnostics: [], revisionCreated: true };
   }
 
+  async saveDraft(input: SaveDraftInput) {
+    this.saveDraftInputs.push(input);
+    if (this.mutationError) throw this.mutationError;
+    const current = this.projects.find((item) => item.project.id === input.projectId);
+    if (!current) throw new Error("PROJECT_NOT_FOUND");
+    return { state: current, diagnostics: [], revisionCreated: false };
+  }
+
   async deleteProject(input: DeleteProjectInput) {
     this.deleteInputs.push(input);
     if (this.mutationError) throw this.mutationError;
@@ -159,10 +171,33 @@ function renderApp(api: ProjectApi, initialEntry = "/") {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  const router = createMemoryRouter(createAppRoutes({ includeLayoutSpike: true }), {
-    initialEntries: [initialEntry],
-  });
+  const router = createMemoryRouter(
+    createAppRoutes({
+      includeLayoutSpike: true,
+      workspaceAdapters: {
+        SourceEditor: TestSourceEditor,
+        createParserClient: () => new UnavailableParserClient(),
+      },
+    }),
+    { initialEntries: [initialEntry] },
+  );
   return render(<App api={api} queryClient={queryClient} router={router} />);
+}
+
+const TestSourceEditor: SourceEditorComponent = ({ initialSource, onChange }) => (
+  <textarea
+    aria-label="DBML source editor"
+    defaultValue={initialSource}
+    onChange={(event) => onChange(event.currentTarget.value)}
+  />
+);
+
+class UnavailableParserClient implements DbmlParserWorkerClient {
+  async parse(): Promise<never> {
+    throw new Error("Worker unavailable in this component test.");
+  }
+
+  dispose(): void {}
 }
 
 describe("Project Home", () => {

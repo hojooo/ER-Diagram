@@ -51,6 +51,52 @@ export const diagnosticSchema = z
   .strict();
 export type Diagnostic = z.infer<typeof diagnosticSchema>;
 
+export const sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/);
+export type Sha256Hex = z.infer<typeof sha256HexSchema>;
+
+export const dbmlParserWorkerRequestSchema = z
+  .object({
+    type: z.literal("PARSE_DBML"),
+    requestId: z.uuid(),
+    filepath: z.literal("/main.dbml"),
+    source: z.string(),
+    sourceHash: sha256HexSchema,
+  })
+  .strict();
+export type DbmlParserWorkerRequest = z.infer<typeof dbmlParserWorkerRequestSchema>;
+
+const dbmlParserWorkerResponseBase = {
+  type: z.literal("DBML_PARSE_RESULT"),
+  requestId: z.uuid(),
+  sourceHash: sha256HexSchema,
+  parserInputHash: sha256HexSchema,
+  parserVersion: z.string().min(1),
+  diagnostics: z.array(diagnosticSchema),
+};
+
+const dbmlParserWorkerSuccessResponseSchema = z
+  .object({
+    ...dbmlParserWorkerResponseBase,
+    ok: z.literal(true),
+    graph: z.unknown().refine((value) => value !== undefined, {
+      message: "graph is required for a successful parse.",
+    }),
+  })
+  .strict();
+
+const dbmlParserWorkerFailureResponseSchema = z
+  .object({
+    ...dbmlParserWorkerResponseBase,
+    ok: z.literal(false),
+  })
+  .strict();
+
+export const dbmlParserWorkerResponseSchema = z.discriminatedUnion("ok", [
+  dbmlParserWorkerSuccessResponseSchema,
+  dbmlParserWorkerFailureResponseSchema,
+]);
+export type DbmlParserWorkerResponse = z.infer<typeof dbmlParserWorkerResponseSchema>;
+
 export const commandIdSchema = z.uuid();
 export type CommandId = z.infer<typeof commandIdSchema>;
 

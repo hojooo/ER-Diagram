@@ -1,4 +1,4 @@
-import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
+import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ComponentProps } from "react";
 import {
   isRouteErrorResponse,
@@ -12,8 +12,8 @@ import {
 import type { ProjectApi } from "./projects/project-api.js";
 import { ProjectApiProvider } from "./projects/project-api-context.js";
 import { ProjectHomePage } from "./projects/project-home-page.js";
-import { ProjectWorkspacePage } from "./projects/project-workspace-page.js";
 import { RootErrorBoundary } from "./root-error-boundary.js";
+import type { ProjectWorkspaceAdapters } from "./source-editor/project-source-workspace.js";
 
 type DataRouter = ComponentProps<typeof RouterProvider>["router"];
 
@@ -36,7 +36,10 @@ export function App({ api, queryClient, router }: AppProps) {
 }
 
 export function createAppRoutes(
-  options: { readonly includeLayoutSpike?: boolean } = {},
+  options: {
+    readonly includeLayoutSpike?: boolean;
+    readonly workspaceAdapters?: ProjectWorkspaceAdapters;
+  } = {},
 ): RouteObject[] {
   const routes: RouteObject[] = [
     {
@@ -45,7 +48,19 @@ export function createAppRoutes(
       HydrateFallback: RouteLoadingPage,
       children: [
         { index: true, element: <ProjectHomePage /> },
-        { path: "projects/:projectId", element: <ProjectWorkspacePage /> },
+        {
+          path: "projects/:projectId",
+          lazy: async () => {
+            const module = await import("./projects/project-workspace-page.js");
+            return {
+              Component: () => (
+                <module.ProjectWorkspacePage
+                  {...(options.workspaceAdapters ? { adapters: options.workspaceAdapters } : {})}
+                />
+              ),
+            };
+          },
+        },
         { path: "*", element: <NotFoundPage /> },
       ],
     },

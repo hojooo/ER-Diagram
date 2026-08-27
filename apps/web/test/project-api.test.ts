@@ -105,6 +105,12 @@ describe("HTTP project API", () => {
         ),
       )
       .mockResolvedValueOnce(
+        jsonResponse(
+          { state, diagnostics: [], revisionCreated: false },
+          { status: 200, headers: { "x-command-id": COMMAND_ID } },
+        ),
+      )
+      .mockResolvedValueOnce(
         new Response(null, { status: 204, headers: { "x-command-id": COMMAND_ID } }),
       );
     const api = createHttpProjectApi({ fetch: fetcher, generateCommandId: () => COMMAND_ID });
@@ -124,12 +130,18 @@ describe("HTTP project API", () => {
       name: "Customer schema copy",
       expectedSchemaRevisionNo: 1,
     });
+    await api.saveDraft({
+      projectId: PROJECT_ID,
+      source: project.draftSource,
+      expectedSchemaRevisionNo: 1,
+    });
     await api.deleteProject({ projectId: PROJECT_ID, expectedSchemaRevisionNo: 1 });
 
     expect(fetcher.mock.calls.map(([input, init]) => [input, init?.method])).toEqual([
       ["/api/v1/projects", "POST"],
       [`/api/v1/projects/${PROJECT_ID}`, "PATCH"],
       ["/api/v1/projects", "POST"],
+      [`/api/v1/projects/${PROJECT_ID}/draft`, "PUT"],
       [`/api/v1/projects/${PROJECT_ID}`, "DELETE"],
     ]);
     expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({
@@ -144,6 +156,11 @@ describe("HTTP project API", () => {
       commandId: COMMAND_ID,
       sourceProjectId: PROJECT_ID,
       name: "Customer schema copy",
+      expectedSchemaRevisionNo: 1,
+    });
+    expect(JSON.parse(String(fetcher.mock.calls[3]?.[1]?.body))).toEqual({
+      commandId: COMMAND_ID,
+      source: project.draftSource,
       expectedSchemaRevisionNo: 1,
     });
   });
