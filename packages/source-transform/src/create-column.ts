@@ -187,7 +187,7 @@ export function verifyCreateColumnSemanticDiff(
   }
 
   const addedColumn = afterTarget.columns.at(-1);
-  const expectedColumn = {
+  const expectedColumnWithoutType = {
     key: qualifiedElementKey(
       "column",
       beforeTarget.schemaName,
@@ -195,13 +195,25 @@ export function verifyCreateColumnSemanticDiff(
       command.column.name,
     ),
     name: command.column.name,
-    type: command.column.type.trim(),
     primaryKey: false,
     unique: false,
     notNull: false,
-    injectedFromPartial: null,
+    default: null,
+    increment: false,
+    note: null,
+    metadata: {},
+    checks: [],
+    injectedFrom: null,
   };
-  if (!addedColumn || !sameValue(columnSemantics(addedColumn), expectedColumn)) {
+  if (!addedColumn) return semanticMismatch();
+
+  const { type: addedType, ...addedColumnWithoutType } = columnSemantics(addedColumn);
+  const expectedType = parseCommandColumnType(command.column.type);
+  if (
+    !expectedType ||
+    !sameValue(addedType, expectedType) ||
+    !sameValue(addedColumnWithoutType, expectedColumnWithoutType)
+  ) {
     return semanticMismatch();
   }
 
@@ -279,6 +291,7 @@ function inferColumnIndent(
   const sourceOwnedColumns = target.columns
     .filter(
       (column) =>
+        column.injectedFrom === null &&
         column.range.startOffset > target.range.startOffset &&
         column.range.startOffset < closingBraceOffset,
     )
@@ -346,37 +359,183 @@ function tableSemantics(table: TableNode) {
   };
 }
 
-function tableIdentitySemantics(table: TableNode) {
-  return {
-    key: table.key,
-    schemaName: table.schemaName,
-    name: table.name,
-    partialNames: table.partialNames,
-    metadata: table.metadata,
-  };
+function tableIdentitySemantics(table: TableNode): Record<string, unknown> {
+  const { columns: _columns, ...identity } = table;
+  return withoutSourceLocations(identity) as Record<string, unknown>;
 }
 
-function columnSemantics(column: ColumnNode): unknown {
-  return {
-    key: column.key,
-    name: column.name,
-    type: column.type,
-    primaryKey: column.primaryKey,
-    unique: column.unique,
-    notNull: column.notNull,
-    injectedFromPartial: column.injectedFromPartial ?? null,
-  };
+function columnSemantics(column: ColumnNode): Omit<ColumnNode, "range"> {
+  return withoutSourceLocations(column) as Omit<ColumnNode, "range">;
 }
 
 function nonTableSemantics(graph: SchemaGraph): unknown {
-  return {
+  return withoutSourceLocations({
     parserVersion: graph.parserVersion,
-    enums: graph.enums.map(({ range: _range, ...item }) => item),
-    references: graph.references.map(({ range: _range, key: _key, ...item }) => item),
-    groups: graph.groups.map(({ range: _range, ...item }) => item),
-    partials: graph.partials.map(({ range: _range, ...item }) => item),
-    views: graph.views.map(({ range: _range, ...item }) => item),
-  };
+    project: graph.project,
+    notes: graph.notes,
+    enums: graph.enums,
+    references: graph.references,
+    groups: graph.groups,
+    partials: graph.partials,
+    views: graph.views,
+  });
+}
+
+const SOURCE_LOCATION_KEYS = new Set(["range", "contentRange", "injectionRange"]);
+
+function withoutSourceLocations(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutSourceLocations);
+  if (!value || typeof value !== "object") return value;
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key, item]) => !(SOURCE_LOCATION_KEYS.has(key) && isSourceRange(item)))
+      .map(([key, item]) => [key, withoutSourceLocations(item)]),
+  );
+}
+
+function isSourceRange(value: unknown): value is ColumnNode["range"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Partial<ColumnNode["range"]>;
+  return (
+    typeof candidate.startOffset === "number" &&
+    typeof candidate.endOffset === "number" &&
+    typeof candidate.startLine === "number" &&
+    typeof candidate.startColumn === "number" &&
+    typeof candidate.endLine === "number" &&
+    typeof candidate.endColumn === "number" &&
+    typeof candidate.filepath === "string"
+  );
+}
+
+function renderColumnType(type: ColumnNode["type"]): string {
+  const qualifiedName = type.schemaName ? `${type.schemaName}.${type.name}` : type.name;
+  return type.arguments === null ? qualifiedName : `${qualifiedName}(${type.arguments})`;
+}
+
+function parseCommandColumnType(value: string): ColumnNode["type"] | null {
+  const fragment = value.trim();
+  const argumentStart = trailingArgumentStart(fragment);
+  const nameFragment = argumentStart === null ? fragment : fragment.slice(0, argumentStart).trim();
+  const segments = splitQualifiedTypeName(nameFragment);
+  if (!segments || segments.length < 1 || segments.length > 2) return null;
+
+  const decoded = segments.map(decodeTypeIdentifier);
+  if (decoded.some((segment) => segment === null)) return null;
+  const names = decoded as string[];
+  const schemaName = names.length === 2 ? names[0] : null;
+  const name = names.at(-1);
+  if (!name) return null;
+  const argumentsValue =
+    argumentStart === null ? null : normalizeTypeArguments(fragment.slice(argumentStart + 1, -1));
+  if (argumentsValue === undefined) return null;
+
+  const type = {
+    schemaName: schemaName ?? null,
+    name,
+    arguments: argumentsValue,
+    display: "",
+  } satisfies ColumnNode["type"];
+  return { ...type, display: renderColumnType(type) };
+}
+
+function trailingArgumentStart(value: string): number | null {
+  if (!value.endsWith(")")) return null;
+  let quoted = false;
+  let escaped = false;
+  let depth = 0;
+  let start: number | null = null;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') quoted = false;
+      continue;
+    }
+    if (character === '"') {
+      quoted = true;
+      continue;
+    }
+    if (character === "(") {
+      if (depth === 0) start = index;
+      depth += 1;
+      continue;
+    }
+    if (character === ")") {
+      depth -= 1;
+      if (depth < 0 || (depth === 0 && index !== value.length - 1)) return null;
+    }
+  }
+
+  return !quoted && depth === 0 ? start : null;
+}
+
+function splitQualifiedTypeName(value: string): string[] | null {
+  const segments: string[] = [];
+  let start = 0;
+  let quoted = false;
+  let escaped = false;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') quoted = false;
+      continue;
+    }
+    if (character === '"') {
+      quoted = true;
+      continue;
+    }
+    if (character !== ".") continue;
+    segments.push(value.slice(start, index).trim());
+    start = index + 1;
+  }
+  if (quoted || escaped) return null;
+  segments.push(value.slice(start).trim());
+  return segments;
+}
+
+function decodeTypeIdentifier(value: string): string | null {
+  if (value.length === 0) return null;
+  if (!value.startsWith('"')) {
+    return /["\s]/u.test(value) ? null : value;
+  }
+  if (!value.endsWith('"')) return null;
+  try {
+    const decoded = JSON.parse(value) as unknown;
+    return typeof decoded === "string" && decoded.length > 0 ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeTypeArguments(value: string): string | undefined {
+  let result = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === '"') {
+      let end = index + 1;
+      let escaped = false;
+      for (; end < value.length; end += 1) {
+        const candidate = value[end];
+        if (escaped) escaped = false;
+        else if (candidate === "\\") escaped = true;
+        else if (candidate === '"') break;
+      }
+      if (end >= value.length) return undefined;
+      const decoded = decodeTypeIdentifier(value.slice(index, end + 1));
+      if (decoded === null) return undefined;
+      result += decoded;
+      index = end;
+      continue;
+    }
+    if (!/\s/u.test(character ?? "")) result += character;
+  }
+  return result;
 }
 
 function sameValue(left: unknown, right: unknown): boolean {

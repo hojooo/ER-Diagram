@@ -1,6 +1,7 @@
 import { parseDbmlV2 } from "@er-diagram/core";
 import { fixtureInventory, generateFidelityFixture } from "@er-diagram/test-fixtures";
 import { beforeAll, describe, expect, it } from "vitest";
+import { demoSchemaGraph } from "../src/diagram/demo-schema.js";
 import {
   createDiagramProjection,
   GLOBAL_VIEW_KEY,
@@ -31,6 +32,37 @@ describe("diagram projection", () => {
     expect(views[0]).toEqual({ key: GLOBAL_VIEW_KEY, label: "Global" });
     expect(views).toHaveLength(fixtureInventory.fidelity.diagramViews + 1);
     expect(new Set(views.map((view) => view.key))).toHaveLength(views.length);
+  });
+
+  it("projects normalized type displays and foreign keys from endpoint column keys", () => {
+    const projection = createDiagramProjection(demoSchemaGraph, {
+      viewKey: GLOBAL_VIEW_KEY,
+      collapsedGroupKeys: new Set(),
+      lod: "FULL",
+    });
+    const sourceColumnByKey = new Map(
+      demoSchemaGraph.tables.flatMap((table) =>
+        table.columns.map((column) => [column.key, column] as const),
+      ),
+    );
+    const endpointColumnKeys = new Set(
+      demoSchemaGraph.references.flatMap((reference) =>
+        reference.endpoints.flatMap((endpoint) => endpoint.columnKeys),
+      ),
+    );
+
+    for (const table of tableNodes(projection)) {
+      for (const column of table.data.columns) {
+        expect(column.type).toBe(sourceColumnByKey.get(column.key)?.type.display);
+        expect(column.foreignKey).toBe(endpointColumnKeys.has(column.key));
+      }
+    }
+    expect(
+      tableNodes(projection).some((table) =>
+        table.data.columns.some((column) => column.type === "varchar"),
+      ),
+    ).toBe(true);
+    expect(endpointColumnKeys.size).toBeGreaterThan(0);
   });
 
   it("places all 15 group parents before their 143 table children", () => {

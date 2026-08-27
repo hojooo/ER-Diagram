@@ -1,21 +1,14 @@
-import { Parser, type Database, type TablePartial, type Token } from "@dbml/core";
+import { Parser } from "@dbml/core";
 import type { Diagnostic } from "@er-diagram/contracts";
 import { sha256Utf8 } from "./hash.js";
+import { normalizeSchemaGraph, SchemaGraphNormalizationError } from "./normalize-schema-graph.js";
+import type { SchemaGraph } from "./schema-graph.js";
 import {
-  DBML_PARSER_VERSION,
-  type DiagramViewNode,
-  type EnumNode,
-  type ReferenceEdge,
-  type SchemaGraph,
-  type SourceRange,
-  type TableGroupNode,
-  type TableNode,
-  type TablePartialNode,
-  qualifiedElementKey,
-} from "./schema-graph.js";
+  buildProjectSourceTextIndex,
+  buildSingleFileSourceTextIndex,
+} from "./source-text-index.js";
 
 export const DBML_PARSE_MODE = "dbmlv2" as const;
-const DEFAULT_SCHEMA = "public";
 const DEFAULT_FILEPATH = "/main.dbml";
 
 export interface DbmlParseSuccess {
@@ -64,8 +57,6 @@ interface CompilerFailureLike {
   message?: string;
 }
 
-type DatabaseWithV2Elements = Database & { tablePartials: TablePartial[] };
-
 export async function parseDbmlV2(
   source: string,
   filepath = DEFAULT_FILEPATH,
@@ -80,7 +71,11 @@ export async function parseDbmlV2(
       ok: true,
       sourceHash,
       parserInputHash,
-      graph: await buildSchemaGraph(database, filepath),
+      graph: await normalizeSchemaGraph(database, {
+        fallbackFilepath: filepath,
+        forceFilepath: true,
+        sourceText: buildSingleFileSourceTextIndex(parserInput, filepath),
+      }),
     };
   } catch (error) {
     return {
@@ -127,7 +122,11 @@ export async function parseDbmlProjectV2(input: {
       ok: true,
       sourceHashes,
       parserInputHashes,
-      graph: await buildSchemaGraph(database, input.entrypoint),
+      graph: await normalizeSchemaGraph(database, {
+        fallbackFilepath: input.entrypoint,
+        forceFilepath: false,
+        sourceText: buildProjectSourceTextIndex(parser.DBMLCompiler, Object.keys(input.files)),
+      }),
     };
   } catch (error) {
     return {
@@ -147,194 +146,16 @@ async function hashSources(files: Record<string, string>): Promise<Record<string
   return hashes;
 }
 
-async function buildSchemaGraph(
-  database: Database,
-  fallbackFilepath: string,
-): Promise<SchemaGraph> {
-  const sourceMap: Record<string, SourceRange> = {};
-  const tables: TableNode[] = database.schemas.flatMap((schema) =>
-    schema.tables.map((table) => {
-      const schemaName = schema.name || DEFAULT_SCHEMA;
-      const key = qualifiedElementKey("table", schemaName, table.name);
-      const range = toSourceRange(table.token, fallbackFilepath);
-      sourceMap[key] = range;
-
-      const columns = table.fields.map((field) => {
-        const fieldKey = qualifiedElementKey("column", schemaName, table.name, field.name);
-        const fieldRange = toSourceRange(field.token, fallbackFilepath);
-        sourceMap[fieldKey] = fieldRange;
-        const typeSchema = field.type?.schemaName ? `${field.type.schemaName}.` : "";
-        const typeArgs = field.type?.args ?? "";
-
-        return {
-          key: fieldKey,
-          name: field.name,
-          type: `${typeSchema}${field.type?.type_name ?? "unknown"}${typeArgs}`,
-          primaryKey: Boolean(field.pk),
-          unique: Boolean(field.unique),
-          notNull: Boolean(field.not_null),
-          ...(field.injectedPartial ? { injectedFromPartial: field.injectedPartial.name } : {}),
-          range: fieldRange,
-        };
-      });
-
-      return {
-        key,
-        schemaName,
-        name: table.name,
-        columns,
-        partialNames: table.partials.map((partial) => partial.name),
-        metadata: { ...table.metadata },
-        range,
-      };
-    }),
-  );
-
-  const enums: EnumNode[] = database.schemas.flatMap((schema) =>
-    schema.enums.map((dbEnum) => {
-      const schemaName = schema.name || DEFAULT_SCHEMA;
-      const key = qualifiedElementKey("enum", schemaName, dbEnum.name);
-      const range = toSourceRange(dbEnum.token, fallbackFilepath);
-      sourceMap[key] = range;
-      return {
-        key,
-        schemaName,
-        name: dbEnum.name,
-        values: dbEnum.values.map((value) => value.name),
-        range,
-      };
-    }),
-  );
-
-  const references: ReferenceEdge[] = database.schemas.flatMap((schema) =>
-    schema.refs.map((reference, index) => {
-      const schemaName = schema.name || DEFAULT_SCHEMA;
-      const key = qualifiedElementKey(
-        "reference",
-        schemaName,
-        reference.name ?? `anonymous-${index}`,
-        String(reference.id),
-      );
-      const range = toSourceRange(reference.token, fallbackFilepath);
-      sourceMap[key] = range;
-      const [left, right] = reference.endpoints;
-      if (!left || !right) {
-        throw new Error(`Reference ${reference.name ?? reference.id} does not have two endpoints.`);
-      }
-
-      return {
-        key,
-        name: reference.name ?? null,
-        endpoints: [left, right].map((endpoint) => ({
-          tableKey: qualifiedElementKey(
-            "table",
-            endpoint.schemaName ?? DEFAULT_SCHEMA,
-            endpoint.tableName,
-          ),
-          fieldNames: [...endpoint.fieldNames],
-          relation: String(endpoint.relation),
-        })) as ReferenceEdge["endpoints"],
-        ...(reference.onDelete ? { onDelete: String(reference.onDelete) } : {}),
-        ...(reference.onUpdate ? { onUpdate: String(reference.onUpdate) } : {}),
-        range,
-      };
-    }),
-  );
-
-  const groups: TableGroupNode[] = database.schemas.flatMap((schema) =>
-    schema.tableGroups.map((group) => {
-      const schemaName = schema.name || DEFAULT_SCHEMA;
-      const key = qualifiedElementKey("group", schemaName, group.name);
-      const range = toSourceRange(group.token, fallbackFilepath);
-      sourceMap[key] = range;
-      return {
-        key,
-        schemaName,
-        name: group.name,
-        tableKeys: group.tables.map((table) =>
-          qualifiedElementKey("table", table.schema.name || DEFAULT_SCHEMA, table.name),
-        ),
-        metadata: { ...group.metadata },
-        range,
-      };
-    }),
-  );
-
-  const partials: TablePartialNode[] = (database as DatabaseWithV2Elements).tablePartials.map(
-    (partial) => {
-      const key = qualifiedElementKey("partial", partial.name);
-      const range = toSourceRange(partial.token, fallbackFilepath);
-      sourceMap[key] = range;
-      return {
-        key,
-        name: partial.name,
-        fieldNames: partial.fields.map((field) => field.name),
-        range,
-      };
-    },
-  );
-
-  const views: DiagramViewNode[] = database.diagramViews.map((view) => {
-    const key = qualifiedElementKey("view", view.schemaName, view.name);
-    const range = toSourceRange(view.token, fallbackFilepath);
-    sourceMap[key] = range;
-    return {
-      key,
-      schemaName: view.schemaName,
-      name: view.name,
-      visibleTableKeys: view.visibleEntities.tables
-        ? view.visibleEntities.tables.map((table) =>
-            qualifiedElementKey("table", table.schemaName || DEFAULT_SCHEMA, table.name),
-          )
-        : null,
-      visibleGroupKeys: view.visibleEntities.tableGroups
-        ? view.visibleEntities.tableGroups.map((group) =>
-            qualifiedElementKey("group", view.schemaName ?? DEFAULT_SCHEMA, group.name),
-          )
-        : null,
-      visibleSchemaNames: view.visibleEntities.schemas
-        ? view.visibleEntities.schemas.map((schema) => schema.name)
-        : null,
-      range,
-    };
-  });
-
-  const semanticModel = {
-    tables: tables.map(({ range: _range, ...table }) => table),
-    enums: enums.map(({ range: _range, ...dbEnum }) => dbEnum),
-    references: references.map(({ range: _range, ...reference }) => reference),
-    groups: groups.map(({ range: _range, ...group }) => group),
-    partials: partials.map(({ range: _range, ...partial }) => partial),
-    views: views.map(({ range: _range, ...view }) => view),
-  };
-
-  return {
-    parserVersion: DBML_PARSER_VERSION,
-    schemaHash: await sha256Utf8(JSON.stringify(semanticModel)),
-    tables,
-    enums,
-    references,
-    groups,
-    partials,
-    views,
-    diagnostics: [],
-    sourceMap,
-  };
-}
-
-function toSourceRange(token: Token, fallbackFilepath: string): SourceRange {
-  return {
-    startOffset: token.start.offset,
-    endOffset: token.end.offset,
-    startLine: token.start.line,
-    startColumn: token.start.column,
-    endLine: token.end.line,
-    endColumn: token.end.column,
-    filepath: token.filepath?.absolute ?? fallbackFilepath,
-  };
-}
-
 function normalizeDiagnostics(error: unknown, source: string): Diagnostic[] {
+  if (error instanceof SchemaGraphNormalizationError) {
+    return [
+      {
+        code: "DBML_NORMALIZATION_ERROR",
+        message: error.message,
+        severity: "ERROR",
+      },
+    ];
+  }
   const failure = error as CompilerFailureLike;
   if (!Array.isArray(failure?.diags) || failure.diags.length === 0) {
     return [
