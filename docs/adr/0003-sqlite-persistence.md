@@ -35,10 +35,22 @@ key다. Canonical source write, revision, last-valid pointer와 관련 layout ke
 `BEGIN IMMEDIATE` transaction에서 commit하거나 모두 rollback한다. better-sqlite3 transaction callback은
 동기식으로 제한한다.
 
+Application service는 DBML parse와 source hash 계산을 transaction 밖에서 완료한 뒤 transaction 안에서
+`expectedSchemaRevisionNo`를 다시 확인한다. 실제 source 변경은 새 revision insert, project draft와
+`schemaRevisionNo` update, last-valid pointer update와 pruning을 같은 transaction에서 처리한다. Parse
+error는 write 실패가 아니라 `INVALID` revision이며 기존 last-valid pointer를 유지한다. 동일 source,
+hash와 parser version의 save는 revision을 만들지 않는 no-op이다.
+
+Project 복제는 current draft와 last-valid 상태만 새 project의 revision 1~2로 재기준화한다. 과거 schema
+history, layout과 import artifact는 복사하지 않는다. Project rename은 expected schema revision으로
+동시 schema 변경을 차단하되 source revision과 `schemaRevisionNo`를 증가시키지 않는다. 같은 schema
+revision에서 발생한 rename끼리는 마지막 commit이 적용된다.
+
 최근 non-checkpoint revision 100개를 보존한다. Checkpoint 여부는 별도 boolean으로 중복 저장하지 않고
 revision origin에서 파생한다. `SQL_IMPORT`, `RESTORE`, `PARSER_MIGRATION`은 checkpoint이며
-`SOURCE_EDIT`, `VISUAL_COMMAND`는 pruning 대상이다. Original SQL은 사용자가 명시적으로 선택한 경우만
-저장한다.
+`SOURCE_EDIT`, `VISUAL_COMMAND`는 pruning 대상이다. 현재 last-valid pointer가 가리키는 revision은
+100개 한도 밖이어도 보호한다. 이 경우 non-checkpoint revision은 최대 101개가 남을 수 있다. Original
+SQL은 사용자가 명시적으로 선택한 경우만 저장한다.
 
 하나의 server process만 SQLite에 write한다. Multi-process horizontal write와 shared network filesystem database는 P0 범위가 아니다.
 
