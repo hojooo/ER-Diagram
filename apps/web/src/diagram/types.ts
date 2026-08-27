@@ -17,6 +17,7 @@ export type TableDiagramNodeData = {
   name: string;
   columns: DiagramColumn[];
   lod: DiagramLod;
+  selectedElementKey?: string | null;
 } & Record<string, unknown>;
 
 export type GroupDiagramNodeData = {

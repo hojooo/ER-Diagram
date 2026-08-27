@@ -1,4 +1,5 @@
 import type { Diagnostic } from "@er-diagram/contracts";
+import type { SourceRange } from "@er-diagram/core";
 import type { editor, IRange } from "monaco-editor";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 
@@ -11,6 +12,7 @@ import type { SourceEditorHandle, SourceEditorProps } from "./editor-contract.js
 import { loadMonacoRuntime, type MonacoRuntime } from "./monaco-runtime.js";
 
 export const DBML_MARKER_OWNER = "er-diagram-dbml";
+export const DBML_MAIN_FILEPATH = "/main.dbml";
 
 interface MonacoDbmlEditorProps extends SourceEditorProps {
   readonly loadRuntime?: () => Promise<MonacoRuntime>;
@@ -20,7 +22,15 @@ let languageRegistered = false;
 
 export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorProps>(
   function MonacoDbmlEditor(
-    { projectId, initialSource, diagnostics, onChange, onSave, loadRuntime = loadMonacoRuntime },
+    {
+      projectId,
+      initialSource,
+      diagnostics,
+      onChange,
+      onSave,
+      onCursorPositionChange,
+      loadRuntime = loadMonacoRuntime,
+    },
     forwardedRef,
   ) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -31,12 +41,14 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
     const diagnosticsRef = useRef(diagnostics);
     const onChangeRef = useRef(onChange);
     const onSaveRef = useRef(onSave);
+    const onCursorPositionChangeRef = useRef(onCursorPositionChange);
     const suppressChangeRef = useRef(false);
     const [loadState, setLoadState] = useState<"LOADING" | "READY" | "ERROR">("LOADING");
 
     diagnosticsRef.current = diagnostics;
     onChangeRef.current = onChange;
     onSaveRef.current = onSave;
+    onCursorPositionChangeRef.current = onCursorPositionChange;
 
     useImperativeHandle(
       forwardedRef,
@@ -62,6 +74,16 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
           activeEditor.focus();
           return true;
         },
+        revealSourceRange(range) {
+          const activeEditor = editorRef.current;
+          const model = modelRef.current;
+          if (!activeEditor || !model || range.filepath !== DBML_MAIN_FILEPATH) return false;
+          const selection = sourceRangeStartToEditorRange(model, range);
+          activeEditor.setSelection(selection);
+          activeEditor.revealRangeInCenter(selection);
+          activeEditor.focus();
+          return true;
+        },
         focus() {
           editorRef.current?.focus();
         },
@@ -74,6 +96,7 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
       let activeEditor: editor.IStandaloneCodeEditor | undefined;
       let model: editor.ITextModel | undefined;
       let changeListener: { dispose(): void } | undefined;
+      let cursorListener: { dispose(): void } | undefined;
 
       void loadRuntime().then(
         (monaco) => {
@@ -105,6 +128,13 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
           changeListener = model.onDidChangeContent(() => {
             if (!suppressChangeRef.current && model) onChangeRef.current(model.getValue());
           });
+          cursorListener = activeEditor.onDidChangeCursorPosition((event) => {
+            if (!model) return;
+            onCursorPositionChangeRef.current?.({
+              filepath: DBML_MAIN_FILEPATH,
+              offset: model.getOffsetAt(event.position),
+            });
+          });
           monacoRef.current = monaco;
           modelRef.current = model;
           editorRef.current = activeEditor;
@@ -119,6 +149,7 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
       return () => {
         cancelled = true;
         changeListener?.dispose();
+        cursorListener?.dispose();
         if (model && monacoRef.current) {
           monacoRef.current.editor.setModelMarkers(model, DBML_MARKER_OWNER, []);
         }
@@ -172,6 +203,19 @@ function registerDbmlLanguage(monaco: MonacoRuntime): void {
   monaco.languages.setLanguageConfiguration(DBML_LANGUAGE_ID, dbmlLanguageConfiguration);
   monaco.languages.setMonarchTokensProvider(DBML_LANGUAGE_ID, dbmlMonarchLanguage);
   languageRegistered = true;
+}
+
+export function sourceRangeStartToEditorRange(
+  model: editor.ITextModel,
+  range: SourceRange,
+): IRange {
+  const position = model.getPositionAt(clamp(range.startOffset, 0, model.getValueLength()));
+  return {
+    startLineNumber: position.lineNumber,
+    startColumn: position.column,
+    endLineNumber: position.lineNumber,
+    endColumn: position.column,
+  };
 }
 
 export function applyDiagnosticMarkers(
