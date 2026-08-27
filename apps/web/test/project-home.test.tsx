@@ -185,7 +185,7 @@ describe("Project Home", () => {
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create project" }));
 
-    await screen.findByRole("heading", { name: "Orders" });
+    await screen.findByRole("heading", { name: "Orders", level: 1 });
     expect(api.createInputs).toEqual([{ name: "Orders", primaryDialect: "MYSQL", source: "" }]);
     expect(screen.getByText("MySQL project")).toBeVisible();
     expect(screen.queryByText("Compound groups, source-defined views")).not.toBeInTheDocument();
@@ -209,7 +209,7 @@ describe("Project Home", () => {
     await within(dialog).findByText("schema.dbml");
     fireEvent.click(within(dialog).getByRole("button", { name: "Create project" }));
 
-    await screen.findByRole("heading", { name: "Unicode schema" });
+    await screen.findByRole("heading", { name: "Unicode schema", level: 1 });
     expect(api.createInputs[0]?.source).toBe(source);
   });
 
