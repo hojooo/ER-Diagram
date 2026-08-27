@@ -1,7 +1,6 @@
 import type { Database } from "@dbml/core";
 import { parseCardinality, type RelationCardinality } from "@dbml/parse";
 import { isSourceRangeValid, resolvePublicFilepath } from "./dbml-source-range.js";
-import { sha256Utf8 } from "./hash.js";
 import {
   type CheckNode,
   type ColumnDefaultNode,
@@ -28,10 +27,10 @@ import {
   type TablePartialNode,
   type TextNote,
 } from "./schema-graph.js";
-import { sourceOwnerKey, type SourceTextIndex } from "./source-text-index.js";
+import { computeSchemaHash } from "./schema-semantics.js";
+import { type SourceTextIndex, sourceOwnerKey } from "./source-text-index.js";
 
 const DEFAULT_SCHEMA = "public";
-const SOURCE_LOCATION_KEYS = new Set(["range", "contentRange", "injectionRange"]);
 
 interface PositionLike {
   offset: number;
@@ -322,20 +321,9 @@ class SchemaGraphNormalizer {
     );
     const views = (this.database.diagramViews ?? []).map((view) => this.normalizeView(view));
 
-    const semanticModel = {
-      project,
-      notes,
-      tables,
-      enums,
-      references,
-      groups,
-      partials,
-      views,
-    };
-
-    return {
+    const graph: SchemaGraph = {
       parserVersion: DBML_PARSER_VERSION,
-      schemaHash: await sha256Utf8(JSON.stringify(withoutSourceLocations(semanticModel))),
+      schemaHash: "",
       project,
       notes,
       tables,
@@ -347,6 +335,7 @@ class SchemaGraphNormalizer {
       diagnostics: [],
       sourceMap: this.sourceMap,
     };
+    return { ...graph, schemaHash: await computeSchemaHash(graph) };
   }
 
   private normalizeProject(): ProjectNode | null {
@@ -1075,28 +1064,4 @@ function requiredKey(value: SchemaElementKey | undefined): SchemaElementKey {
     throw new SchemaGraphNormalizationError("Failed to allocate a SchemaElementKey.");
   }
   return value;
-}
-
-function withoutSourceLocations(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(withoutSourceLocations);
-  if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([key, child]) => !(SOURCE_LOCATION_KEYS.has(key) && isSourceRange(child)))
-      .map(([key, child]) => [key, withoutSourceLocations(child)]),
-  );
-}
-
-function isSourceRange(value: unknown): value is SourceRange {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const candidate = value as Partial<SourceRange>;
-  return (
-    typeof candidate.startOffset === "number" &&
-    typeof candidate.endOffset === "number" &&
-    typeof candidate.startLine === "number" &&
-    typeof candidate.startColumn === "number" &&
-    typeof candidate.endLine === "number" &&
-    typeof candidate.endColumn === "number" &&
-    typeof candidate.filepath === "string"
-  );
 }
