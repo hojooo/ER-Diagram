@@ -19,6 +19,7 @@ export type SqliteStorageErrorCode =
   | "SQLITE_MIGRATION_FAILED"
   | "SQLITE_SCHEMA_VERSION_UNSUPPORTED"
   | "SQLITE_NOT_WRITABLE"
+  | "SQLITE_PROJECT_DATA_INVALID"
   | "SQLITE_ASYNC_TRANSACTION_UNSUPPORTED";
 
 export class SqliteStorageError extends Error {

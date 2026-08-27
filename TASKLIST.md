@@ -194,8 +194,8 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - 검증: `pnpm --filter @er-diagram/core test test/semantic-diff.test.ts`
 - [x] `M1-004` SQLite five-table migration, WAL/FK/busy timeout, UUIDv7 adapter
   - 검증: `pnpm --filter @er-diagram/storage-sqlite test test/storage-sqlite.test.ts`
-- [ ] `M1-005` project/revision use cases와 transaction/retention
-  - 검증: `pnpm --filter @er-diagram/core test application/project`
+- [x] `M1-005` project/revision use cases와 transaction/retention
+  - 검증: `pnpm --filter @er-diagram/core test test/application/project.test.ts`
 - [ ] `M1-006` project/draft/revision/restore Fastify API와 correlation ID
   - 검증: `pnpm --filter @er-diagram/server test:integration projects`
 - [ ] `M1-007` accessible Web shell과 Project Home

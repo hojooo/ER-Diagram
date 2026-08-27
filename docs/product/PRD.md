@@ -317,12 +317,16 @@ P0에서는 기존 schema와 SQL을 자동 merge하지 않는다. replace 전 �
 
 | ID | 우선순위 | 요구사항 | 수용 기준 |
 | --- | --- | --- | --- |
-| `PRJ-001` | P0 | 사용자는 project를 생성·rename·복제·삭제할 수 있다. | 삭제 전 명시적 확인과 portable backup 안내가 표시된다. |
+| `PRJ-001` | P0 | 사용자는 project를 생성·rename·복제·삭제할 수 있다. | 복제는 current draft와 last-valid 상태를 새 revision 1~2로 재기준화하고 과거 history·layout·import artifact는 복사하지 않는다. 삭제 전 명시적 확인과 portable backup 안내를 표시한다. |
 | `PRJ-002` | P0 | project 생성 시 `primaryDialect`를 선택한다. | `POSTGRESQL`, `MYSQL` 외 값은 저장되지 않는다. |
 | `PRJ-003` | P0 | canonical source, invalid draft, last-valid revision을 분리한다. | invalid draft 저장 후 재시작해도 내용과 last-valid diagram이 모두 복구된다. |
 | `PRJ-004` | P0 | 모든 schema write는 monotonically increasing `revisionNo` 또는 expected version을 사용한다. | 두 browser tab의 stale write가 최신 내용을 조용히 덮어쓰지 않는다. |
 | `PRJ-005` | P0 | autosave와 명시적 save 상태를 표시한다. | 사용자는 `Saving`, `Saved`, `Error`, `Draft invalid`를 구분할 수 있다. |
 | `PRJ-006` | P0 | portable bundle을 export/import한다. | bundle은 DBML, layout, metadata, parser version, optional reports를 포함하고 새 설치에서 복구된다. |
+
+Project rename은 요청한 `expectedSchemaRevisionNo`가 current schema와 같은지 확인하지만 source
+revision을 만들거나 `schemaRevisionNo`를 증가시키지 않는다. 같은 schema revision을 기준으로 한 rename
+끼리는 마지막으로 commit된 이름을 사용한다.
 
 ### 11.2 DBML parsing과 source editor
 
@@ -573,10 +577,13 @@ INVALID_DRAFT
 | `validity` | `VALID` 또는 `INVALID` |
 | `origin` | `SOURCE_EDIT`, `VISUAL_COMMAND`, `SQL_IMPORT`, `RESTORE`, `PARSER_MIGRATION` |
 | `parserVersion` | validation provenance |
-| `diagnosticSummary` | error/warning count와 version |
+| `diagnosticSummary` | error/warning/info count와 parser version |
 | `createdAt` | 생성 시각 |
 
-P0는 최근 non-checkpoint schema revision 100개를 보존한다. import replace, restore, parser migration checkpoint는 자동 pruning 대상에서 제외한다.
+P0는 최근 non-checkpoint schema revision 100개를 보존한다. import replace, restore, parser migration
+checkpoint는 자동 pruning 대상에서 제외한다. 현재 `lastValidRevisionId`가 가리키는 revision은 항상
+보호하므로 invalid draft가 100개를 초과해 연속 저장된 동안에는 non-checkpoint revision이 최대 101개
+남을 수 있다.
 
 ### 14.3 `DiagramLayout`
 
