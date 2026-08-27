@@ -107,13 +107,14 @@ describe("DBML source workspace", () => {
     const retry = screen.getByRole("button", { name: "Retry local draft" });
     await waitFor(() => expect(retry).toBeEnabled());
     fireEvent.click(retry);
-    await settleReact();
 
-    expect(api.saveDraftInputs[1]).toMatchObject({
-      source: SECOND_VALID_SOURCE,
-      expectedSchemaRevisionNo: 2,
-    });
-    expect(screen.getByText("Saved")).toBeVisible();
+    await waitFor(() =>
+      expect(api.saveDraftInputs[1]).toMatchObject({
+        source: SECOND_VALID_SOURCE,
+        expectedSchemaRevisionNo: 2,
+      }),
+    );
+    expect(await findWorkspaceStatus("Saved")).toBeVisible();
     expect(editor).toHaveValue(domValue(SECOND_VALID_SOURCE));
   });
 
