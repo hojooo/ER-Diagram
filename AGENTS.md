@@ -37,9 +37,9 @@
 
 ## Testing And Verification
 
-- Run focused tests with `pnpm --filter <workspace> test -- <pattern>`.
+- Run focused tests with `pnpm --filter <workspace> test <pattern>`.
 - Run architecture rules with `pnpm architecture:check`.
-- Run the Milestone 0 gate with `pnpm ci:verify` and `pnpm test:perf -- --scenario layout-spike`.
+- Run the Milestone 0 gate with `pnpm ci:verify` and `pnpm test:perf --scenario layout-spike`.
 - Run `pnpm licenses:check` whenever dependencies or notices change.
 - Synthetic fixtures must be byte-identical for the same seed and must never contain private Digreed schema data.
 

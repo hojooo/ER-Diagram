@@ -35,7 +35,7 @@ Milestone 0 전체 gate는 다음 명령으로 확인한다.
 
 ```sh
 pnpm ci:verify
-pnpm test:perf -- --scenario layout-spike
+pnpm test:perf --scenario layout-spike
 ```
 
 ## Repository 구조
