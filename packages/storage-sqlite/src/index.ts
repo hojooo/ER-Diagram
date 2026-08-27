@@ -1,3 +1,4 @@
+export { createSqliteProjectRepository } from "./project-repository.js";
 export {
   appMetadata,
   DETAIL_LEVELS,
