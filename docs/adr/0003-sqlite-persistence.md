@@ -20,9 +20,25 @@ P0 schema는 다음 table로 구성한다.
 - `import_artifacts`
 - `app_metadata`
 
-ID는 UUIDv7 text, 시간은 UTC ISO-8601 text로 저장한다. Connection은 `foreign_keys=ON`, WAL mode, `busy_timeout=5000`으로 초기화한다. Canonical source write, revision, last-valid pointer와 관련 layout key migration은 하나의 transaction에서 commit하거나 모두 rollback한다.
+Drizzle 표준 migrator가 관리하는 `__drizzle_migrations`는 허용하되 제품 table inventory에는 포함하지
+않는다. Migration은 review 가능한 SQL과 `meta/_journal.json`을 직접 작성하며 P0에는 `drizzle-kit`을
+추가하지 않는다. Drizzle schema와 실제 migration의 정합성은 empty database introspection과 behavior
+test로 검증한다.
 
-최근 non-checkpoint revision 100개를 보존한다. Import, restore, parser-migration checkpoint는 자동 pruning에서 제외한다. Original SQL은 사용자가 명시적으로 선택한 경우만 저장한다.
+ID는 lowercase UUIDv7 text, 시간은 `YYYY-MM-DDTHH:mm:ss.sssZ` UTC ISO-8601 text로 저장한다.
+Connection은 durable file만 허용하고 매번 `foreign_keys=ON`, WAL mode, `busy_timeout=5000`을 설정한
+뒤 effective value를 다시 확인한다. Migration, integrity check와 rollback-only write probe가 실패하면
+connection을 닫고 startup을 실패시킨다.
+
+`projects.last_valid_revision_id`는 같은 project의 revision만 가리키는 deferrable composite foreign
+key다. Canonical source write, revision, last-valid pointer와 관련 layout key migration은 하나의
+`BEGIN IMMEDIATE` transaction에서 commit하거나 모두 rollback한다. better-sqlite3 transaction callback은
+동기식으로 제한한다.
+
+최근 non-checkpoint revision 100개를 보존한다. Checkpoint 여부는 별도 boolean으로 중복 저장하지 않고
+revision origin에서 파생한다. `SQL_IMPORT`, `RESTORE`, `PARSER_MIGRATION`은 checkpoint이며
+`SOURCE_EDIT`, `VISUAL_COMMAND`는 pruning 대상이다. Original SQL은 사용자가 명시적으로 선택한 경우만
+저장한다.
 
 하나의 server process만 SQLite에 write한다. Multi-process horizontal write와 shared network filesystem database는 P0 범위가 아니다.
 
@@ -51,5 +67,8 @@ Portable하게 보이지만 revision, optimistic version, multiple sidecar의 tr
 
 - Empty database migration, foreign-key violation, transaction rollback과 restart recovery를 검사한다.
 - WAL, foreign keys와 busy timeout의 effective value를 확인한다.
+- 다섯 product table과 Drizzle migration table, column/index inventory와 migration hash를 확인한다.
+- read-only storage, unsupported schema version, invalid migration과 built package의 migration path가
+  fail-closed인지 확인한다.
 - Retention과 checkpoint 예외를 fixture로 검증한다.
 - Backup/restore는 checksum, dry run, read-back을 포함한다.
