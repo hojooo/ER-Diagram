@@ -1,4 +1,6 @@
-import type { Diagnostic } from "@er-diagram/contracts";
+import type { Diagnostic, SourceRange } from "@er-diagram/contracts";
+
+export type { SourceRange } from "@er-diagram/contracts";
 
 export const DBML_PARSER_VERSION = "9.1.1" as const;
 
@@ -30,16 +32,8 @@ export type SchemaKeySegment =
   | SchemaKeySegment[]
   | { [key: string]: SchemaKeySegment };
 
-/** UTF-16 half-open offsets with one-based line and column coordinates. */
-export interface SourceRange {
-  startOffset: number;
-  endOffset: number;
-  startLine: number;
-  startColumn: number;
-  endLine: number;
-  endColumn: number;
-  filepath: string;
-}
+/** Stable source lookup for every normalized schema element. */
+export type SourceMap = Record<SchemaElementKey, SourceRange>;
 
 export interface TextNote {
   value: string;
@@ -243,7 +237,7 @@ export interface SchemaGraph {
   partials: TablePartialNode[];
   views: DiagramViewNode[];
   diagnostics: Diagnostic[];
-  sourceMap: Record<SchemaElementKey, SourceRange>;
+  sourceMap: SourceMap;
 }
 
 export function qualifiedElementKey(
