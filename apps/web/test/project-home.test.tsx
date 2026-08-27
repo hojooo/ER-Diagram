@@ -8,14 +8,15 @@ import { createMemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { App, createAppRoutes } from "../src/App.js";
-import { ProjectApiError } from "../src/projects/project-api.js";
 import type {
   CreateProjectInput,
   DeleteProjectInput,
   DuplicateProjectInput,
   ProjectApi,
   RenameProjectInput,
+  SaveDraftInput,
 } from "../src/projects/project-api.js";
+import { ProjectApiError } from "../src/projects/project-api.js";
 
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-0123456789ab";
 const COPY_ID = "019d3f4e-7b6c-7def-9abc-0123456789ab";
@@ -96,6 +97,7 @@ class FakeProjectApi implements ProjectApi {
   readonly renameInputs: RenameProjectInput[] = [];
   readonly duplicateInputs: DuplicateProjectInput[] = [];
   readonly deleteInputs: DeleteProjectInput[] = [];
+  readonly saveDraftInputs: SaveDraftInput[] = [];
 
   async listProjects() {
     if (this.listError) throw this.listError;
@@ -146,6 +148,14 @@ class FakeProjectApi implements ProjectApi {
     const state = projectState({ id: COPY_ID, name: input.name });
     this.projects = [state, ...this.projects];
     return { state, diagnostics: [], revisionCreated: true };
+  }
+
+  async saveDraft(input: SaveDraftInput) {
+    this.saveDraftInputs.push(input);
+    if (this.mutationError) throw this.mutationError;
+    const current = this.projects.find((item) => item.project.id === input.projectId);
+    if (!current) throw new Error("PROJECT_NOT_FOUND");
+    return { state: current, diagnostics: [], revisionCreated: false };
   }
 
   async deleteProject(input: DeleteProjectInput) {

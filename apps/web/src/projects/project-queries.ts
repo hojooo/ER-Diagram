@@ -1,8 +1,9 @@
 import { QueryClient } from "@tanstack/react-query";
 
 export const projectQueryKeys = {
-  all: ["projects"] as const,
-  detail: (projectId: string) => ["projects", projectId] as const,
+  root: ["projects"] as const,
+  list: ["projects", "list"] as const,
+  detail: (projectId: string) => ["projects", "detail", projectId] as const,
 };
 
 export function createAppQueryClient(): QueryClient {

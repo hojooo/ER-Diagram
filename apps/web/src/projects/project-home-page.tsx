@@ -1,5 +1,5 @@
-import * as Dialog from "@radix-ui/react-dialog";
 import type { PrimaryDialect, ProjectSummary } from "@er-diagram/contracts";
+import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type RefObject, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -21,7 +21,7 @@ export function ProjectHomePage() {
   const api = useProjectApi();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const projectsQuery = useQuery({
-    queryKey: projectQueryKeys.all,
+    queryKey: projectQueryKeys.list,
     queryFn: () => api.listProjects(),
   });
 
@@ -298,7 +298,7 @@ function CreateProjectDialog() {
       queryClient.setQueryData(projectQueryKeys.detail(result.state.project.id), {
         state: result.state,
       });
-      await queryClient.invalidateQueries({ queryKey: projectQueryKeys.all });
+      await queryClient.invalidateQueries({ queryKey: projectQueryKeys.list });
       setOpen(false);
       await navigate(`/projects/${result.state.project.id}`);
     } catch (error) {
@@ -418,7 +418,7 @@ function RenameProjectDialog({ project }: { readonly project: ProjectSummary }) 
     try {
       const result = await mutation.mutateAsync(trimmedName);
       queryClient.setQueryData(projectQueryKeys.detail(project.id), result);
-      await queryClient.invalidateQueries({ queryKey: projectQueryKeys.all });
+      await queryClient.invalidateQueries({ queryKey: projectQueryKeys.list });
       setOpen(false);
     } catch (error) {
       setFormError(error);
@@ -497,7 +497,7 @@ function DuplicateProjectDialog({ project }: { readonly project: ProjectSummary 
       queryClient.setQueryData(projectQueryKeys.detail(result.state.project.id), {
         state: result.state,
       });
-      await queryClient.invalidateQueries({ queryKey: projectQueryKeys.all });
+      await queryClient.invalidateQueries({ queryKey: projectQueryKeys.list });
       setOpen(false);
       await navigate(`/projects/${result.state.project.id}`);
     } catch (error) {
@@ -568,7 +568,7 @@ function DeleteProjectDialog({
     try {
       await mutation.mutateAsync();
       queryClient.removeQueries({ queryKey: projectQueryKeys.detail(project.id) });
-      await queryClient.invalidateQueries({ queryKey: projectQueryKeys.all });
+      await queryClient.invalidateQueries({ queryKey: projectQueryKeys.list });
       setOpen(false);
       queueMicrotask(() => focusAfterDeleteRef.current?.focus());
     } catch (error) {
@@ -730,7 +730,7 @@ async function refreshAfterConflict(
   error: unknown,
 ) {
   if (error instanceof ProjectApiError && error.code === "PROJECT_SCHEMA_REVISION_CONFLICT") {
-    await queryClient.invalidateQueries({ queryKey: projectQueryKeys.all });
+    await queryClient.invalidateQueries({ queryKey: projectQueryKeys.list });
   }
 }
 

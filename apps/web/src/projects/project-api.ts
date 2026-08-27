@@ -3,15 +3,16 @@ import {
   createProjectRequestSchema,
   deleteProjectRequestSchema,
   errorResponseSchema,
+  type PrimaryDialect,
+  type ProjectMutationResponse,
+  type ProjectResponse,
+  type ProjectsResponse,
   projectIdSchema,
   projectMutationResponseSchema,
   projectResponseSchema,
   projectsResponseSchema,
   renameProjectRequestSchema,
-  type PrimaryDialect,
-  type ProjectMutationResponse,
-  type ProjectResponse,
-  type ProjectsResponse,
+  saveDraftRequestSchema,
 } from "@er-diagram/contracts";
 
 export interface CreateProjectInput {
@@ -37,12 +38,19 @@ export interface DeleteProjectInput {
   readonly expectedSchemaRevisionNo: number;
 }
 
+export interface SaveDraftInput {
+  readonly projectId: string;
+  readonly source: string;
+  readonly expectedSchemaRevisionNo: number;
+}
+
 export interface ProjectApi {
   listProjects(): Promise<ProjectsResponse>;
   getProject(projectId: string): Promise<ProjectResponse>;
   createProject(input: CreateProjectInput): Promise<ProjectMutationResponse>;
   renameProject(input: RenameProjectInput): Promise<ProjectResponse>;
   duplicateProject(input: DuplicateProjectInput): Promise<ProjectMutationResponse>;
+  saveDraft(input: SaveDraftInput): Promise<ProjectMutationResponse>;
   deleteProject(input: DeleteProjectInput): Promise<void>;
 }
 
@@ -83,7 +91,7 @@ interface RuntimeSchema<T> {
 }
 
 interface RequestOptions<T> {
-  readonly method: "GET" | "POST" | "PATCH" | "DELETE";
+  readonly method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   readonly path: string;
   readonly expectedStatus: number;
   readonly responseSchema?: RuntimeSchema<T>;
@@ -163,6 +171,23 @@ export function createHttpProjectApi(options: HttpProjectApiOptions = {}): Proje
         method: "POST",
         path: "/projects",
         expectedStatus: 201,
+        responseSchema: projectMutationResponseSchema,
+        body,
+        commandId,
+      });
+    },
+    saveDraft: (input) => {
+      const projectId = parseClientInput(projectIdSchema, input.projectId);
+      const commandId = generateCommandId();
+      const body = parseClientInput(saveDraftRequestSchema, {
+        commandId,
+        source: input.source,
+        expectedSchemaRevisionNo: input.expectedSchemaRevisionNo,
+      });
+      return request(fetcher, basePath, {
+        method: "PUT",
+        path: `/projects/${encodeURIComponent(projectId)}/draft`,
+        expectedStatus: 200,
         responseSchema: projectMutationResponseSchema,
         body,
         commandId,
