@@ -7,6 +7,7 @@ export type DiagramViewKey = "GLOBAL" | string;
 export type DiagramColumn = Pick<ColumnNode, "key" | "name" | "primaryKey"> & {
   type: string;
   foreignKey: boolean;
+  partialName: string | null;
 };
 
 export type TableDiagramNodeData = {
@@ -31,6 +32,10 @@ export type ReferenceDiagramEdgeData = {
   kind: "reference";
   count: number;
   referenceKeys: string[];
+  referenceName?: string | null;
+  inactive?: boolean;
+  sourceMultiplicity?: string;
+  targetMultiplicity?: string;
 } & Record<string, unknown>;
 
 export type TableDiagramNode = Node<TableDiagramNodeData, "table"> & {

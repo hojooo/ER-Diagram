@@ -1,4 +1,10 @@
-import type { DiagramViewNode, ReferenceEdge, SchemaGraph } from "@er-diagram/core";
+import type {
+  DiagramViewNode,
+  ReferenceEdge,
+  ReferenceEndpoint,
+  SchemaGraph,
+  TableNode,
+} from "@er-diagram/core";
 import type {
   DiagramLod,
   DiagramProjection,
@@ -30,6 +36,23 @@ export function listDiagramViews(graph: SchemaGraph): DiagramViewOption[] {
     { key: GLOBAL_VIEW_KEY, label: "Global" },
     ...graph.views.map((view) => ({ key: view.key, label: view.name })),
   ];
+}
+
+export function createBaseDiagramProjection(graph: SchemaGraph): DiagramProjection {
+  const visibleTableKeys = new Set(graph.tables.map((table) => table.key));
+  return {
+    viewKey: GLOBAL_VIEW_KEY,
+    lod: "FULL",
+    nodes: createTableNodes(
+      graph,
+      visibleTableKeys,
+      new Map(),
+      new Set(),
+      collectForeignColumnKeys(graph.references),
+      "FULL",
+    ),
+    edges: createBaseReferenceEdges(graph),
+  };
 }
 
 export function createDiagramProjection(
@@ -146,9 +169,10 @@ function selectDisplayParentByTable(
 function collectForeignColumnKeys(references: readonly ReferenceEdge[]): ReadonlySet<string> {
   const result = new Set<string>();
   for (const reference of references) {
-    for (const endpoint of reference.endpoints) {
-      for (const columnKey of endpoint.columnKeys) result.add(columnKey);
-    }
+    if (reference.inactive) continue;
+    const role = resolveReferenceRole(reference);
+    if (!role.foreignEndpoint) continue;
+    for (const columnKey of role.foreignEndpoint.columnKeys) result.add(columnKey);
   }
   return result;
 }
@@ -198,6 +222,7 @@ function createTableNodes(
   lod: DiagramLod,
 ): TableDiagramNode[] {
   const childIndexByGroup = new Map<string, number>();
+  const partialNameByKey = new Map(graph.partials.map((partial) => [partial.key, partial.name]));
   let topLevelIndex = 0;
 
   return graph.tables.flatMap((table) => {
@@ -208,12 +233,16 @@ function createTableNodes(
     if (parentId) childIndexByGroup.set(parentId, siblingIndex + 1);
     else topLevelIndex += 1;
 
+    const primaryColumnKeys = collectPrimaryColumnKeys(table);
     const columns = table.columns.map((column) => ({
       key: column.key,
       name: column.name,
       type: column.type.display,
-      primaryKey: column.primaryKey,
+      primaryKey: primaryColumnKeys.has(column.key),
       foreignKey: foreignColumnKeys.has(column.key),
+      partialName: column.injectedFrom
+        ? (partialNameByKey.get(column.injectedFrom.partialKey) ?? "Unknown partial")
+        : null,
     }));
     const visibleRowCount =
       lod === "FULL"
@@ -223,10 +252,11 @@ function createTableNodes(
           : 0;
     const position = parentId
       ? { x: GROUP_PADDING, y: GROUP_HEADER_HEIGHT + GROUP_PADDING + siblingIndex * 170 }
-      : { x: (topLevelIndex % 8) * 320, y: Math.floor(topLevelIndex / 8) * 220 };
+      : { x: (siblingIndex % 8) * 320, y: Math.floor(siblingIndex / 8) * 220 };
     const node: TableDiagramNode = {
       id: table.key,
       type: "table",
+      focusable: false,
       position,
       style: {
         width: TABLE_WIDTH,
@@ -244,6 +274,101 @@ function createTableNodes(
     };
     return [node];
   });
+}
+
+function collectPrimaryColumnKeys(table: TableNode): ReadonlySet<string> {
+  const result = new Set(
+    table.columns.filter((column) => column.primaryKey).map((column) => column.key),
+  );
+  for (const index of table.indexes) {
+    if (!index.primaryKey) continue;
+    for (const term of index.terms) {
+      if (term.kind === "COLUMN") result.add(term.columnKey);
+    }
+  }
+  return result;
+}
+
+function createBaseReferenceEdges(graph: SchemaGraph): SchemaDiagramEdge[] {
+  const tableByKey = new Map(graph.tables.map((table) => [table.key, table]));
+  const columnNameByKey = new Map(
+    graph.tables.flatMap((table) =>
+      table.columns.map((column) => [column.key, column.name] as const),
+    ),
+  );
+
+  return graph.references.map((reference) => {
+    const role = resolveReferenceRole(reference);
+    const sourceEndpoint = role.foreignEndpoint ?? reference.endpoints[0];
+    const targetEndpoint = role.referencedEndpoint ?? reference.endpoints[1];
+    const sourceMultiplicity = formatMultiplicity(sourceEndpoint);
+    const targetMultiplicity = formatMultiplicity(targetEndpoint);
+    const sourceLabel = formatEndpointLabel(sourceEndpoint, tableByKey, columnNameByKey);
+    const targetLabel = formatEndpointLabel(targetEndpoint, tableByKey, columnNameByKey);
+    const referenceLabel = reference.name ?? "Anonymous reference";
+    const data: ReferenceDiagramEdgeData = {
+      kind: "reference",
+      count: 1,
+      referenceKeys: [reference.key],
+      referenceName: reference.name,
+      inactive: reference.inactive,
+      sourceMultiplicity,
+      targetMultiplicity,
+    };
+    return {
+      id: reference.key,
+      type: "reference",
+      source: sourceEndpoint.tableKey,
+      target: targetEndpoint.tableKey,
+      data,
+      label: `${reference.name ?? "Ref"} · ${sourceMultiplicity} → ${targetMultiplicity}`,
+      ariaLabel: `${referenceLabel}: ${sourceLabel} ${sourceMultiplicity} to ${targetLabel} ${targetMultiplicity}${reference.inactive ? ", inactive" : ""}`,
+      focusable: false,
+      selectable: true,
+      interactionWidth: 20,
+      markerEnd: { type: "arrowclosed" },
+      ...(reference.inactive ? { style: { strokeDasharray: "6 4" } } : {}),
+    } satisfies SchemaDiagramEdge;
+  });
+}
+
+interface ReferenceRole {
+  foreignEndpoint: ReferenceEndpoint | null;
+  referencedEndpoint: ReferenceEndpoint | null;
+}
+
+function resolveReferenceRole(reference: ReferenceEdge): ReferenceRole {
+  const referencedIndex = reference.endpoints.findIndex(
+    (endpoint) => endpoint.multiplicity.max === 1,
+  );
+  if (referencedIndex < 0) {
+    return { foreignEndpoint: null, referencedEndpoint: null };
+  }
+  return {
+    referencedEndpoint: reference.endpoints[referencedIndex] ?? null,
+    foreignEndpoint: reference.endpoints[referencedIndex === 0 ? 1 : 0] ?? null,
+  };
+}
+
+export function formatMultiplicity(endpoint: ReferenceEndpoint): string {
+  const { min, max } = endpoint.multiplicity;
+  if (min === 1 && max === 1) return "1";
+  return `${min}..${max === null ? "*" : max}`;
+}
+
+function formatEndpointLabel(
+  endpoint: ReferenceEndpoint,
+  tableByKey: ReadonlyMap<string, TableNode>,
+  columnNameByKey: ReadonlyMap<string, string>,
+): string {
+  const table = tableByKey.get(endpoint.tableKey);
+  const tableName = table
+    ? table.schemaName === "public"
+      ? table.name
+      : `${table.schemaName}.${table.name}`
+    : endpoint.tableKey;
+  const columns = endpoint.columnKeys.map((key) => columnNameByKey.get(key) ?? key);
+  return `${tableName}.${columns.length === 1 ? columns[0] : `(${columns.join(", ")})`}`;
 }
 
 function createReferenceEdges(
