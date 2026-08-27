@@ -186,7 +186,7 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
 
 ### Milestone 1 — Read-only Schema Workspace
 
-- [ ] `M1-001` stable qualified key와 source range를 갖는 normalized `SchemaGraph`
+- [x] `M1-001` stable qualified key와 source range를 갖는 normalized `SchemaGraph`
   - 검증: `pnpm --filter @er-diagram/core test test/normalized-graph.test.ts`
 - [ ] `M1-002` lexical/syntax/semantic diagnostics와 shared source map
   - 검증: `pnpm --filter @er-diagram/core test diagnostics`
