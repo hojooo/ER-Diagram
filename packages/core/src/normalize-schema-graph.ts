@@ -1,5 +1,6 @@
 import type { Database } from "@dbml/core";
 import { parseCardinality, type RelationCardinality } from "@dbml/parse";
+import { isSourceRangeValid, resolvePublicFilepath } from "./dbml-source-range.js";
 import { sha256Utf8 } from "./hash.js";
 import {
   type CheckNode,
@@ -253,6 +254,8 @@ interface DatabaseLike {
 export interface NormalizeSchemaGraphOptions {
   fallbackFilepath: string;
   forceFilepath: boolean;
+  publicFilepathByCompilerPath?: ReadonlyMap<string, string> | undefined;
+  sourceByPublicFilepath?: ReadonlyMap<string, string> | undefined;
   sourceText?: SourceTextIndex;
 }
 
@@ -857,7 +860,16 @@ class SchemaGraphNormalizer {
   private range(token: TokenLike): SourceRange {
     const filepath = this.options.forceFilepath
       ? this.options.fallbackFilepath
-      : (tokenFilepath(token) ?? this.options.fallbackFilepath);
+      : resolvePublicFilepath(tokenFilepath(token), {
+          fallbackPublicFilepath: this.options.fallbackFilepath,
+          publicFilepathByCompilerPath: this.options.publicFilepathByCompilerPath,
+          sourceByPublicFilepath: this.options.sourceByPublicFilepath,
+        });
+    if (filepath === null) {
+      throw new SchemaGraphNormalizationError(
+        `No public filepath mapping exists for compiler token: ${tokenFilepath(token) ?? "<missing>"}`,
+      );
+    }
     const range: SourceRange = {
       startOffset: token.start.offset,
       endOffset: token.end.offset,
@@ -867,7 +879,7 @@ class SchemaGraphNormalizer {
       endColumn: token.end.column,
       filepath,
     };
-    validateRange(range);
+    validateRange(range, this.options.sourceByPublicFilepath);
     return range;
   }
 
@@ -1035,26 +1047,14 @@ function tokenFilepath(token: TokenLike): string | null {
   return null;
 }
 
-function validateRange(range: SourceRange): void {
-  const integerValues = [
-    range.startOffset,
-    range.endOffset,
-    range.startLine,
-    range.startColumn,
-    range.endLine,
-    range.endColumn,
-  ];
+function validateRange(
+  range: SourceRange,
+  sourceByPublicFilepath?: ReadonlyMap<string, string>,
+): void {
   if (
-    !integerValues.every(Number.isSafeInteger) ||
-    range.startOffset < 0 ||
+    !isSourceRangeValid(range, sourceByPublicFilepath) ||
     range.endOffset <= range.startOffset ||
-    range.startLine < 1 ||
-    range.startColumn < 1 ||
-    range.endLine < 1 ||
-    range.endColumn < 1 ||
-    range.endLine < range.startLine ||
-    (range.endLine === range.startLine && range.endColumn <= range.startColumn) ||
-    range.filepath.length === 0
+    (range.endLine === range.startLine && range.endColumn <= range.startColumn)
   ) {
     throw new SchemaGraphNormalizationError(`Invalid source range: ${JSON.stringify(range)}`);
   }

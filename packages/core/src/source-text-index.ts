@@ -1,7 +1,6 @@
 import {
-  Compiler,
-  Filepath,
-  MemoryProjectLayout,
+  type Compiler,
+  type Filepath,
   SyntaxNodeKind,
   SyntaxTokenKind,
   type AttributeNode,
@@ -16,22 +15,15 @@ export interface SourceTextIndex {
   stickyContentByOwner: ReadonlyMap<string, TextNote>;
 }
 
-export function buildSingleFileSourceTextIndex(source: string, filepath: string): SourceTextIndex {
-  const path = Filepath.from(filepath);
-  const layout = new MemoryProjectLayout();
-  layout.setSource(path, source);
-  return buildSourceTextIndex(new Compiler(layout), [{ path, publicFilepath: filepath }]);
-}
-
-export function buildProjectSourceTextIndex(
+export function buildCompilerSourceTextIndex(
   compiler: Compiler,
-  filepaths: readonly string[],
+  files: ReadonlyArray<{ compilerFilepath: Filepath; publicFilepath: string }>,
 ): SourceTextIndex {
   return buildSourceTextIndex(
     compiler,
-    filepaths.map((filepath) => ({
-      path: Filepath.from(filepath),
-      publicFilepath: filepath,
+    files.map((file) => ({
+      path: file.compilerFilepath,
+      publicFilepath: file.publicFilepath,
     })),
   );
 }
