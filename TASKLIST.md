@@ -175,91 +175,91 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
 - [x] `M0-007` DBML v2 parser spike
   - `TablePartial`, `TableGroup`, `DiagramView`, comments, metadata와 source hash를 증명한다.
   - `@dbml/connector`의 비연결 사용 필요성을 확인하고, 근거가 없으면 P0 direct runtime dependency에서 제외한다.
-  - 검증: `pnpm --filter @er-diagram/core test -- parser-spike`
+  - 검증: `pnpm --filter @er-diagram/core test parser-spike`
 - [x] `M0-008` minimal source transformation spike
   - source range `TextEdit[]`, reverse-offset 적용, reparse와 semantic diff gate
-  - 검증: `pnpm --filter @er-diagram/source-transform test -- fidelity-spike`
+  - 검증: `pnpm --filter @er-diagram/source-transform test fidelity-spike`
 - [x] `M0-009` React Flow + ELK compound graph spike
   - 15 groups, collapsed aggregate edge, 7 views, worker/culling/LOD prototype
-  - 검증: `pnpm test:perf -- --scenario layout-spike`
+  - 검증: `pnpm test:perf --scenario layout-spike`
 - [x] `M0-GATE` parser fidelity, minimal source patch, scale layout 통과
 
 ### Milestone 1 — Read-only Schema Workspace
 
-- [ ] `M1-001` stable qualified key와 source range를 갖는 normalized `SchemaGraph`
-  - 검증: `pnpm --filter @er-diagram/core test -- normalized-graph`
+- [x] `M1-001` stable qualified key와 source range를 갖는 normalized `SchemaGraph`
+  - 검증: `pnpm --filter @er-diagram/core test test/normalized-graph.test.ts`
 - [ ] `M1-002` lexical/syntax/semantic diagnostics와 shared source map
-  - 검증: `pnpm --filter @er-diagram/core test -- diagnostics`
+  - 검증: `pnpm --filter @er-diagram/core test diagnostics`
 - [ ] `M1-003` canonical semantic hash, add/update/delete diff, rename candidate
-  - 검증: `pnpm --filter @er-diagram/core test -- semantic-diff`
+  - 검증: `pnpm --filter @er-diagram/core test semantic-diff`
 - [ ] `M1-004` SQLite five-table migration, WAL/FK/busy timeout, UUIDv7 adapter
   - 검증: `pnpm --filter @er-diagram/storage-sqlite test`
 - [ ] `M1-005` project/revision use cases와 transaction/retention
-  - 검증: `pnpm --filter @er-diagram/core test -- application/project`
+  - 검증: `pnpm --filter @er-diagram/core test application/project`
 - [ ] `M1-006` project/draft/revision/restore Fastify API와 correlation ID
-  - 검증: `pnpm --filter @er-diagram/server test:integration -- projects`
+  - 검증: `pnpm --filter @er-diagram/server test:integration projects`
 - [ ] `M1-007` accessible Web shell과 Project Home
-  - 검증: `pnpm --filter @er-diagram/web test -- project-home`
+  - 검증: `pnpm --filter @er-diagram/web test project-home`
 - [ ] `M1-008` Monaco DBML editor, parser worker, 750 ms autosave와 stale-response guard
-  - 검증: `pnpm --filter @er-diagram/web test -- source-editor`
+  - 검증: `pnpm --filter @er-diagram/web test source-editor`
 - [ ] `M1-009` table/column/PK/FK/ref base diagram과 source navigation
-  - 검증: `pnpm --filter @er-diagram/web test -- diagram-base`
+  - 검증: `pnpm --filter @er-diagram/web test diagram-base`
 - [ ] `M1-010` `TableGroup` compound node와 collapse edge aggregation
-  - 검증: `pnpm --filter @er-diagram/web test -- table-groups`
+  - 검증: `pnpm --filter @er-diagram/web test table-groups`
 - [ ] `M1-011` `DiagramView`, search, `NAME_ONLY|KEYS_ONLY|FULL` LOD
-  - 검증: `pnpm --filter @er-diagram/web test -- views-search-lod`
+  - 검증: `pnpm --filter @er-diagram/web test views-search-lod`
 - [ ] `M1-012` per-view layout persistence와 auto-layout preview/apply/cancel/reset
-  - 검증: `pnpm test:integration -- layout && pnpm test:e2e -- layout`
+  - 검증: `pnpm test:integration layout && pnpm test:e2e layout`
 - [ ] `M1-GATE` fidelity 탐색과 invalid-draft restart recovery 통과
 
 ### Milestone 2 — PostgreSQL·MySQL SQL Interchange
 
 - [ ] `M2-001` versioned PostgreSQL/MySQL DDL capability matrix
-  - 검증: `pnpm --filter @er-diagram/core test -- sql-capabilities`
+  - 검증: `pnpm --filter @er-diagram/core test sql-capabilities`
 - [ ] `M2-002` SQL import와 clause별 `ConversionReport`, graph A→DBML→graph B 비교
-  - 검증: `pnpm --filter @er-diagram/core test -- sql-import`
+  - 검증: `pnpm --filter @er-diagram/core test sql-import`
 - [ ] `M2-003` DML/민감 data exclusion과 opt-in original SQL retention
-  - 검증: `pnpm --filter @er-diagram/core test -- data-exclusion`
+  - 검증: `pnpm --filter @er-diagram/core test data-exclusion`
 - [ ] `M2-004` import preview/apply API, hash 재검증, checkpoint/rollback
-  - 검증: `pnpm --filter @er-diagram/server test:integration -- sql-import`
+  - 검증: `pnpm --filter @er-diagram/server test:integration sql-import`
 - [ ] `M2-005` new-project/replace-only import preview UI
-  - 검증: `pnpm test:e2e -- sql-import`
+  - 검증: `pnpm test:e2e sql-import`
 - [ ] `M2-006` same-dialect export, reparse와 semantic equality
-  - 검증: `pnpm --filter @er-diagram/core test -- sql-export`
+  - 검증: `pnpm --filter @er-diagram/core test sql-export`
 - [ ] `M2-007` invalid/last-valid export UX와 report download
-  - 검증: `pnpm test:e2e -- sql-export`
+  - 검증: `pnpm test:e2e sql-export`
 - [ ] `M2-GATE` PostgreSQL/MySQL same-dialect semantic round-trip, silent loss 0
 
 ### Milestone 3 — Visual Schema Editing
 
 - [ ] `M3-001` expected revision을 포함한 `VisualCommand` Zod union
-  - 검증: `pnpm --filter @er-diagram/contracts test -- visual-command`
+  - 검증: `pnpm --filter @er-diagram/contracts test visual-command`
 - [ ] `M3-002` table/column create/update/rename/reorder/delete minimal patch
-  - 검증: `pnpm --filter @er-diagram/source-transform test -- table-column`
+  - 검증: `pnpm --filter @er-diagram/source-transform test table-column`
 - [ ] `M3-003` reference/index/constraint patch와 DBML capability guard
-  - 검증: `pnpm --filter @er-diagram/source-transform test -- relationships-indexes`
+  - 검증: `pnpm --filter @er-diagram/source-transform test relationships-indexes`
 - [ ] `M3-004` group/view patch와 `TablePartial` provenance protection
-  - 검증: `pnpm --filter @er-diagram/source-transform test -- groups-views-partials`
+  - 검증: `pnpm --filter @er-diagram/source-transform test groups-views-partials`
 - [ ] `M3-005` idempotent command application transaction과 layout rename migration
-  - 검증: `pnpm --filter @er-diagram/core test -- visual-command-application`
+  - 검증: `pnpm --filter @er-diagram/core test visual-command-application`
 - [ ] `M3-006` thin Fastify visual-command API, 409/422, source redaction
-  - 검증: `pnpm --filter @er-diagram/server test:integration -- visual-commands`
+  - 검증: `pnpm --filter @er-diagram/server test:integration visual-commands`
 - [ ] `M3-007` accessible visual inspector/form과 source fallback
-  - 검증: `pnpm --filter @er-diagram/web test -- visual-editor`
+  - 검증: `pnpm --filter @er-diagram/web test visual-editor`
 - [ ] `M3-008` source/visual session undo-redo와 durable restore
-  - 검증: `pnpm test:e2e -- undo-redo`
+  - 검증: `pnpm test:e2e undo-redo`
 - [ ] `M3-GATE` unrelated source preservation, reparse, semantic diff, rollback 통과
 
 ### Milestone 4 — Security, Recovery, Open-source Release
 
 - [ ] `M4-001` source/bundle/worker size와 timeout limit
-  - 검증: `pnpm test:security -- limits-timeouts`
+  - 검증: `pnpm test:security limits-timeouts`
 - [ ] `M4-002` CSP, text escaping, archive traversal/bomb/symlink 방어, redacted logging
   - 검증: `pnpm test:security`
 - [ ] `M4-003` portable bundle v1과 hash/version/traversal validation
-  - 검증: `pnpm test:integration -- bundles`
+  - 검증: `pnpm test:integration bundles`
 - [ ] `M4-004` backup, restore dry-run/apply와 pre-migration checksum
-  - 검증: `pnpm --filter @er-diagram/server test:integration -- backup-restore`
+  - 검증: `pnpm --filter @er-diagram/server test:integration backup-restore`
 - [ ] `M4-005` Node 24 non-root multi-stage image와 localhost compose
   - 검증: `docker compose config && docker compose up --build -d`
 - [ ] `M4-006` live/ready, graceful shutdown, outbound-disabled runtime
@@ -280,15 +280,15 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
 ### Milestone 5 — P1 Static SELECT Lineage
 
 - [ ] `M5-001` `node-sql-parser@5.4.0` P1 adapter와 neutral AST
-  - 검증: `pnpm --filter @er-diagram/core test -- query-parser`
+  - 검증: `pnpm --filter @er-diagram/core test query-parser`
 - [ ] `M5-002` alias/CTE/schema qualification table-level lineage resolver
-  - 검증: `pnpm --filter @er-diagram/core test -- table-lineage`
+  - 검증: `pnpm --filter @er-diagram/core test table-lineage`
 - [ ] `M5-003` ambiguity/unsupported/confidence diagnostics와 capability report
-  - 검증: `pnpm --filter @er-diagram/core test -- lineage-diagnostics`
+  - 검증: `pnpm --filter @er-diagram/core test lineage-diagnostics`
 - [ ] `M5-004` non-executing query editor와 lineage overlay
-  - 검증: `pnpm test:e2e -- lineage`
+  - 검증: `pnpm test:e2e lineage`
 - [ ] `M5-005` 1 MiB, 2초 timeout, crash isolation, literal-redacted logging
-  - 검증: `pnpm test:security -- lineage && pnpm test:perf -- lineage`
+  - 검증: `pnpm test:security lineage && pnpm test:perf lineage`
 
 ## 5. 공통 검증 명령
 

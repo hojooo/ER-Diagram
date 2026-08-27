@@ -14,6 +14,8 @@ const requiredFiles = [
   "docs/adr/0004-fastify-adapter-boundary.md",
 ];
 const forbiddenMarkers = /PROPOSED|OPEN-|IMPLEMENTATION_BLOCKER/u;
+const ineffectivePnpmTestFilter =
+  /\bpnpm\s+(?:(?:--filter|-F)\s+[^\s`;&|<>]+\s+)?test(?::[A-Za-z0-9:_-]+)?\s+--(?:\s+\S+|\s*$)/u;
 const failures = [];
 
 for (const filepath of requiredFiles) {
@@ -37,6 +39,12 @@ for (const absolutePath of markdownFiles(repositoryRoot)) {
     const lineNumber = index + 1;
     if (/[\t ]+$/u.test(line)) {
       failures.push(`${filepath}:${lineNumber}: trailing whitespace`);
+    }
+
+    if (ineffectivePnpmTestFilter.test(line)) {
+      failures.push(
+        `${filepath}:${lineNumber}: pass the focused test filter directly without a standalone --`,
+      );
     }
 
     const fenceMatch = line.match(/^\s*(`{3,}|~{3,})/u);

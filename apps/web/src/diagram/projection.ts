@@ -1,4 +1,4 @@
-import type { DiagramViewNode, ReferenceEdge, SchemaGraph, TableNode } from "@er-diagram/core";
+import type { DiagramViewNode, ReferenceEdge, SchemaGraph } from "@er-diagram/core";
 import type {
   DiagramLod,
   DiagramProjection,
@@ -39,7 +39,7 @@ export function createDiagramProjection(
   const view = resolveView(graph, options.viewKey);
   const { visibleTableKeys, visibleGroupKeys } = selectViewVisibility(graph, view);
   const groupByTable = selectDisplayParentByTable(graph, visibleGroupKeys);
-  const foreignColumnKeys = collectForeignColumnKeys(graph.references, graph.tables);
+  const foreignColumnKeys = collectForeignColumnKeys(graph.references);
   const groupNodes = createGroupNodes(
     graph,
     visibleTableKeys,
@@ -143,20 +143,11 @@ function selectDisplayParentByTable(
   return result;
 }
 
-function collectForeignColumnKeys(
-  references: readonly ReferenceEdge[],
-  tables: readonly TableNode[],
-): ReadonlySet<string> {
-  const tableByKey = new Map(tables.map((table) => [table.key, table]));
+function collectForeignColumnKeys(references: readonly ReferenceEdge[]): ReadonlySet<string> {
   const result = new Set<string>();
   for (const reference of references) {
     for (const endpoint of reference.endpoints) {
-      const table = tableByKey.get(endpoint.tableKey);
-      if (!table) continue;
-      for (const fieldName of endpoint.fieldNames) {
-        const column = table.columns.find((candidate) => candidate.name === fieldName);
-        if (column) result.add(column.key);
-      }
+      for (const columnKey of endpoint.columnKeys) result.add(columnKey);
     }
   }
   return result;
@@ -220,7 +211,7 @@ function createTableNodes(
     const columns = table.columns.map((column) => ({
       key: column.key,
       name: column.name,
-      type: column.type,
+      type: column.type.display,
       primaryKey: column.primaryKey,
       foreignKey: foreignColumnKeys.has(column.key),
     }));

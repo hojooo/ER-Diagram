@@ -4,7 +4,8 @@ import type { Edge, Node } from "@xyflow/react";
 export type DiagramLod = "NAME_ONLY" | "KEYS_ONLY" | "FULL";
 export type DiagramViewKey = "GLOBAL" | string;
 
-export type DiagramColumn = Pick<ColumnNode, "key" | "name" | "type" | "primaryKey"> & {
+export type DiagramColumn = Pick<ColumnNode, "key" | "name" | "primaryKey"> & {
+  type: string;
   foreignKey: boolean;
 };
 
