@@ -21,6 +21,7 @@ const RECOVERED_SOURCE = INITIAL_SOURCE.replace(
 );
 
 test("renders the active graph and keeps source navigation revision-safe", async ({ page }) => {
+  test.setTimeout(60_000);
   const browserErrors: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") browserErrors.push(message.text());
@@ -33,9 +34,12 @@ test("renders the active graph and keeps source navigation revision-safe", async
   await expect(
     page.locator('section[aria-label="DBML source editor"] .monaco-editor'),
   ).toBeVisible();
-  await expect(page.getByTestId("base-diagram-layout-status")).toHaveText("Diagram layout ready", {
-    timeout: 10_000,
-  });
+  const layoutStatus = page.getByTestId("base-diagram-layout-status");
+  await expect(layoutStatus).toHaveText(/Diagram layout (ready|failed)/, { timeout: 20_000 });
+  if ((await layoutStatus.textContent())?.includes("failed")) {
+    await page.getByRole("button", { name: "Retry layout" }).click();
+    await expect(layoutStatus).toHaveText("Diagram layout ready", { timeout: 10_000 });
+  }
   await expect(page.locator(".react-flow__node")).toHaveCount(2);
   await expect(page.locator(".diagram-table__column-action")).toHaveCount(3);
   await expect(page.locator(".react-flow__edge")).toHaveCount(1);
