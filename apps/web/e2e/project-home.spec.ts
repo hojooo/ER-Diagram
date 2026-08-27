@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { expect, type Page, test } from "@playwright/test";
 
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-0123456789ab";
@@ -23,12 +24,13 @@ interface TestProjectState {
 }
 
 function revision(projectId: string) {
+  const source = "";
   return {
     id: projectId,
     projectId,
     revisionNo: 1,
-    source: "",
-    sourceHash: `hash-${projectId}`,
+    source,
+    sourceHash: sha256(source),
     validity: "VALID" as const,
     origin: "SOURCE_EDIT" as const,
     parserVersion: "9.1.1",
@@ -185,7 +187,11 @@ test("creates, opens, renames, duplicates, and confirms deletion", async ({ page
   await expect(page).toHaveURL(`/projects/${PROJECT_ID}`);
   await expect(page.getByRole("heading", { name: "Orders", level: 1 })).toBeVisible();
   await expect(page.getByText("MySQL project")).toBeVisible();
-  await expect(page.getByText("Source editor not available yet")).toBeVisible();
+  await expect(page.getByText("Canonical DBML source")).toBeVisible();
+  await expect(page.getByTestId("persistence-status")).toHaveText(/Saved/);
+  await expect(
+    page.locator('section[aria-label="DBML source editor"] .monaco-editor'),
+  ).toBeVisible();
   await expect(page.getByTestId("erd-canvas")).toHaveCount(0);
 
   await page.getByRole("link", { name: "Back to projects" }).click();
@@ -224,3 +230,7 @@ test("creates, opens, renames, duplicates, and confirms deletion", async ({ page
   await expect(page.getByRole("article", { name: "Orders schema copy" })).toHaveCount(0);
   expect(browserErrors).toEqual([]);
 });
+
+function sha256(source: string): string {
+  return createHash("sha256").update(source, "utf8").digest("hex");
+}

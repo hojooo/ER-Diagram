@@ -1,14 +1,23 @@
 import { projectIdSchema } from "@er-diagram/contracts";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
+import {
+  ProjectSourceWorkspace,
+  type ProjectWorkspaceAdapters,
+} from "../source-editor/project-source-workspace.js";
 import { ProjectApiError } from "./project-api.js";
 import { useProjectApi } from "./project-api-context.js";
-import { diagnosticSummaryLabel, dialectLabel, ValidityBadge } from "./project-home-page.js";
+import { dialectLabel, ValidityBadge } from "./project-home-page.js";
 import { projectQueryKeys } from "./project-queries.js";
 
-export function ProjectWorkspacePage() {
+export function ProjectWorkspacePage({
+  adapters,
+}: {
+  readonly adapters?: ProjectWorkspaceAdapters;
+}) {
   const api = useProjectApi();
+  const queryClient = useQueryClient();
   const params = useParams();
   const parsedProjectId = projectIdSchema.safeParse(params.projectId);
   const projectId = parsedProjectId.success ? parsedProjectId.data : undefined;
@@ -73,39 +82,13 @@ export function ProjectWorkspacePage() {
         <ValidityBadge validity={currentRevision.validity} />
       </div>
 
-      <div className="mt-8 grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
-        <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">
-            Schema workspace
-          </p>
-          <h2 className="mt-3 text-xl font-semibold text-white">Source editor not available yet</h2>
-          <p className="mt-3 max-w-2xl text-slate-300">
-            This route is connected to the durable project state. Source editing and the
-            project-derived diagram are not available in this build.
-          </p>
-        </section>
-        <aside
-          className="rounded-2xl border border-slate-800 bg-slate-900 p-6"
-          aria-label="Project validation summary"
-        >
-          <h2 className="font-semibold text-white">Validation summary</h2>
-          <p className="mt-3 text-sm text-slate-300">
-            {diagnosticSummaryLabel(currentRevision.diagnosticSummary)}
-          </p>
-          <dl className="mt-5 grid gap-3 text-sm">
-            <div>
-              <dt className="text-slate-500">Current revision</dt>
-              <dd className="mt-1 font-semibold text-slate-200">{currentRevision.revisionNo}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Last valid revision</dt>
-              <dd className="mt-1 font-semibold text-slate-200">
-                {projectQuery.data.state.lastValidRevision?.revisionNo ?? "None"}
-              </dd>
-            </div>
-          </dl>
-        </aside>
-      </div>
+      <ProjectSourceWorkspace
+        key={projectId}
+        initialState={projectQuery.data.state}
+        api={api}
+        queryClient={queryClient}
+        {...(adapters ? { adapters } : {})}
+      />
     </section>
   );
 }

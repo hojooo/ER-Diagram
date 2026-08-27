@@ -4,11 +4,12 @@ import {
   dbmlParserWorkerRequestSchema,
   dbmlParserWorkerResponseSchema,
 } from "@er-diagram/contracts";
-import { DBML_PARSER_VERSION, type SchemaGraph } from "@er-diagram/core";
+import type { DBML_PARSER_VERSION, SchemaGraph } from "@er-diagram/core";
 
 import { hashDbmlSource } from "./source-hash.js";
 
 export const DBML_PARSER_WORKER_TIMEOUT_MS = 5_000;
+export const EXPECTED_DBML_PARSER_VERSION: typeof DBML_PARSER_VERSION = "9.1.1";
 
 export interface DbmlParserWorkerLike {
   postMessage(message: DbmlParserWorkerRequest): void;
@@ -90,7 +91,7 @@ export function createDbmlParserWorkerClient(
     if (
       response.sourceHash !== request.sourceHash ||
       response.parserInputHash !== request.sourceHash ||
-      response.parserVersion !== DBML_PARSER_VERSION ||
+      response.parserVersion !== EXPECTED_DBML_PARSER_VERSION ||
       (response.ok && !isSchemaGraphTransport(response.graph))
     ) {
       invalidateWorker(
@@ -192,7 +193,7 @@ export function createDbmlParserWorkerClient(
 
 function isSchemaGraphTransport(value: unknown): value is SchemaGraph {
   if (!isPlainRecord(value)) return false;
-  if (value.parserVersion !== DBML_PARSER_VERSION) return false;
+  if (value.parserVersion !== EXPECTED_DBML_PARSER_VERSION) return false;
   if (typeof value.schemaHash !== "string" || !/^[0-9a-f]{64}$/.test(value.schemaHash))
     return false;
   if (value.project !== null && !isPlainRecord(value.project)) return false;

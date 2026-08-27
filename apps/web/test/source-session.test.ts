@@ -258,6 +258,23 @@ describe("source session autosave", () => {
     });
     session.dispose();
   });
+
+  it("fails closed when the persisted hash does not match the initial draft bytes", async () => {
+    const state = projectState(VALID_SOURCE, 1, "VALID");
+    state.project.draftHash = "f".repeat(64);
+    state.currentRevision.sourceHash = "f".repeat(64);
+    const session = createSession({ initialState: state });
+
+    session.start();
+    await settle();
+
+    expect(session.getSnapshot()).toMatchObject({
+      validation: "ERROR",
+      canUseValidSchema: false,
+      validationError: { code: "SOURCE_HASH_MISMATCH" },
+    });
+    session.dispose();
+  });
 });
 
 function createSession(override: Partial<Parameters<typeof createSourceSession>[0]> = {}) {

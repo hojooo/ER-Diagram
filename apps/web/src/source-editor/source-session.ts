@@ -158,6 +158,21 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
     void options.parseSource(source).then(
       (result) => {
         if (disposed || requestGeneration !== generation || source !== snapshot.source) return;
+        if (source === persistedSource && result.sourceHash !== persistedSourceHash) {
+          publish({
+            sourceHash: result.sourceHash,
+            validation: "ERROR",
+            diagnostics: [],
+            activeGraph: lastValidGraph,
+            activeGraphSource: lastValidGraph ? "LAST_VALID" : null,
+            canUseValidSchema: false,
+            validationError: {
+              code: "SOURCE_HASH_MISMATCH",
+              message: "The persisted source hash did not match the current draft bytes.",
+            },
+          });
+          return;
+        }
         const outcome: SourceValidationOutcome = result.ok
           ? { validity: "VALID", diagnostics: result.diagnostics, graph: result.graph }
           : { validity: "INVALID", diagnostics: result.diagnostics, graph: null };
@@ -232,17 +247,22 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
   }
 
   function validateLastValidSource(source: string, expectedHash: string): void {
-    void options.parseSource(source).then((result) => {
-      if (disposed || !result.ok || result.sourceHash !== expectedHash) return;
-      lastValidGraph = result.graph;
-      if (snapshot.validation !== "VALID") {
-        publish({
-          activeGraph: result.graph,
-          activeGraphSource: "LAST_VALID",
-          canUseValidSchema: false,
-        });
-      }
-    });
+    void options.parseSource(source).then(
+      (result) => {
+        if (disposed || !result.ok || result.sourceHash !== expectedHash) return;
+        lastValidGraph = result.graph;
+        if (snapshot.validation !== "VALID") {
+          publish({
+            activeGraph: result.graph,
+            activeGraphSource: "LAST_VALID",
+            canUseValidSchema: false,
+          });
+        }
+      },
+      () => {
+        // Current-draft validation owns the visible worker error state.
+      },
+    );
   }
 
   function queueSave(source: string, requestGeneration: number): void {
@@ -283,7 +303,13 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
         source: candidate.source,
         expectedSchemaRevisionNo,
       });
-      assertSaveResponse(response, projectId, candidate.source, sourceHash);
+      assertSaveResponse(
+        response,
+        projectId,
+        candidate.source,
+        sourceHash,
+        expectedSchemaRevisionNo,
+      );
       const state = response.state;
       persistedSource = candidate.source;
       persistedSourceHash = sourceHash;
@@ -460,6 +486,7 @@ function assertSaveResponse(
   projectId: string,
   source: string,
   sourceHash: string,
+  expectedSchemaRevisionNo: number,
 ): void {
   const { project, currentRevision } = response.state;
   if (
@@ -469,7 +496,9 @@ function assertSaveResponse(
     currentRevision.source !== source ||
     project.draftHash !== sourceHash ||
     currentRevision.sourceHash !== sourceHash ||
-    project.schemaRevisionNo !== currentRevision.revisionNo
+    project.schemaRevisionNo !== currentRevision.revisionNo ||
+    project.schemaRevisionNo !== expectedSchemaRevisionNo + (response.revisionCreated ? 1 : 0) ||
+    project.parserVersion !== currentRevision.parserVersion
   ) {
     const error = new Error("The saved draft response did not match its request.");
     Object.assign(error, { code: "CLIENT_SAVE_RESPONSE_MISMATCH" });

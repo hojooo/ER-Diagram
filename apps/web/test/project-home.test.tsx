@@ -17,6 +17,8 @@ import type {
   SaveDraftInput,
 } from "../src/projects/project-api.js";
 import { ProjectApiError } from "../src/projects/project-api.js";
+import type { SourceEditorComponent } from "../src/source-editor/editor-contract.js";
+import type { DbmlParserWorkerClient } from "../src/source-editor/parser-worker-client.js";
 
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-0123456789ab";
 const COPY_ID = "019d3f4e-7b6c-7def-9abc-0123456789ab";
@@ -169,10 +171,33 @@ function renderApp(api: ProjectApi, initialEntry = "/") {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  const router = createMemoryRouter(createAppRoutes({ includeLayoutSpike: true }), {
-    initialEntries: [initialEntry],
-  });
+  const router = createMemoryRouter(
+    createAppRoutes({
+      includeLayoutSpike: true,
+      workspaceAdapters: {
+        SourceEditor: TestSourceEditor,
+        createParserClient: () => new UnavailableParserClient(),
+      },
+    }),
+    { initialEntries: [initialEntry] },
+  );
   return render(<App api={api} queryClient={queryClient} router={router} />);
+}
+
+const TestSourceEditor: SourceEditorComponent = ({ initialSource, onChange }) => (
+  <textarea
+    aria-label="DBML source editor"
+    defaultValue={initialSource}
+    onChange={(event) => onChange(event.currentTarget.value)}
+  />
+);
+
+class UnavailableParserClient implements DbmlParserWorkerClient {
+  async parse(): Promise<never> {
+    throw new Error("Worker unavailable in this component test.");
+  }
+
+  dispose(): void {}
 }
 
 describe("Project Home", () => {
