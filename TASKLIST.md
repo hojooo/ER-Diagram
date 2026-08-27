@@ -17,7 +17,7 @@
 
 | 영역 | 기준 |
 | --- | --- |
-| Web | React 19.2.8, Vite 8.2.2, TypeScript 7.0.2 |
+| Web | React 19.2.8, React Router DOM 7.18.2, Vite 8.2.2, TypeScript 7.0.2 |
 | Server | Fastify 5.12.1 |
 | DBML | `@dbml/core`, `@dbml/parse` 9.1.1 exact pin; `@dbml/connector` P0 제외 |
 | Diagram | `@xyflow/react` 12.11.5, ELK.js 0.12.0 |
@@ -25,7 +25,7 @@
 | Store | SQLite, Drizzle ORM 0.45.2, better-sqlite3 13.0.3 |
 | Contract | Zod 4.4.3 |
 | Client state | TanStack Query 5.102.4, Zustand 5.0.15 |
-| UI | Tailwind CSS 4.3.3, 필요한 접근성 widget만 Radix primitive 사용 |
+| UI | Tailwind CSS 4.3.3, Radix Dialog 1.1.23, 필요한 접근성 widget만 Radix primitive 사용 |
 | Test | Vitest 4.1.11, React Testing Library 16.3.2, Playwright 1.62.1 |
 | P1 SQL AST | node-sql-parser 5.4.0 |
 | Quality | Biome format/lint, strict TypeScript, dependency-cruiser architecture check |
@@ -53,6 +53,7 @@
 | --- | --- | --- |
 | Node.js 24 LTS + pnpm 10 | Web, worker, server, CLI, shared contract를 TypeScript 단일 toolchain으로 구성한다. pnpm workspace는 `@er-diagram/*` package의 의존 경계와 exact lockfile 재현성을 관리하기 적합하다. | native module 지원과 release image의 Node ABI를 검증한다. Node major 또는 pnpm major 변경은 lockfile·native build·worker behavior를 다시 검증하는 compatibility event로 취급한다. |
 | React 19.2.8 | Monaco와 React Flow를 포함한 상태가 많은 schema workspace를 component 단위로 구성하고, source·diagram·inspector의 선택 상태를 명시적으로 동기화하기 위해 사용한다. | React state를 canonical DBML이나 durable revision의 정본으로 사용하지 않는다. 다른 UI runtime으로의 교체는 web package 내부 변경으로 제한한다. |
+| React Router DOM 7.18.2 | Project Home과 project별 workspace를 URL로 분리하고, 새로고침·뒤로 가기·not-found·route error 상태를 SPA 안에서 명시적으로 표현한다. | route state를 project 정본으로 사용하지 않는다. Production history fallback과 Fastify static serving은 container packaging에서 별도로 검증한다. |
 | Vite 8.2.2 | React SPA의 빠른 개발 server와 production bundling을 제공하고 parser/layout Web Worker를 별도 bundle로 구성하기 쉽다. P0에는 SSR이 필요하지 않다. | worker asset, Monaco chunk, offline production build를 실제 container에서 검증한다. SSR·server component가 필요해지면 별도 결정이 필요하다. |
 | TypeScript 7.0.2 | parser-neutral graph, visual command, HTTP/worker/bundle contract를 정적 타입으로 공유하고 adapter 경계의 실수를 조기에 탐지한다. | 타입 검사는 runtime 입력이나 semantic invariant 검증을 대체하지 않는다. 외부 입력은 Zod와 application validation을 반드시 통과한다. |
 | Fastify 5.12.1 | P0 API가 CRUD, revision conflict, import/export orchestration 중심이므로 작은 HTTP/CLI adapter를 구성하기에 충분하며 core를 framework 밖에 유지하기 쉽다. | auth, multi-user policy, queue, WebSocket orchestration 또는 복잡한 integration이 확정되면 NestJS adapter를 별도 ADR로 검토한다. Fastify plugin을 core로 누출하지 않는다. |
@@ -63,7 +64,7 @@
 | SQLite + Drizzle ORM 0.45.2 + better-sqlite3 13.0.3 | single-user self-host에서 별도 DB 운영 없이 mounted volume에 project·revision·layout을 원자 저장한다. Drizzle은 typed schema/migration 표현을, better-sqlite3는 단일 process transaction adapter를 담당한다. | WAL이어도 multi-process horizontal write는 지원하지 않는다. 동시 사용자·원격 DB·고가용성이 요구되면 persistence port를 유지한 채 별도 store를 검토한다. native build와 read-only/full-disk 복구를 검증한다. |
 | Zod 4.4.3 | HTTP, worker message, portable bundle, `VisualCommand`처럼 신뢰 경계를 넘는 입력을 runtime에서 검증하면서 TypeScript 타입을 함께 유지한다. | Zod parse 성공은 DBML reparse, semantic diff, 권한 또는 revision invariant 성공을 의미하지 않는다. domain 검증은 core/application에 남긴다. |
 | TanStack Query 5.102.4 + Zustand 5.0.15 | server project/revision/layout cache와 editor·selection·viewport·undo 같은 session UI state를 분리해 서로 다른 수명주기를 표현한다. | 동일 데이터를 두 store에 중복 정본화하지 않는다. TanStack Query는 server state, Zustand는 ephemeral client state로 사용하며 canonical source는 server revision에 둔다. |
-| Tailwind CSS 4.3.3 + 선택적 Radix primitive | 초기 design token과 responsive layout을 빠르게 일관화하고, dialog·popover 등 복잡한 widget만 검증된 접근성 primitive를 사용한다. | Radix를 전면 component framework로 사용하지 않는다. semantic HTML과 keyboard flow를 우선하고 styling만으로 접근성을 충족했다고 간주하지 않는다. |
+| Tailwind CSS 4.3.3 + Radix Dialog 1.1.23 | 초기 design token과 responsive layout을 빠르게 일관화하고, destructive confirmation과 form dialog의 focus trap·Escape·focus return만 검증된 접근성 primitive에 맡긴다. | Radix를 전면 component framework로 사용하지 않는다. semantic HTML과 keyboard flow를 우선하고 styling만으로 접근성을 충족했다고 간주하지 않는다. |
 | Vitest 4.1.11 + React Testing Library 16.3.2 + Playwright 1.62.1 | Vite/TypeScript와 같은 module 환경에서 parser·use case unit test, 사용자 관점 component test, 실제 browser E2E를 계층별로 구성한다. | mock interaction count보다 source·revision·layout의 관찰 가능한 결과를 검증한다. SQLite restart, container, backup/restore, performance는 browser unit test와 분리된 acceptance gate로 둔다. |
 | node-sql-parser 5.4.0 | P1의 PostgreSQL·MySQL `SELECT`를 실행하지 않고 AST로 변환해 table-level lineage 후보를 추출할 수 있다. | P1 전용 adapter에 격리하고 AST를 core 밖으로 노출하지 않는다. 지원하지 않는 syntax와 ambiguity는 확정 edge가 아니라 diagnostic으로 반환하며 SQL 실행 기능을 추가하지 않는다. |
 | Biome + strict TypeScript + dependency-cruiser | format/lint/type error를 일관되게 검사하고 Fastify, React, SQLite가 framework-free package로 역류하는 것을 CI에서 차단한다. | 정적 검사는 behavior·source fidelity·runtime security 검증을 대체하지 않는다. architecture rule 변경은 ADR과 forbidden-dependency fixture를 함께 갱신한다. |
@@ -198,10 +199,10 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - 검증: `pnpm --filter @er-diagram/core test test/application/project.test.ts`
 - [x] `M1-006` project/draft/revision/restore Fastify API와 correlation ID
   - 검증: `pnpm --filter @er-diagram/server test:integration projects`
-- [ ] `M1-007` accessible Web shell과 Project Home
-  - 검증: `pnpm --filter @er-diagram/web test project-home`
-- [ ] `M1-008` Monaco DBML editor, parser worker, 750 ms autosave와 stale-response guard
-  - 검증: `pnpm --filter @er-diagram/web test source-editor`
+- [x] `M1-007` accessible Web shell과 Project Home
+  - 검증: `pnpm --filter @er-diagram/web test test/project-home.test.tsx`
+- [x] `M1-008` Monaco DBML editor, parser worker, 750 ms autosave와 stale-response guard
+  - 검증: `pnpm --filter @er-diagram/web test test/source-editor.test.tsx`
 - [ ] `M1-009` table/column/PK/FK/ref base diagram과 source navigation
   - 검증: `pnpm --filter @er-diagram/web test diagram-base`
 - [ ] `M1-010` `TableGroup` compound node와 collapse edge aggregation

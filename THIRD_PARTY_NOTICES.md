@@ -14,6 +14,7 @@ effect and must be retained when that package is redistributed.
 | `@dbml/core` | `9.1.1` | `Apache-2.0` | `Apache-2.0` | [source](https://github.com/holistics/dbml/tree/master/packages/dbml-core) |
 | `@dbml/parse` | `9.1.1` | `Apache-2.0` | `Apache-2.0` | [source](https://github.com/holistics/dbml/tree/master/packages/dbml-parse) |
 | `@playwright/test` | `1.62.1` | `Apache-2.0` | `Apache-2.0` | [source](https://github.com/microsoft/playwright) |
+| `@radix-ui/react-dialog` | `1.1.23` | `MIT` | `MIT` | [source](https://github.com/radix-ui/primitives/tree/main/packages/react/dialog) |
 | `@tailwindcss/vite` | `4.3.3` | `MIT` | `MIT` | [source](https://github.com/tailwindlabs/tailwindcss/tree/main/packages/@tailwindcss-vite) |
 | `@tanstack/react-query` | `5.102.4` | `MIT` | `MIT` | [source](https://github.com/TanStack/query/tree/main/packages/react-query) |
 | `@testing-library/dom` | `10.4.1` | `MIT` | `MIT` | [source](https://github.com/testing-library/dom-testing-library) |
@@ -34,6 +35,7 @@ effect and must be retained when that package is redistributed.
 | `monaco-editor` | `0.56.0` | `MIT` | `MIT` | [source](https://github.com/microsoft/monaco-editor) |
 | `react` | `19.2.8` | `MIT` | `MIT` | [source](https://github.com/react/react/tree/main/packages/react) |
 | `react-dom` | `19.2.8` | `MIT` | `MIT` | [source](https://github.com/react/react/tree/main/packages/react-dom) |
+| `react-router-dom` | `7.18.2` | `MIT` | `MIT` | [source](https://github.com/remix-run/react-router/tree/main/packages/react-router-dom) |
 | `tailwindcss` | `4.3.3` | `MIT` | `MIT` | [source](https://github.com/tailwindlabs/tailwindcss/tree/main/packages/tailwindcss) |
 | `typescript` | `7.0.2` | `Apache-2.0` | `Apache-2.0` | [source](https://github.com/microsoft/TypeScript) |
 | `vite` | `8.2.2` | `MIT` | `MIT` | [source](https://github.com/vitejs/vite/tree/main/packages/vite) |

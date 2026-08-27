@@ -7,7 +7,7 @@ test("renders and updates the compound graph prototype", async ({ page }) => {
   });
   page.on("pageerror", (error) => browserErrors.push(error.message));
 
-  await page.goto("/");
+  await page.goto("/__spikes/layout");
 
   await expect(page.getByRole("heading", { name: "DBML·SQL ERD Studio" })).toBeVisible();
   await expect(page.getByTestId("erd-canvas")).toBeVisible();

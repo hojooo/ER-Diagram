@@ -28,6 +28,12 @@
       "upstreamNotice": "NOTICE"
     },
     {
+      "name": "@radix-ui/react-dialog",
+      "version": "1.1.23",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/radix-ui/primitives/tree/main/packages/react/dialog"
+    },
+    {
       "name": "@tailwindcss/vite",
       "version": "4.3.3",
       "licenseExpression": "MIT",
@@ -147,6 +153,12 @@
       "version": "19.2.8",
       "licenseExpression": "MIT",
       "source": "https://github.com/react/react/tree/main/packages/react-dom"
+    },
+    {
+      "name": "react-router-dom",
+      "version": "7.18.2",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/remix-run/react-router/tree/main/packages/react-router-dom"
     },
     {
       "name": "tailwindcss",
