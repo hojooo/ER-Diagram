@@ -278,11 +278,20 @@ P0에서는 기존 schema와 SQL을 자동 merge하지 않는다. replace 전 �
 ### 10.3 Source 직접 편집
 
 1. 사용자가 Monaco 기반 editor에서 DBML을 수정한다.
-2. draft는 짧은 debounce 후 worker로 전달된다.
-3. parser가 diagnostics와 normalized graph candidate를 반환한다.
-4. valid이면 last-valid graph와 source map을 교체한다.
-5. invalid이면 draft는 저장하지만 diagram은 마지막 valid graph를 유지한다.
-6. invalid 상태에서는 SQL export와 visual schema mutation을 비활성화한다.
+2. draft는 750 ms debounce 후 browser worker validation과 server autosave에 각각 전달된다.
+3. parser가 diagnostics와 normalized graph candidate를 반환한다. 현재 editor generation과 source hash가
+   일치하지 않는 worker 결과는 폐기한다.
+4. server는 동일 source를 다시 검증하고 expected schema revision과 함께 저장하는 authoritative 경계다.
+   save는 직렬화하고 저장 중 발생한 edit는 최신 source 하나로 합친다.
+5. valid이면 last-valid graph와 source map을 교체한다.
+6. invalid이면 draft는 저장하지만 diagram은 마지막 valid graph를 유지한다.
+7. invalid 상태에서는 SQL export와 visual schema mutation을 비활성화한다.
+8. stale revision `409`가 발생하면 local buffer를 보존하고 autosave를 중단한다. 최신 server revision을
+   기준으로 local draft를 다시 저장하거나, destructive confirmation 후 server draft를 불러오는 선택을
+   사용자에게 제공하며 자동 overwrite는 하지 않는다.
+9. 저장되지 않은 buffer로 workspace를 떠나려 하면 pending save를 먼저 flush한다. 저장 완료 시 원래
+   navigation을 계속하고, 실패 또는 명시적 이탈 시에는 `Stay`를 기본 action으로 둔 확인 UI와
+   `beforeunload` 경고로 아직 전송되지 않은 edit가 사라질 수 있음을 알린다.
 
 ### 10.4 Diagram 위치 편집
 
