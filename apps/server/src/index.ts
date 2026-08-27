@@ -1,1 +1,1 @@
-export { createServer } from "./app.js";
+export { type CreateServerOptions, createServer } from "./app.js";

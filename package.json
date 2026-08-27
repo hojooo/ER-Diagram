@@ -22,7 +22,7 @@
     "lint": "biome lint .",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:perf": "node scripts/run-perf-tests.mjs",
     "test:security": "vitest run --config vitest.security.config.ts --passWithNoTests",
     "test:unit": "vitest run --config vitest.config.ts",

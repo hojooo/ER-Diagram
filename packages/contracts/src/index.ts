@@ -50,3 +50,203 @@ export const diagnosticSchema = z
   })
   .strict();
 export type Diagnostic = z.infer<typeof diagnosticSchema>;
+
+export const commandIdSchema = z.uuid();
+export type CommandId = z.infer<typeof commandIdSchema>;
+
+export const correlationIdSchema = z.uuid();
+export type CorrelationId = z.infer<typeof correlationIdSchema>;
+
+export const projectIdSchema = z.uuidv7();
+export type ProjectId = z.infer<typeof projectIdSchema>;
+
+export const schemaRevisionNoSchema = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+export const layoutRevisionNoSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+export const utcIsoTimestampSchema = z.iso.datetime({ precision: 3 });
+
+export const draftValiditySchema = z.enum(["VALID", "INVALID"]);
+export type DraftValidity = z.infer<typeof draftValiditySchema>;
+
+export const schemaRevisionOriginSchema = z.enum([
+  "SOURCE_EDIT",
+  "VISUAL_COMMAND",
+  "SQL_IMPORT",
+  "RESTORE",
+  "PARSER_MIGRATION",
+]);
+export type SchemaRevisionOrigin = z.infer<typeof schemaRevisionOriginSchema>;
+
+export const diagnosticSummarySchema = z
+  .object({
+    errors: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    warnings: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    infos: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    parserVersion: z.string().min(1),
+  })
+  .strict();
+export type DiagnosticSummary = z.infer<typeof diagnosticSummarySchema>;
+
+export const projectSchema = z
+  .object({
+    id: projectIdSchema,
+    name: z.string().min(1),
+    primaryDialect: primaryDialectSchema,
+    draftSource: z.string(),
+    draftHash: z.string().min(1),
+    lastValidRevisionId: projectIdSchema.nullable(),
+    parserVersion: z.string().min(1),
+    schemaRevisionNo: schemaRevisionNoSchema,
+    layoutRevisionNo: layoutRevisionNoSchema,
+    createdAt: utcIsoTimestampSchema,
+    updatedAt: utcIsoTimestampSchema,
+  })
+  .strict();
+export type Project = z.infer<typeof projectSchema>;
+
+export const schemaRevisionSchema = z
+  .object({
+    id: projectIdSchema,
+    projectId: projectIdSchema,
+    revisionNo: schemaRevisionNoSchema,
+    source: z.string(),
+    sourceHash: z.string().min(1),
+    validity: draftValiditySchema,
+    origin: schemaRevisionOriginSchema,
+    parserVersion: z.string().min(1),
+    diagnosticSummary: diagnosticSummarySchema,
+    createdAt: utcIsoTimestampSchema,
+  })
+  .strict();
+export type SchemaRevision = z.infer<typeof schemaRevisionSchema>;
+
+export const schemaRevisionSummarySchema = schemaRevisionSchema.omit({ source: true });
+export type SchemaRevisionSummary = z.infer<typeof schemaRevisionSummarySchema>;
+
+export const projectStateSchema = z
+  .object({
+    project: projectSchema,
+    currentRevision: schemaRevisionSchema,
+    lastValidRevision: schemaRevisionSchema.nullable(),
+  })
+  .strict();
+export type ProjectState = z.infer<typeof projectStateSchema>;
+
+export const projectSummarySchema = z
+  .object({
+    id: projectIdSchema,
+    name: z.string().min(1),
+    primaryDialect: primaryDialectSchema,
+    parserVersion: z.string().min(1),
+    schemaRevisionNo: schemaRevisionNoSchema,
+    layoutRevisionNo: layoutRevisionNoSchema,
+    draftValidity: draftValiditySchema,
+    diagnosticSummary: diagnosticSummarySchema,
+    createdAt: utcIsoTimestampSchema,
+    updatedAt: utcIsoTimestampSchema,
+  })
+  .strict();
+export type ProjectSummary = z.infer<typeof projectSummarySchema>;
+
+const createProjectOperationSchema = z
+  .object({
+    operation: z.literal("CREATE"),
+    commandId: commandIdSchema,
+    name: z.string(),
+    primaryDialect: primaryDialectSchema,
+    source: z.string(),
+  })
+  .strict();
+
+const duplicateProjectOperationSchema = z
+  .object({
+    operation: z.literal("DUPLICATE"),
+    commandId: commandIdSchema,
+    sourceProjectId: projectIdSchema,
+    name: z.string(),
+    expectedSchemaRevisionNo: schemaRevisionNoSchema,
+  })
+  .strict();
+
+export const createProjectRequestSchema = z.discriminatedUnion("operation", [
+  createProjectOperationSchema,
+  duplicateProjectOperationSchema,
+]);
+export type CreateProjectRequest = z.infer<typeof createProjectRequestSchema>;
+
+export const projectParamsSchema = z.object({ projectId: projectIdSchema }).strict();
+export type ProjectParams = z.infer<typeof projectParamsSchema>;
+
+export const revisionParamsSchema = z
+  .object({
+    projectId: projectIdSchema,
+    revisionNo: z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  })
+  .strict();
+export type RevisionParams = z.infer<typeof revisionParamsSchema>;
+
+export const renameProjectRequestSchema = z
+  .object({
+    commandId: commandIdSchema,
+    name: z.string(),
+    expectedSchemaRevisionNo: schemaRevisionNoSchema,
+  })
+  .strict();
+export type RenameProjectRequest = z.infer<typeof renameProjectRequestSchema>;
+
+export const deleteProjectRequestSchema = z
+  .object({
+    commandId: commandIdSchema,
+    expectedSchemaRevisionNo: schemaRevisionNoSchema,
+  })
+  .strict();
+export type DeleteProjectRequest = z.infer<typeof deleteProjectRequestSchema>;
+
+export const saveDraftRequestSchema = z
+  .object({
+    commandId: commandIdSchema,
+    source: z.string(),
+    expectedSchemaRevisionNo: schemaRevisionNoSchema,
+  })
+  .strict();
+export type SaveDraftRequest = z.infer<typeof saveDraftRequestSchema>;
+
+export const restoreRevisionRequestSchema = z
+  .object({
+    commandId: commandIdSchema,
+    expectedSchemaRevisionNo: schemaRevisionNoSchema,
+  })
+  .strict();
+export type RestoreRevisionRequest = z.infer<typeof restoreRevisionRequestSchema>;
+
+export const projectsResponseSchema = z
+  .object({ projects: z.array(projectSummarySchema) })
+  .strict();
+export type ProjectsResponse = z.infer<typeof projectsResponseSchema>;
+
+export const projectResponseSchema = z.object({ state: projectStateSchema }).strict();
+export type ProjectResponse = z.infer<typeof projectResponseSchema>;
+
+export const projectMutationResponseSchema = z
+  .object({
+    state: projectStateSchema,
+    diagnostics: z.array(diagnosticSchema),
+    revisionCreated: z.boolean(),
+  })
+  .strict();
+export type ProjectMutationResponse = z.infer<typeof projectMutationResponseSchema>;
+
+export const projectRevisionsResponseSchema = z
+  .object({ revisions: z.array(schemaRevisionSummarySchema) })
+  .strict();
+export type ProjectRevisionsResponse = z.infer<typeof projectRevisionsResponseSchema>;
+
+export const errorResponseSchema = z
+  .object({
+    code: z.string().min(1),
+    message: z.string().min(1),
+    correlationId: correlationIdSchema,
+    currentRevisionNo: schemaRevisionNoSchema.optional(),
+    diagnostics: z.array(diagnosticSchema).optional(),
+  })
+  .strict();
+export type ErrorResponse = z.infer<typeof errorResponseSchema>;
