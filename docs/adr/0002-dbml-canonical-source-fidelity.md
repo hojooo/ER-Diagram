@@ -21,6 +21,16 @@ Parser adapter는 다음 계약을 지킨다.
 - public source range는 UTF-16 half-open offset이며 line과 column은 1부터 시작한다.
 - stable element key는 parser object identity가 아니라 kind, namespace, qualified name, element path를 정규화한 canonical JSON representation을 사용한다.
 
+Canonical semantic projection은 별도 version을 가지며 version 1의 hash preimage를 `{ version, elements, orders }`로 고정한다. Element는 stable key를 기준으로 flat record가 되고 nested element는 실제 parent key를 가진다. `schemaHash`, parser version, diagnostics, source map, source range와 filepath는 의미에서 제외한다. 반면 note, expression, metadata, default를 포함한 normalized graph의 실제 의미 값은 포함한다. Object key와 결과 순서는 locale에 의존하지 않는 code-unit 순서로 정렬하고 SHA-256 lowercase hex를 생성한다.
+
+순서는 문법별 의미에 따라 처리한다.
+
+- top-level 선언, sibling index/check, group membership, view visibility와 table partial membership 순서는 무시한다.
+- table·partial column, enum value, index term, reference endpoint와 composite endpoint column 순서는 보존한다.
+- column 또는 enum value sequence가 바뀌면 child 변경과 별도로 parent의 `columnOrder` 또는 `valueOrder` 변경을 보고한다.
+
+Source 직접 편집의 rename은 diff 결과와 분리된 advisory candidate다. 같은 schema의 table 또는 같은 table의 column에서 이름과 identity-relative key를 제외한 전체 구조가 양쪽에서 각각 하나만 정확히 일치할 때만 `HIGH` confidence 후보를 만든다. 후보가 있어도 원래 ADD와 DELETE를 제거하거나 자동 `RENAME`으로 바꾸지 않는다. Ambiguous match, owner 이동, rename과 동시에 발생한 구조 변경은 rename으로 추론하지 않는다.
+
 Visual mutation은 source position을 기준으로 가장 작은 `TextEdit[]`를 만든다. Edit는 offset 내림차순으로 적용하고 수정된 전체 source를 DBML v2로 다시 parse한다. Reparse 결과의 semantic diff가 command가 기대한 변경과 정확히 일치할 때만 source를 commit한다. 실패하면 원본을 유지하고 diagnostic을 반환한다.
 
 M0에서는 `CreateColumn` 한 종류로 이 경계를 증명한다. 대상 block 밖의 comment, partial, view와 formatting은 byte-identical이어야 하며 full-model DBML regeneration은 canonical source 갱신 경로로 사용하지 않는다.
@@ -42,6 +52,7 @@ Rename 추적은 쉬워지지만 표준 DBML 호환성을 깨뜨리고 사용자
 ## Consequences
 
 - Source fidelity와 semantic correctness를 각각 byte comparison과 normalized diff로 검증할 수 있다.
+- Canonical semantics version 변경은 schema hash compatibility event이며 persistence 도입 이후에는 명시적 revalidation 또는 migration이 필요하다.
 - Parser upgrade는 source rewrite가 아니라 explicit revalidation event가 된다.
 - Source transformer는 command별로 안전한 insertion/update range와 formatting rule을 구현해야 한다.
 - Source 직접 편집에서 rename을 확신할 수 없으면 layout identity는 delete+create로 처리할 수 있다.
@@ -51,4 +62,6 @@ Rename 추적은 쉬워지지만 표준 DBML 호환성을 깨뜨리고 사용자
 - `TablePartial`, `TableGroup`, `DiagramView`, comment, metadata fixture가 legacy fallback 없이 parse되어야 한다.
 - 입력 hash와 parser 전달 hash가 일치해야 한다.
 - column 추가 뒤 expected semantic diff만 발생하고 unrelated source가 byte-identical이어야 한다.
+- formatting, comment, filepath와 무의미한 선언 순서가 달라도 hash와 diff가 같아야 한다.
+- exact·unique table/column rename만 advisory candidate가 되고 ADD/DELETE는 그대로 유지되어야 한다.
 - reparse 또는 semantic verification 실패 시 canonical source가 바뀌지 않아야 한다.

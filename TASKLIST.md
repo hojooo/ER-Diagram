@@ -190,8 +190,8 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - 검증: `pnpm --filter @er-diagram/core test test/normalized-graph.test.ts`
 - [x] `M1-002` lexical/syntax/semantic diagnostics와 shared source map
   - 검증: `pnpm --filter @er-diagram/core test test/diagnostics.test.ts`
-- [ ] `M1-003` canonical semantic hash, add/update/delete diff, rename candidate
-  - 검증: `pnpm --filter @er-diagram/core test semantic-diff`
+- [x] `M1-003` canonical semantic hash, add/update/delete diff, rename candidate
+  - 검증: `pnpm --filter @er-diagram/core test test/semantic-diff.test.ts`
 - [ ] `M1-004` SQLite five-table migration, WAL/FK/busy timeout, UUIDv7 adapter
   - 검증: `pnpm --filter @er-diagram/storage-sqlite test`
 - [ ] `M1-005` project/revision use cases와 transaction/retention

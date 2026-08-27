@@ -1,5 +1,6 @@
 import {
   type ColumnNode,
+  diffSchemaGraphs,
   parseDbmlV2,
   qualifiedElementKey,
   type SchemaGraph,
@@ -146,32 +147,33 @@ export function verifyCreateColumnSemanticDiff(
   const afterTarget = after.tables.find((table) => table.key === command.targetTableKey);
 
   if (!beforeTarget || !afterTarget) return semanticMismatch();
+  const expectedColumnKey = qualifiedElementKey(
+    "column",
+    beforeTarget.schemaName,
+    beforeTarget.name,
+    command.column.name,
+  );
+  const semanticDiff = diffSchemaGraphs(before, after);
   if (
-    !sameValue(
-      before.tables.map((table) => table.key),
-      after.tables.map((table) => table.key),
+    semanticDiff.renameCandidates.length !== 0 ||
+    semanticDiff.changes.length !== 2 ||
+    !semanticDiff.changes.some(
+      (change) =>
+        change.operation === "ADD" &&
+        change.elementKind === "column" &&
+        change.key === expectedColumnKey &&
+        change.parentKey === command.targetTableKey,
+    ) ||
+    !semanticDiff.changes.some(
+      (change) =>
+        change.operation === "UPDATE" &&
+        change.elementKind === "table" &&
+        change.key === command.targetTableKey &&
+        change.parentKey === null &&
+        change.changedFields.length === 1 &&
+        change.changedFields[0] === "columnOrder",
     )
   ) {
-    return semanticMismatch();
-  }
-
-  for (const beforeTable of before.tables) {
-    const afterTable = after.tables.find((table) => table.key === beforeTable.key);
-    if (!afterTable) return semanticMismatch();
-
-    if (beforeTable.key !== command.targetTableKey) {
-      if (!sameValue(tableSemantics(beforeTable), tableSemantics(afterTable))) {
-        return semanticMismatch();
-      }
-      continue;
-    }
-
-    if (!sameValue(tableIdentitySemantics(beforeTable), tableIdentitySemantics(afterTable))) {
-      return semanticMismatch();
-    }
-  }
-
-  if (!sameValue(nonTableSemantics(before), nonTableSemantics(after))) {
     return semanticMismatch();
   }
 
@@ -181,38 +183,29 @@ export function verifyCreateColumnSemanticDiff(
 
   const existingAfterColumns = afterTarget.columns.slice(0, beforeTarget.columns.length);
   if (
-    !sameValue(beforeTarget.columns.map(columnSemantics), existingAfterColumns.map(columnSemantics))
+    beforeTarget.columns.some((column, index) => existingAfterColumns[index]?.key !== column.key)
   ) {
     return semanticMismatch();
   }
 
   const addedColumn = afterTarget.columns.at(-1);
-  const expectedColumnWithoutType = {
-    key: qualifiedElementKey(
-      "column",
-      beforeTarget.schemaName,
-      beforeTarget.name,
-      command.column.name,
-    ),
-    name: command.column.name,
-    primaryKey: false,
-    unique: false,
-    notNull: false,
-    default: null,
-    increment: false,
-    note: null,
-    metadata: {},
-    checks: [],
-    injectedFrom: null,
-  };
   if (!addedColumn) return semanticMismatch();
 
-  const { type: addedType, ...addedColumnWithoutType } = columnSemantics(addedColumn);
   const expectedType = parseCommandColumnType(command.column.type);
   if (
     !expectedType ||
-    !sameValue(addedType, expectedType) ||
-    !sameValue(addedColumnWithoutType, expectedColumnWithoutType)
+    !sameColumnType(addedColumn.type, expectedType) ||
+    addedColumn.key !== expectedColumnKey ||
+    addedColumn.name !== command.column.name ||
+    addedColumn.primaryKey ||
+    addedColumn.unique ||
+    addedColumn.notNull ||
+    addedColumn.default !== null ||
+    addedColumn.increment ||
+    addedColumn.note !== null ||
+    Object.keys(addedColumn.metadata).length !== 0 ||
+    addedColumn.checks.length !== 0 ||
+    addedColumn.injectedFrom !== null
   ) {
     return semanticMismatch();
   }
@@ -352,62 +345,6 @@ function invalidCommand(): SourceTransformDiagnostic {
   );
 }
 
-function tableSemantics(table: TableNode) {
-  return {
-    ...tableIdentitySemantics(table),
-    columns: table.columns.map(columnSemantics),
-  };
-}
-
-function tableIdentitySemantics(table: TableNode): Record<string, unknown> {
-  const { columns: _columns, ...identity } = table;
-  return withoutSourceLocations(identity) as Record<string, unknown>;
-}
-
-function columnSemantics(column: ColumnNode): Omit<ColumnNode, "range"> {
-  return withoutSourceLocations(column) as Omit<ColumnNode, "range">;
-}
-
-function nonTableSemantics(graph: SchemaGraph): unknown {
-  return withoutSourceLocations({
-    parserVersion: graph.parserVersion,
-    project: graph.project,
-    notes: graph.notes,
-    enums: graph.enums,
-    references: graph.references,
-    groups: graph.groups,
-    partials: graph.partials,
-    views: graph.views,
-  });
-}
-
-const SOURCE_LOCATION_KEYS = new Set(["range", "contentRange", "injectionRange"]);
-
-function withoutSourceLocations(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(withoutSourceLocations);
-  if (!value || typeof value !== "object") return value;
-
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([key, item]) => !(SOURCE_LOCATION_KEYS.has(key) && isSourceRange(item)))
-      .map(([key, item]) => [key, withoutSourceLocations(item)]),
-  );
-}
-
-function isSourceRange(value: unknown): value is ColumnNode["range"] {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const candidate = value as Partial<ColumnNode["range"]>;
-  return (
-    typeof candidate.startOffset === "number" &&
-    typeof candidate.endOffset === "number" &&
-    typeof candidate.startLine === "number" &&
-    typeof candidate.startColumn === "number" &&
-    typeof candidate.endLine === "number" &&
-    typeof candidate.endColumn === "number" &&
-    typeof candidate.filepath === "string"
-  );
-}
-
 function renderColumnType(type: ColumnNode["type"]): string {
   const qualifiedName = type.schemaName ? `${type.schemaName}.${type.name}` : type.name;
   return type.arguments === null ? qualifiedName : `${qualifiedName}(${type.arguments})`;
@@ -538,18 +475,12 @@ function normalizeTypeArguments(value: string): string | undefined {
   return result;
 }
 
-function sameValue(left: unknown, right: unknown): boolean {
-  return JSON.stringify(canonicalize(left)) === JSON.stringify(canonicalize(right));
-}
-
-function canonicalize(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalize);
-  if (!value || typeof value !== "object") return value;
-
-  return Object.fromEntries(
-    Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, item]) => [key, canonicalize(item)]),
+function sameColumnType(left: ColumnNode["type"], right: ColumnNode["type"]): boolean {
+  return (
+    left.schemaName === right.schemaName &&
+    left.name === right.name &&
+    left.arguments === right.arguments &&
+    left.display === right.display
   );
 }
 
