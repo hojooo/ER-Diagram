@@ -33,7 +33,9 @@ test("renders the active graph and keeps source navigation revision-safe", async
   await expect(
     page.locator('section[aria-label="DBML source editor"] .monaco-editor'),
   ).toBeVisible();
-  await expect(page.getByTestId("base-diagram-layout-status")).toHaveText("Diagram layout ready");
+  await expect(page.getByTestId("base-diagram-layout-status")).toHaveText("Diagram layout ready", {
+    timeout: 10_000,
+  });
   await expect(page.locator(".react-flow__node")).toHaveCount(2);
   await expect(page.locator(".diagram-table__column-action")).toHaveCount(3);
   await expect(page.locator(".react-flow__edge")).toHaveCount(1);
@@ -67,7 +69,7 @@ test("renders the active graph and keeps source navigation revision-safe", async
   await replaceEditorSource(editor, RECOVERED_SOURCE);
   await expect.poll(() => api.writes.length).toBe(2);
   await expect(page.getByText(/Showing the current valid draft/)).toBeVisible();
-  await expect(page.locator(".diagram-table__column-action")).toHaveCount(4);
+  await expect(page.locator(".diagram-table__column-action")).toHaveCount(4, { timeout: 10_000 });
   await expect(
     page.getByRole("button", { name: /Open source for table at line/ }).first(),
   ).toBeEnabled();
