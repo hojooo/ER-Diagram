@@ -11,15 +11,22 @@ import {
   revisionParamsSchema,
   type SchemaRevisionSummary,
   saveDraftRequestSchema,
+  sqlImportApplyResponseSchema,
 } from "@er-diagram/contracts";
-import type { ProjectApplication, SchemaRevision } from "@er-diagram/core";
+import type { ProjectApplication, SchemaRevision, SqlImportApplication } from "@er-diagram/core";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
-import { parseRequest, parseResponse, sendProjectApplicationError } from "./http-errors.js";
+import {
+  parseRequest,
+  parseResponse,
+  sendProjectApplicationError,
+  sendSqlImportApplicationError,
+} from "./http-errors.js";
 
 export function registerProjectRoutes(
   server: FastifyInstance,
   application: ProjectApplication,
+  sqlImportApplication: SqlImportApplication,
 ): void {
   server.get("/api/v1/projects", async (request, reply) => {
     const result = await application.listProjects();
@@ -30,6 +37,22 @@ export function registerProjectRoutes(
   server.post("/api/v1/projects", async (request, reply) => {
     const command = parseRequest(createProjectRequestSchema, request.body);
     echoCommandId(reply, command.commandId);
+    if (command.operation === "CREATE_FROM_SQL_IMPORT") {
+      const result = await sqlImportApplication.createProjectFromPreview({
+        name: command.name,
+        primaryDialect: command.primaryDialect,
+        source: command.source,
+        previewHash: command.previewHash,
+        ...(command.originalSqlRetention === undefined
+          ? {}
+          : { originalSqlRetention: command.originalSqlRetention }),
+        ...(command.dataStatementHandling === undefined
+          ? {}
+          : { dataStatementHandling: command.dataStatementHandling }),
+      });
+      if (!result.ok) return sendSqlImportApplicationError(request, reply, result.error);
+      return reply.code(201).send(parseResponse(sqlImportApplyResponseSchema, result.value));
+    }
     const result =
       command.operation === "CREATE"
         ? await application.createProject({

@@ -4,6 +4,8 @@ import {
   sqlImportApplyResponseSchema,
   sqlImportPreviewRequestSchema,
   sqlImportPreviewResponseSchema,
+  sqlImportStandalonePreviewRequestSchema,
+  sqlImportStandalonePreviewResponseSchema,
 } from "@er-diagram/contracts";
 import type { SqlImportApplication } from "@er-diagram/core";
 import type { FastifyInstance, FastifyReply } from "fastify";
@@ -14,6 +16,20 @@ export function registerSqlImportRoutes(
   server: FastifyInstance,
   application: SqlImportApplication,
 ): void {
+  server.post("/api/v1/sql-import/preview", async (request, reply) => {
+    const command = parseRequest(sqlImportStandalonePreviewRequestSchema, request.body);
+    echoCommandId(reply, command.commandId);
+    const result = await application.previewStandalone({
+      dialect: command.dialect,
+      source: command.source,
+      ...(command.originalSqlRetention === undefined
+        ? {}
+        : { originalSqlRetention: command.originalSqlRetention }),
+    });
+    if (!result.ok) return sendSqlImportApplicationError(request, reply, result.error);
+    return reply.send(parseResponse(sqlImportStandalonePreviewResponseSchema, result.value));
+  });
+
   server.post("/api/v1/projects/:projectId/sql-import/preview", async (request, reply) => {
     const { projectId } = parseRequest(projectParamsSchema, request.params);
     const command = parseRequest(sqlImportPreviewRequestSchema, request.body);

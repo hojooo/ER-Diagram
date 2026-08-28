@@ -6,6 +6,7 @@ import {
   projectResponseSchema,
   sqlImportApplyResponseSchema,
   sqlImportPreviewResponseSchema,
+  sqlImportStandalonePreviewResponseSchema,
 } from "@er-diagram/contracts";
 import {
   createLayoutApplication,
@@ -17,7 +18,10 @@ import {
   createSqliteProjectRepository,
   createSqliteSqlImportRepository,
   generateUuidV7,
+  importArtifacts,
   openSqliteStorage,
+  projects,
+  schemaRevisions,
   type SqliteStorage,
   toUtcIsoTimestamp,
 } from "@er-diagram/storage-sqlite";
@@ -90,6 +94,122 @@ afterEach(async () => {
 });
 
 describe("SQL import Fastify API", () => {
+  it("previews stateless SQL and creates the project only when apply is submitted", async () => {
+    const { server, storage } = createFixture();
+    const previewResponse = await server.inject({
+      method: "POST",
+      url: "/api/v1/sql-import/preview",
+      payload: {
+        commandId: COMMAND_ID,
+        dialect: "POSTGRESQL",
+        source: POSTGRESQL_DDL,
+        originalSqlRetention: "RETAIN",
+      },
+    });
+
+    expect(previewResponse.statusCode).toBe(200);
+    expect(previewResponse.headers["x-command-id"]).toBe(COMMAND_ID);
+    const preview = sqlImportStandalonePreviewResponseSchema.parse(previewResponse.json());
+    expect(preview).toMatchObject({ previewStatus: "PREVIEWED", candidate: expect.any(Object) });
+    expect(storage.database.select().from(projects).all()).toEqual([]);
+    expect(storage.database.select().from(schemaRevisions).all()).toEqual([]);
+    expect(storage.database.select().from(importArtifacts).all()).toEqual([]);
+
+    const createResponse = await server.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      payload: {
+        operation: "CREATE_FROM_SQL_IMPORT",
+        commandId: OTHER_COMMAND_ID,
+        name: "Imported schema",
+        primaryDialect: "POSTGRESQL",
+        source: POSTGRESQL_DDL,
+        previewHash: preview.previewHash,
+        originalSqlRetention: "RETAIN",
+      },
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    expect(createResponse.headers["x-command-id"]).toBe(OTHER_COMMAND_ID);
+    const applied = sqlImportApplyResponseSchema.parse(createResponse.json());
+    expect(applied.state).toMatchObject({
+      project: { name: "Imported schema", schemaRevisionNo: 1, layoutRevisionNo: 0 },
+      currentRevision: { revisionNo: 1, origin: "SQL_IMPORT", validity: "VALID" },
+    });
+    expect(storage.database.select().from(projects).all()).toHaveLength(1);
+    expect(storage.database.select().from(schemaRevisions).all()).toHaveLength(1);
+    expect(storage.database.select().from(importArtifacts).all()).toHaveLength(1);
+  });
+
+  it("returns failed stateless previews as 200 without storing source or artifacts", async () => {
+    const { server, storage } = createFixture();
+    const marker = "PRIVATE_STATELESS_LITERAL";
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/v1/sql-import/preview",
+      payload: {
+        commandId: COMMAND_ID,
+        dialect: "POSTGRESQL",
+        source: `CREATE TABLE broken (note text DEFAULT '${marker}'`,
+        originalSqlRetention: "RETAIN",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(sqlImportStandalonePreviewResponseSchema.parse(response.json())).toMatchObject({
+      previewStatus: "FAILED",
+      candidate: null,
+    });
+    expect(response.body).not.toContain(marker);
+    expect(storage.database.select().from(projects).all()).toEqual([]);
+    expect(storage.database.select().from(importArtifacts).all()).toEqual([]);
+  });
+
+  it("maps atomic project import preview mismatch and readiness failures", async () => {
+    const { server } = createFixture();
+    const source = `${POSTGRESQL_DDL} INSERT INTO users VALUES (1);`;
+    const previewResponse = await server.inject({
+      method: "POST",
+      url: "/api/v1/sql-import/preview",
+      payload: { commandId: COMMAND_ID, dialect: "POSTGRESQL", source },
+    });
+    const preview = sqlImportStandalonePreviewResponseSchema.parse(previewResponse.json());
+
+    const mismatch = await server.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      payload: {
+        operation: "CREATE_FROM_SQL_IMPORT",
+        commandId: COMMAND_ID,
+        name: "Import",
+        primaryDialect: "POSTGRESQL",
+        source,
+        previewHash: "f".repeat(64),
+      },
+    });
+    expect(mismatch.statusCode).toBe(409);
+    expect(errorResponseSchema.parse(mismatch.json()).code).toBe(
+      "SQL_IMPORT_CREATE_PREVIEW_MISMATCH",
+    );
+
+    const confirmation = await server.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      payload: {
+        operation: "CREATE_FROM_SQL_IMPORT",
+        commandId: COMMAND_ID,
+        name: "Import",
+        primaryDialect: "POSTGRESQL",
+        source,
+        previewHash: preview.previewHash,
+      },
+    });
+    expect(confirmation.statusCode).toBe(422);
+    expect(errorResponseSchema.parse(confirmation.json()).code).toBe(
+      "SQL_IMPORT_CREATE_DATA_CONFIRMATION_REQUIRED",
+    );
+  });
+
   it("previews and atomically applies PostgreSQL DDL", async () => {
     const { server } = createFixture();
     const projectId = await createProject(server);
