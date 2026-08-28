@@ -8,14 +8,17 @@ import {
   Position,
 } from "@xyflow/react";
 import { createContext, useContext } from "react";
+import type { DiagramSelection } from "./source-navigation.js";
 import type { GroupDiagramNode, SchemaDiagramEdge, TableDiagramNode } from "./types.js";
 
 export interface DiagramInteractions {
   toggleGroup(groupKey: string): void;
+  activateElement(selection: DiagramSelection): void;
 }
 
 export const DiagramInteractionContext = createContext<DiagramInteractions>({
   toggleGroup: () => undefined,
+  activateElement: () => undefined,
 });
 
 export function GroupDiagramNodeComponent({ data }: NodeProps<GroupDiagramNode>) {
@@ -47,6 +50,7 @@ export function GroupDiagramNodeComponent({ data }: NodeProps<GroupDiagramNode>)
 }
 
 export function TableDiagramNodeComponent({ data }: NodeProps<TableDiagramNode>) {
+  const { activateElement } = useContext(DiagramInteractionContext);
   const displayedColumns =
     data.lod === "FULL"
       ? data.columns
@@ -55,23 +59,60 @@ export function TableDiagramNodeComponent({ data }: NodeProps<TableDiagramNode>)
         : [];
 
   return (
-    <article className="diagram-table">
+    <article
+      className={`diagram-table ${data.selectedElementKey ? "is-selected" : ""}`}
+      aria-label={`Table ${data.schemaName}.${data.name}`}
+    >
       <Handle type="target" position={Position.Left} />
       <header className="diagram-table__header">
-        <span>{data.schemaName}</span>
-        <strong>{data.name}</strong>
+        <button
+          className="nodrag nopan diagram-table__table-action"
+          type="button"
+          aria-pressed={data.selectedElementKey === data.tableKey}
+          onClick={(event) => {
+            event.stopPropagation();
+            activateElement({
+              elementKey: data.tableKey,
+              kind: "table",
+              tableKeys: [data.tableKey],
+            });
+          }}
+        >
+          <span>{data.schemaName}</span>
+          <strong>{data.name}</strong>
+        </button>
       </header>
       {displayedColumns.length > 0 ? (
         <ul className="diagram-table__columns">
-          {displayedColumns.map((column) => (
-            <li key={column.key}>
-              <span className="diagram-table__key">
-                {column.primaryKey ? "PK" : column.foreignKey ? "FK" : ""}
-              </span>
-              <span>{column.name}</span>
-              <code>{column.type}</code>
-            </li>
-          ))}
+          {displayedColumns.map((column) => {
+            const badges = [
+              column.primaryKey ? "PK" : null,
+              column.foreignKey ? "FK" : null,
+              column.partialName ? `Partial ${column.partialName}` : null,
+            ].filter((badge): badge is string => badge !== null);
+            return (
+              <li key={column.key}>
+                <button
+                  className="nodrag nopan diagram-table__column-action"
+                  type="button"
+                  aria-pressed={data.selectedElementKey === column.key}
+                  aria-label={`${column.name}, ${column.type}${badges.length > 0 ? `, ${badges.join(", ")}` : ""}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    activateElement({
+                      elementKey: column.key,
+                      kind: "column",
+                      tableKeys: [data.tableKey],
+                    });
+                  }}
+                >
+                  <span className="diagram-table__key">{badges.join(" · ")}</span>
+                  <span>{column.name}</span>
+                  <code>{column.type}</code>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
       <Handle type="source" position={Position.Right} />
@@ -82,6 +123,18 @@ export function TableDiagramNodeComponent({ data }: NodeProps<TableDiagramNode>)
 export function ReferenceDiagramEdgeComponent(props: EdgeProps<SchemaDiagramEdge>) {
   const [edgePath, labelX, labelY] = getSmoothStepPath(props);
   const count = props.data?.count ?? 1;
+  const label =
+    count > 1
+      ? `×${count}`
+      : [
+          props.data?.referenceName ?? "Ref",
+          props.data?.sourceMultiplicity && props.data?.targetMultiplicity
+            ? `${props.data.sourceMultiplicity} → ${props.data.targetMultiplicity}`
+            : null,
+          props.data?.inactive ? "Inactive" : null,
+        ]
+          .filter((part): part is string => part !== null)
+          .join(" · ");
   return (
     <>
       <BaseEdge
@@ -90,13 +143,13 @@ export function ReferenceDiagramEdgeComponent(props: EdgeProps<SchemaDiagramEdge
         {...(props.markerEnd ? { markerEnd: props.markerEnd } : {})}
         {...(props.style ? { style: props.style } : {})}
       />
-      {count > 1 ? (
+      {label ? (
         <EdgeLabelRenderer>
           <span
             className="diagram-edge-label nodrag nopan"
             style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
           >
-            ×{count}
+            {label}
           </span>
         </EdgeLabelRenderer>
       ) : null}

@@ -34,7 +34,7 @@ describe("diagram projection", () => {
     expect(new Set(views.map((view) => view.key))).toHaveLength(views.length);
   });
 
-  it("projects normalized type displays and foreign keys from endpoint column keys", () => {
+  it("projects normalized type displays and foreign keys from referencing endpoints", () => {
     const projection = createDiagramProjection(demoSchemaGraph, {
       viewKey: GLOBAL_VIEW_KEY,
       collapsedGroupKeys: new Set(),
@@ -45,16 +45,21 @@ describe("diagram projection", () => {
         table.columns.map((column) => [column.key, column] as const),
       ),
     );
-    const endpointColumnKeys = new Set(
-      demoSchemaGraph.references.flatMap((reference) =>
-        reference.endpoints.flatMap((endpoint) => endpoint.columnKeys),
-      ),
+    const foreignColumnKeys = new Set(
+      demoSchemaGraph.references.flatMap((reference) => {
+        const referencedIndex = reference.endpoints.findIndex(
+          (endpoint) => endpoint.multiplicity.max === 1,
+        );
+        return referencedIndex < 0
+          ? []
+          : (reference.endpoints[referencedIndex === 0 ? 1 : 0]?.columnKeys ?? []);
+      }),
     );
 
     for (const table of tableNodes(projection)) {
       for (const column of table.data.columns) {
         expect(column.type).toBe(sourceColumnByKey.get(column.key)?.type.display);
-        expect(column.foreignKey).toBe(endpointColumnKeys.has(column.key));
+        expect(column.foreignKey).toBe(foreignColumnKeys.has(column.key));
       }
     }
     expect(
@@ -62,7 +67,7 @@ describe("diagram projection", () => {
         table.data.columns.some((column) => column.type === "varchar"),
       ),
     ).toBe(true);
-    expect(endpointColumnKeys.size).toBeGreaterThan(0);
+    expect(foreignColumnKeys.size).toBeGreaterThan(0);
   });
 
   it("places all 15 group parents before their 143 table children", () => {

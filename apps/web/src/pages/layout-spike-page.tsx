@@ -84,6 +84,7 @@ export function LayoutSpikePage() {
 
   const interactions = useMemo(
     () => ({
+      activateElement: () => undefined,
       toggleGroup: (groupKey: string) => {
         setCollapsedGroupKeys((current) => {
           const next = new Set(current);

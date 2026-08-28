@@ -4,13 +4,16 @@ import "@testing-library/jest-dom/vitest";
 
 import { createHash } from "node:crypto";
 import type { Diagnostic, ProjectMutationResponse, ProjectState } from "@er-diagram/contracts";
+import { parseDbmlV2 } from "@er-diagram/core";
 import { QueryClient } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createRef, forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { createMemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { useStore } from "zustand";
 
 import { App, createAppRoutes } from "../src/App.js";
+import type { BaseSchemaDiagramProps } from "../src/diagram/base-schema-diagram-contract.js";
 import type { ProjectApi, SaveDraftInput } from "../src/projects/project-api.js";
 import { ProjectApiError } from "../src/projects/project-api.js";
 import type {
@@ -33,12 +36,16 @@ const SERVER_SOURCE = "Table server_state { id int [pk] }";
 
 const navigateToDiagnostic = vi.fn();
 const replaceSource = vi.fn();
+const revealSourceRange = vi.fn();
+const focusSource = vi.fn();
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
   navigateToDiagnostic.mockReset();
   replaceSource.mockReset();
+  revealSourceRange.mockReset();
+  focusSource.mockReset();
 });
 
 describe("DBML source workspace", () => {
@@ -46,7 +53,7 @@ describe("DBML source workspace", () => {
     const api = new SourceProjectApi(projectState(VALID_SOURCE, 1, "VALID"));
     renderWorkspace(api);
 
-    const editor = await screen.findByLabelText("DBML source editor");
+    const editor = (await screen.findByLabelText("DBML source editor")) as HTMLTextAreaElement;
     expect(editor).toHaveValue(domValue(VALID_SOURCE));
     expect(await findWorkspaceStatus("Draft valid")).toBeVisible();
     expect(screen.getByText("Schema actions").nextElementSibling).toHaveTextContent("Available");
@@ -179,6 +186,45 @@ describe("DBML source workspace", () => {
     window.dispatchEvent(savedEvent);
     expect(savedEvent.defaultPrevented).toBe(false);
   });
+
+  it("synchronizes source selection and diagram navigation without applying last-valid ranges", async () => {
+    const api = new SourceProjectApi(projectState(VALID_SOURCE, 1, "VALID"));
+    renderWorkspace(api);
+    const editor = (await screen.findByLabelText("DBML source editor")) as HTMLTextAreaElement;
+    await findWorkspaceStatus("Draft valid");
+
+    editor.setSelectionRange(VALID_SOURCE.indexOf("id"), VALID_SOURCE.indexOf("id"));
+    fireEvent.select(editor);
+    expect(await screen.findByTestId("fake-diagram-selection")).toHaveTextContent("column");
+
+    fireEvent.click(screen.getByRole("button", { name: "Select first diagram table" }));
+    expect(revealSourceRange).toHaveBeenCalledOnce();
+
+    vi.useFakeTimers();
+    fireEvent.change(editor, { target: { value: INVALID_SOURCE } });
+    await act(() => vi.advanceTimersByTimeAsync(750));
+    await settleReact();
+    expect(screen.getByText(/Showing last-valid revision 1/)).toBeVisible();
+    const navigationCalls = revealSourceRange.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Select first diagram table" }));
+    expect(revealSourceRange).toHaveBeenCalledTimes(navigationCalls);
+
+    fireEvent.change(editor, { target: { value: SECOND_VALID_SOURCE } });
+    await act(() => vi.advanceTimersByTimeAsync(750));
+    await settleReact();
+    expect(screen.getByText(/Showing the current valid draft/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Select first diagram table" }));
+    expect(revealSourceRange).toHaveBeenCalledTimes(navigationCalls + 1);
+  });
+
+  it("offers a source focus action when an invalid initial draft has no last-valid graph", async () => {
+    const api = new SourceProjectApi(projectState(INVALID_SOURCE, 1, "INVALID", null));
+    renderWorkspace(api);
+
+    expect(await screen.findByText("No valid diagram yet")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Focus source editor" }));
+    expect(focusSource).toHaveBeenCalledOnce();
+  });
 });
 
 describe("Monaco DBML adapter", () => {
@@ -187,6 +233,7 @@ describe("Monaco DBML adapter", () => {
     const editorHandle = createRef<SourceEditorHandle>();
     const onChange = vi.fn();
     const onSave = vi.fn();
+    const onCursorPositionChange = vi.fn();
     const source = 'Table "사용자😀" {\r\n  id int\r\n}\r\n';
     const markerDiagnostic: Diagnostic = {
       code: "DBML_PARSE_SYNTAX_UNEXPECTED_TOKEN",
@@ -211,6 +258,7 @@ describe("Monaco DBML adapter", () => {
         diagnostics={[markerDiagnostic]}
         onChange={onChange}
         onSave={onSave}
+        onCursorPositionChange={onCursorPositionChange}
         loadRuntime={async () => runtime.value}
       />,
     );
@@ -248,6 +296,28 @@ describe("Monaco DBML adapter", () => {
       }),
     ).toBe(false);
 
+    const markerRange = markerDiagnostic.range;
+    if (!markerRange) throw new Error("Expected a diagnostic source range.");
+    expect(editorHandle.current?.revealSourceRange(markerRange)).toBe(true);
+    expect(runtime.editor.setSelection).toHaveBeenLastCalledWith({
+      startLineNumber: 1,
+      startColumn: 11,
+      endLineNumber: 1,
+      endColumn: 11,
+    });
+    expect(
+      editorHandle.current?.revealSourceRange({
+        ...markerRange,
+        filepath: "/shared.dbml",
+      }),
+    ).toBe(false);
+
+    act(() => runtime.editor.simulateCursor({ lineNumber: 2, column: 3 }));
+    expect(onCursorPositionChange).toHaveBeenCalledWith({
+      filepath: "/main.dbml",
+      offset: source.indexOf("id"),
+    });
+
     act(() => runtime.model.simulateEdit("Table edited { id int }"));
     expect(onChange).toHaveBeenCalledWith("Table edited { id int }");
     const changeCalls = onChange.mock.calls.length;
@@ -260,6 +330,7 @@ describe("Monaco DBML adapter", () => {
 
     rendered.unmount();
     expect(runtime.changeListenerDispose).toHaveBeenCalledOnce();
+    expect(runtime.cursorListenerDispose).toHaveBeenCalledOnce();
     expect(runtime.editor.dispose).toHaveBeenCalledOnce();
     expect(runtime.model.dispose).toHaveBeenCalledOnce();
     expect(runtime.setModelMarkers).toHaveBeenLastCalledWith(runtime.model, DBML_MARKER_OWNER, []);
@@ -267,7 +338,10 @@ describe("Monaco DBML adapter", () => {
 });
 
 const FakeSourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(
-  function FakeSourceEditor({ initialSource, diagnostics, onChange, onSave }, ref) {
+  function FakeSourceEditor(
+    { initialSource, diagnostics, onChange, onSave, onCursorPositionChange },
+    ref,
+  ) {
     const [source, setSource] = useState(initialSource);
     const eolRef = useRef(initialSource.includes("\r\n") ? "\r\n" : "\n");
     useImperativeHandle(ref, () => ({
@@ -280,7 +354,13 @@ const FakeSourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(
         navigateToDiagnostic(diagnostic);
         return diagnostic.range !== undefined;
       },
-      focus() {},
+      revealSourceRange(range) {
+        revealSourceRange(range);
+        return range.filepath === "/main.dbml";
+      },
+      focus() {
+        focusSource();
+      },
     }));
     return (
       <textarea
@@ -301,6 +381,12 @@ const FakeSourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(
             onSave();
           }
         }}
+        onSelect={(event) =>
+          onCursorPositionChange?.({
+            filepath: "/main.dbml",
+            offset: event.currentTarget.selectionStart,
+          })
+        }
       />
     );
   },
@@ -310,42 +396,60 @@ class FakeParserClient implements DbmlParserWorkerClient {
   readonly dispose = vi.fn();
 
   async parse(source: string): Promise<DbmlWorkerParseResult> {
-    const sourceHash = sha256(source);
-    if (source === INVALID_SOURCE) {
+    const parsed = await parseDbmlV2(source);
+    if (!parsed.ok) {
       return {
         type: "DBML_PARSE_RESULT",
         requestId: "550e8400-e29b-41d4-a716-446655440000",
         ok: false,
-        sourceHash,
-        parserInputHash: sourceHash,
+        sourceHash: parsed.sourceHash,
+        parserInputHash: parsed.parserInputHash,
         parserVersion: "9.1.1",
-        diagnostics: [diagnostic(source)],
+        diagnostics: parsed.diagnostics,
       };
     }
     return {
       type: "DBML_PARSE_RESULT",
       requestId: "550e8400-e29b-41d4-a716-446655440000",
       ok: true,
-      sourceHash,
-      parserInputHash: sourceHash,
+      sourceHash: parsed.sourceHash,
+      parserInputHash: parsed.parserInputHash,
       parserVersion: "9.1.1",
-      diagnostics: [],
-      graph: {
-        parserVersion: "9.1.1",
-        schemaHash: sha256(`schema:${source}`),
-        project: null,
-        notes: [],
-        tables: [],
-        enums: [],
-        references: [],
-        groups: [],
-        partials: [],
-        views: [],
-        diagnostics: [],
-        sourceMap: {},
-      },
+      diagnostics: parsed.graph.diagnostics,
+      graph: parsed.graph,
     };
   }
+}
+
+function FakeSchemaDiagram({
+  graph,
+  selectionStore,
+  sourceNavigationEnabled,
+  onNavigateSource,
+}: BaseSchemaDiagramProps) {
+  const selection = useStore(selectionStore, (state) => state.selection);
+  const table = graph.tables[0];
+  return (
+    <div role="application" aria-label="ER diagram canvas">
+      <output data-testid="fake-diagram-selection">{selection?.kind ?? "none"}</output>
+      {table ? (
+        <button
+          type="button"
+          onClick={() => {
+            const nextSelection = {
+              elementKey: table.key,
+              kind: "table" as const,
+              tableKeys: [table.key],
+            };
+            selectionStore.getState().setSelection(nextSelection);
+            if (sourceNavigationEnabled) onNavigateSource(nextSelection);
+          }}
+        >
+          Select first diagram table
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 class SourceProjectApi implements ProjectApi {
@@ -428,6 +532,7 @@ function renderWorkspace(api: SourceProjectApi) {
     createAppRoutes({
       workspaceAdapters: {
         SourceEditor: FakeSourceEditor,
+        SchemaDiagram: FakeSchemaDiagram,
         createParserClient: () => new FakeParserClient(),
       },
     }),
@@ -544,6 +649,7 @@ async function settleReact(): Promise<void> {
 class FakeMonacoRuntime {
   readonly model = new FakeMonacoModel();
   readonly changeListenerDispose = vi.fn();
+  readonly cursorListenerDispose = vi.fn();
   readonly registerLanguage = vi.fn();
   readonly setLanguageConfiguration = vi.fn();
   readonly setMonarchTokensProvider = vi.fn();
@@ -562,6 +668,18 @@ class FakeMonacoRuntime {
     revealRangeInCenter: vi.fn(),
     focus: vi.fn(),
     dispose: vi.fn(),
+    cursorListener: undefined as
+      | ((event: { position: { lineNumber: number; column: number } }) => void)
+      | undefined,
+    onDidChangeCursorPosition: vi.fn(
+      (listener: (event: { position: { lineNumber: number; column: number } }) => void) => {
+        this.editor.cursorListener = listener;
+        return { dispose: this.cursorListenerDispose };
+      },
+    ),
+    simulateCursor: (position: { lineNumber: number; column: number }) => {
+      this.editor.cursorListener?.({ position });
+    },
   };
   readonly createEditor = vi.fn((_container: HTMLElement, _options: unknown) => this.editor);
   readonly value = {
@@ -611,6 +729,15 @@ class FakeMonacoModel {
     const prefix = this.value.slice(0, offset);
     const lines = prefix.split(/\r\n|\r|\n/);
     return { lineNumber: lines.length, column: (lines.at(-1)?.length ?? 0) + 1 };
+  }
+
+  getOffsetAt(position: { lineNumber: number; column: number }): number {
+    const lines = this.value.split(/\r\n|\r|\n/);
+    const preceding = lines.slice(0, position.lineNumber - 1);
+    const eolLength = this.value.includes("\r\n") ? 2 : 1;
+    return (
+      preceding.reduce((total, line) => total + line.length + eolLength, 0) + position.column - 1
+    );
   }
 
   setEOL(sequence: number): void {

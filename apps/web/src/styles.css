@@ -172,6 +172,13 @@ select {
   box-shadow: 0 10px 30px rgb(0 0 0 / 22%);
 }
 
+.diagram-table.is-selected {
+  border-color: #22d3ee;
+  box-shadow:
+    0 0 0 2px rgb(34 211 238 / 25%),
+    0 10px 30px rgb(0 0 0 / 22%);
+}
+
 .diagram-table__header {
   display: flex;
   align-items: baseline;
@@ -179,6 +186,24 @@ select {
   min-height: 48px;
   padding: 13px 14px;
   border-bottom: 1px solid #29364d;
+}
+
+.diagram-table__table-action {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.diagram-table__table-action:focus-visible,
+.diagram-table__column-action:focus-visible {
+  outline: 2px solid #67e8f9;
+  outline-offset: -2px;
 }
 
 .diagram-table__header span {
@@ -198,13 +223,30 @@ select {
 }
 
 .diagram-table__columns li {
-  display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) auto;
-  align-items: center;
   min-height: 24px;
-  padding: 0 12px;
+  padding: 0;
   color: #cbd5e1;
   font-size: 0.68rem;
+}
+
+.diagram-table__column-action {
+  display: grid;
+  width: 100%;
+  min-height: 24px;
+  grid-template-columns: minmax(32px, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.diagram-table__column-action[aria-pressed="true"],
+.diagram-table__table-action[aria-pressed="true"] {
+  background: rgb(8 145 178 / 22%);
 }
 
 .diagram-table__columns code {
@@ -216,6 +258,7 @@ select {
   color: #fbbf24;
   font-size: 0.58rem;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .diagram-edge-label {

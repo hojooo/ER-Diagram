@@ -45,6 +45,17 @@ revision conflict에서는 local buffer를 보존하고 autosave를 멈춘 뒤 �
 draft 재시도 또는 확인을 거친 server draft load를 선택한다. 저장되지 않은 buffer의 navigation은 먼저
 pending save를 flush하고, 명시적 이탈 전에는 `Stay`를 기본으로 하는 확인 경계를 거친다.
 
+Source와 diagram의 선택 상태는 normalized graph의 stable element key만 공유하고 project workspace
+session에만 보관한다. Monaco cursor의 filepath와 UTF-16 offset은 현재 graph의 source map에서 가장 좁은
+table, column 또는 reference range로 해석하며 diagram과 outline의 source action은 같은 key의 range
+시작점으로 이동한다. Diagram layout은 graph에서 파생하고 layout generation이 지난 worker 응답은
+폐기한다. 이 selection과 자동 layout 결과는 canonical source나 durable project state를 소유하지 않는다.
+
+Invalid draft에서 표시하는 last-valid graph의 source range는 현재 Monaco buffer와 같은 source를
+가리키지 않는다. 따라서 last-valid diagram과 outline의 stable-key 탐색은 허용하되 source 이동 action은
+현재 draft가 다시 valid해질 때까지 차단한다. Current graph로 복구되면 새 source map으로 navigation을
+재개하며 이전 graph에 없는 selection key는 폐기한다.
+
 Visual mutation은 source position을 기준으로 가장 작은 `TextEdit[]`를 만든다. Edit는 offset 내림차순으로 적용하고 수정된 전체 source를 DBML v2로 다시 parse한다. Reparse 결과의 semantic diff가 command가 기대한 변경과 정확히 일치할 때만 source를 commit한다. 실패하면 원본을 유지하고 diagnostic을 반환한다.
 
 M0에서는 `CreateColumn` 한 종류로 이 경계를 증명한다. 대상 block 밖의 comment, partial, view와 formatting은 byte-identical이어야 하며 full-model DBML regeneration은 canonical source 갱신 경로로 사용하지 않는다.

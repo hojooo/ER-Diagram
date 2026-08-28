@@ -1,9 +1,18 @@
 import type { ProjectState } from "@er-diagram/contracts";
 import * as Dialog from "@radix-ui/react-dialog";
 import type { QueryClient } from "@tanstack/react-query";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker } from "react-router-dom";
 
+import type { BaseSchemaDiagramComponent } from "../diagram/base-schema-diagram-contract.js";
+import { SchemaOutline } from "../diagram/schema-outline.js";
+import { createDiagramSelectionStore } from "../diagram/selection-store.js";
+import {
+  createDiagramNavigationIndex,
+  findDiagramSelectionAtCursor,
+  type DiagramSelection,
+  type SourceCursorPosition,
+} from "../diagram/source-navigation.js";
 import type { ProjectApi } from "../projects/project-api.js";
 import { projectQueryKeys } from "../projects/project-queries.js";
 import type { SourceEditorComponent, SourceEditorHandle } from "./editor-contract.js";
@@ -24,9 +33,15 @@ const LazyMonacoDbmlEditor = lazy(async () => {
   return { default: module.MonacoDbmlEditor };
 });
 
+const LazyBaseSchemaDiagram = lazy(async () => {
+  const module = await import("../diagram/base-schema-diagram.js");
+  return { default: module.BaseSchemaDiagram };
+});
+
 export interface ProjectWorkspaceAdapters {
   readonly createParserClient?: () => DbmlParserWorkerClient;
   readonly SourceEditor?: SourceEditorComponent;
+  readonly SchemaDiagram?: BaseSchemaDiagramComponent;
 }
 
 export function ProjectSourceWorkspace({
@@ -44,9 +59,46 @@ export function ProjectSourceWorkspace({
   const sessionRef = useRef<SourceSessionController | null>(null);
   const editorRef = useRef<SourceEditorHandle>(null);
   const flushedBlockedNavigationRef = useRef(false);
+  const [selectionStore] = useState(createDiagramSelectionStore);
   const projectId = initialState.project.id;
   const initialStateRef = useRef(initialState);
   const EditorComponent = adapters?.SourceEditor ?? LazyMonacoDbmlEditor;
+  const DiagramComponent = adapters?.SchemaDiagram ?? LazyBaseSchemaDiagram;
+  const activeGraph = sessionSnapshot?.activeGraph ?? null;
+  const sourceNavigationEnabled = sessionSnapshot?.activeGraphSource === "CURRENT_DRAFT";
+  const navigationIndex = useMemo(
+    () => (activeGraph ? createDiagramNavigationIndex(activeGraph) : null),
+    [activeGraph],
+  );
+
+  const handleCursorPositionChange = useCallback(
+    (position: SourceCursorPosition) => {
+      if (!sourceNavigationEnabled || !navigationIndex) {
+        selectionStore.getState().setSelection(null);
+        return;
+      }
+      selectionStore
+        .getState()
+        .setSelection(findDiagramSelectionAtCursor(navigationIndex, position));
+    },
+    [navigationIndex, selectionStore, sourceNavigationEnabled],
+  );
+
+  const handleNavigateSource = useCallback(
+    (selection: DiagramSelection) => {
+      if (!sourceNavigationEnabled || !activeGraph) return;
+      const range = activeGraph.sourceMap[selection.elementKey];
+      if (range) editorRef.current?.revealSourceRange(range);
+    },
+    [activeGraph, sourceNavigationEnabled],
+  );
+
+  useEffect(() => {
+    const currentSelection = selectionStore.getState().selection;
+    if (!activeGraph || (currentSelection && !activeGraph.sourceMap[currentSelection.elementKey])) {
+      selectionStore.getState().setSelection(null);
+    }
+  }, [activeGraph, selectionStore]);
 
   useEffect(() => {
     const parserClient = (adapters?.createParserClient ?? createDbmlParserWorkerClient)();
@@ -114,55 +166,67 @@ export function ProjectSourceWorkspace({
   const { serverState } = sessionSnapshot;
   return (
     <>
-      <div className="mt-8 grid gap-5 xl:grid-cols-[minmax(0,2.3fr)_minmax(19rem,0.8fr)]">
-        <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
-          <div className="flex flex-col gap-3 border-b border-slate-700 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">
-                Canonical DBML source
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                Autosaves 750 ms after the latest edit. Ctrl/Cmd+S saves immediately.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge
-                label={persistenceLabel(sessionSnapshot.persistence)}
-                testId="persistence-status"
-              />
-              <StatusBadge
-                label={validationLabel(sessionSnapshot.validation)}
-                testId="validation-status"
-              />
-              <button
-                className="min-h-10 rounded-lg border border-slate-600 px-3 text-sm font-semibold text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
-                type="button"
-                disabled={sessionSnapshot.persistence === "CONFLICT"}
-                onClick={() => sessionRef.current?.flush()}
-              >
-                Save now
-              </button>
-            </div>
-          </div>
-          <Suspense
-            fallback={
-              <div className="grid min-h-[32rem] place-items-center bg-slate-950 text-slate-300">
-                <p aria-live="polite">Loading local editor assets…</p>
+      <div className="mt-8 space-y-5">
+        <div className="grid gap-5 xl:grid-cols-2">
+          <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
+            <div className="flex flex-col gap-3 border-b border-slate-700 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">
+                  Canonical DBML source
+                </p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Autosaves 750 ms after the latest edit. Ctrl/Cmd+S saves immediately.
+                </p>
               </div>
-            }
-          >
-            <EditorComponent
-              ref={editorRef}
-              projectId={projectId}
-              initialSource={initialStateRef.current.project.draftSource}
-              diagnostics={sessionSnapshot.diagnostics}
-              onChange={(source) => sessionRef.current?.edit(source)}
-              onSave={() => sessionRef.current?.flush()}
-            />
-          </Suspense>
-        </section>
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge
+                  label={persistenceLabel(sessionSnapshot.persistence)}
+                  testId="persistence-status"
+                />
+                <StatusBadge
+                  label={validationLabel(sessionSnapshot.validation)}
+                  testId="validation-status"
+                />
+                <button
+                  className="min-h-10 rounded-lg border border-slate-600 px-3 text-sm font-semibold text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                  type="button"
+                  disabled={sessionSnapshot.persistence === "CONFLICT"}
+                  onClick={() => sessionRef.current?.flush()}
+                >
+                  Save now
+                </button>
+              </div>
+            </div>
+            <Suspense
+              fallback={
+                <div className="grid min-h-[32rem] place-items-center bg-slate-950 text-slate-300">
+                  <p aria-live="polite">Loading local editor assets…</p>
+                </div>
+              }
+            >
+              <EditorComponent
+                ref={editorRef}
+                projectId={projectId}
+                initialSource={initialStateRef.current.project.draftSource}
+                diagnostics={sessionSnapshot.diagnostics}
+                onChange={(source) => sessionRef.current?.edit(source)}
+                onSave={() => sessionRef.current?.flush()}
+                onCursorPositionChange={handleCursorPositionChange}
+              />
+            </Suspense>
+          </section>
 
-        <aside className="space-y-5" aria-label="Source workspace details">
+          <DiagramPanel
+            snapshot={sessionSnapshot}
+            selectionStore={selectionStore}
+            DiagramComponent={DiagramComponent}
+            sourceNavigationEnabled={sourceNavigationEnabled}
+            onNavigateSource={handleNavigateSource}
+            onFocusSource={() => editorRef.current?.focus()}
+          />
+        </div>
+
+        <aside className="grid gap-5 lg:grid-cols-2" aria-label="Source workspace details">
           <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
             <h2 className="font-semibold text-white">Draft status</h2>
             <dl className="mt-4 grid gap-3 text-sm">
@@ -206,6 +270,15 @@ export function ProjectSourceWorkspace({
             onNavigate={(diagnostic) => editorRef.current?.navigateToDiagnostic(diagnostic)}
           />
         </aside>
+
+        {activeGraph ? (
+          <SchemaOutline
+            graph={activeGraph}
+            selectionStore={selectionStore}
+            sourceNavigationEnabled={sourceNavigationEnabled}
+            onNavigateSource={handleNavigateSource}
+          />
+        ) : null}
       </div>
 
       <p className="sr-only" aria-live="polite" aria-atomic="true">
@@ -215,6 +288,75 @@ export function ProjectSourceWorkspace({
 
       <UnsavedNavigationDialog blocker={navigationBlocker} snapshot={sessionSnapshot} />
     </>
+  );
+}
+
+function DiagramPanel({
+  snapshot,
+  selectionStore,
+  DiagramComponent,
+  sourceNavigationEnabled,
+  onNavigateSource,
+  onFocusSource,
+}: {
+  readonly snapshot: SourceSessionSnapshot;
+  readonly selectionStore: ReturnType<typeof createDiagramSelectionStore>;
+  readonly DiagramComponent: BaseSchemaDiagramComponent;
+  readonly sourceNavigationEnabled: boolean;
+  readonly onNavigateSource: (selection: DiagramSelection) => void;
+  readonly onFocusSource: () => void;
+}) {
+  const graph = snapshot.activeGraph;
+  const showingLastValid = snapshot.activeGraphSource === "LAST_VALID";
+  const lastValidRevisionNo = snapshot.serverState.lastValidRevision?.revisionNo;
+
+  return (
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
+      <div className="border-b border-slate-700 px-4 py-3">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">
+          Read-only ER diagram
+        </p>
+        <p className="mt-1 text-xs text-slate-400" aria-live="polite">
+          {showingLastValid
+            ? `Showing last-valid revision ${lastValidRevisionNo ?? "unknown"}. Source navigation is disabled until the current draft is valid.`
+            : graph
+              ? "Showing the current valid draft. Select a table, column, or relationship to open its source."
+              : "Waiting for a valid schema graph."}
+        </p>
+      </div>
+      {graph ? (
+        <Suspense
+          fallback={
+            <div className="grid min-h-[32rem] place-items-center bg-slate-950 text-slate-300">
+              <p aria-live="polite">Loading local diagram assets…</p>
+            </div>
+          }
+        >
+          <DiagramComponent
+            graph={graph}
+            selectionStore={selectionStore}
+            sourceNavigationEnabled={sourceNavigationEnabled}
+            onNavigateSource={onNavigateSource}
+          />
+        </Suspense>
+      ) : (
+        <div className="grid min-h-[32rem] place-items-center bg-slate-950 p-6 text-center">
+          <div>
+            <p className="font-semibold text-slate-100">No valid diagram yet</p>
+            <p className="mt-2 max-w-md text-sm text-slate-400">
+              Fix the current DBML diagnostics to create the first valid diagram.
+            </p>
+            <button
+              className="mt-4 rounded-lg border border-slate-600 px-3 py-2 text-sm font-semibold text-cyan-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+              type="button"
+              onClick={onFocusSource}
+            >
+              Focus source editor
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
