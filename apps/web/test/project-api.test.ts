@@ -44,6 +44,50 @@ const project = {
 
 const state = { project, currentRevision: revision, lastValidRevision: revision };
 
+function sqlImportReport() {
+  return {
+    reportVersion: 1 as const,
+    dialect: "POSTGRESQL" as const,
+    sourceFilepath: "/import.sql",
+    sourceHash: "a".repeat(64),
+    parserInputHash: "a".repeat(64),
+    parserVersions: { dbmlCore: "9.1.1" as const, dbmlParse: "9.1.1" as const },
+    capabilityMatrixVersion: 1 as const,
+    schemaSemanticsVersion: 1 as const,
+    overallStatus: "EXACT" as const,
+    applyEligible: true,
+    candidateDbmlHash: "b".repeat(64),
+    statements: [],
+    diagnostics: [],
+    semanticVerification: {
+      status: "VERIFIED" as const,
+      sourceModelHash: "b".repeat(64),
+      candidateSchemaHash: "b".repeat(64),
+      changes: [] as const,
+    },
+  };
+}
+
+const sqlImportPolicy = {
+  policyVersion: 1 as const,
+  dataStatementNos: [] as number[],
+  dataHandling: "NOT_PRESENT" as const,
+  applyReadiness: "READY" as const,
+};
+
+function sqlImportApplyResponse() {
+  return {
+    artifactId: "019d3f4e-7b6c-7abc-8def-0123456789ac",
+    artifactStatus: "APPLIED" as const,
+    previewHash: "c".repeat(64),
+    appliedAt: CREATED_AT,
+    policy: sqlImportPolicy,
+    state,
+    diagnostics: [],
+    revisionCreated: true as const,
+  };
+}
+
 function jsonResponse(value: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(value), {
     ...init,
@@ -212,6 +256,92 @@ describe("HTTP project API", () => {
       commandId: COMMAND_ID,
       expectedLayoutRevisionNo: 0,
       layout,
+    });
+  });
+
+  it("previews and applies new and replacement SQL imports without automatic retries", async () => {
+    const standalonePreview = {
+      previewStatus: "PREVIEWED" as const,
+      previewHash: "c".repeat(64),
+      originalSqlRetention: "DISCARD" as const,
+      report: sqlImportReport(),
+      policy: sqlImportPolicy,
+      candidate: { dbml: "Table users { id bigint [pk] }\n", dbmlHash: "b".repeat(64) },
+    };
+    const replacePreview = {
+      artifactId: "019d3f4e-7b6c-7abc-8def-0123456789ac",
+      artifactStatus: "PREVIEWED" as const,
+      createdAt: CREATED_AT,
+      baseSchemaRevisionNo: 1,
+      previewHash: standalonePreview.previewHash,
+      originalSqlRetention: standalonePreview.originalSqlRetention,
+      report: standalonePreview.report,
+      policy: standalonePreview.policy,
+      candidate: standalonePreview.candidate,
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse(standalonePreview, {
+          status: 200,
+          headers: { "x-command-id": COMMAND_ID },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(sqlImportApplyResponse(), {
+          status: 201,
+          headers: { "x-command-id": COMMAND_ID },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(replacePreview, {
+          status: 200,
+          headers: { "x-command-id": COMMAND_ID },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(sqlImportApplyResponse(), {
+          status: 200,
+          headers: { "x-command-id": COMMAND_ID },
+        }),
+      );
+    const api = createHttpProjectApi({ fetch: fetcher, generateCommandId: () => COMMAND_ID });
+    const source = "CREATE TABLE users (id bigint PRIMARY KEY);";
+
+    await api.previewStandaloneSqlImport({ dialect: "POSTGRESQL", source });
+    await api.createProjectFromSqlImport({
+      name: "Imported",
+      primaryDialect: "POSTGRESQL",
+      source,
+      previewHash: standalonePreview.previewHash,
+    });
+    await api.previewProjectSqlImport({
+      projectId: PROJECT_ID,
+      expectedSchemaRevisionNo: 1,
+      dialect: "POSTGRESQL",
+      source,
+    });
+    await api.applyProjectSqlImport({
+      projectId: PROJECT_ID,
+      expectedSchemaRevisionNo: 1,
+      artifactId: replacePreview.artifactId,
+      previewHash: replacePreview.previewHash,
+      source,
+    });
+
+    expect(fetcher.mock.calls.map(([input, init]) => [input, init?.method])).toEqual([
+      ["/api/v1/sql-import/preview", "POST"],
+      ["/api/v1/projects", "POST"],
+      [`/api/v1/projects/${PROJECT_ID}/sql-import/preview`, "POST"],
+      [`/api/v1/projects/${PROJECT_ID}/sql-import/apply`, "POST"],
+    ]);
+    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).toEqual({
+      operation: "CREATE_FROM_SQL_IMPORT",
+      commandId: COMMAND_ID,
+      name: "Imported",
+      primaryDialect: "POSTGRESQL",
+      source,
+      previewHash: standalonePreview.previewHash,
     });
   });
 

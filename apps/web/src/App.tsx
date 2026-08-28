@@ -14,6 +14,7 @@ import { ProjectApiProvider } from "./projects/project-api-context.js";
 import { ProjectHomePage } from "./projects/project-home-page.js";
 import { RootErrorBoundary } from "./root-error-boundary.js";
 import type { ProjectWorkspaceAdapters } from "./source-editor/project-source-workspace.js";
+import type { SqlImportPageAdapters } from "./sql-import/sql-import-page.js";
 
 type DataRouter = ComponentProps<typeof RouterProvider>["router"];
 
@@ -39,6 +40,7 @@ export function createAppRoutes(
   options: {
     readonly includeLayoutSpike?: boolean;
     readonly workspaceAdapters?: ProjectWorkspaceAdapters;
+    readonly sqlImportAdapters?: SqlImportPageAdapters;
   } = {},
 ): RouteObject[] {
   const routes: RouteObject[] = [
@@ -48,6 +50,32 @@ export function createAppRoutes(
       HydrateFallback: RouteLoadingPage,
       children: [
         { index: true, element: <ProjectHomePage /> },
+        {
+          path: "sql-import/new",
+          lazy: async () => {
+            const module = await import("./sql-import/sql-import-page.js");
+            return {
+              Component: () => (
+                <module.NewSqlImportPage
+                  {...(options.sqlImportAdapters ? { adapters: options.sqlImportAdapters } : {})}
+                />
+              ),
+            };
+          },
+        },
+        {
+          path: "projects/:projectId/sql-import",
+          lazy: async () => {
+            const module = await import("./sql-import/sql-import-page.js");
+            return {
+              Component: () => (
+                <module.ReplaceSqlImportPage
+                  {...(options.sqlImportAdapters ? { adapters: options.sqlImportAdapters } : {})}
+                />
+              ),
+            };
+          },
+        },
         {
           path: "projects/:projectId",
           lazy: async () => {

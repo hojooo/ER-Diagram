@@ -105,7 +105,12 @@ function ImportAvailability() {
         status="Available"
         detail="Create a project from local DBML text."
       />
-      <AvailabilityCard title="SQL DDL" status="Planned for M2" detail="SQL is never executed." />
+      <AvailabilityCard
+        title="SQL DDL"
+        status="Available"
+        detail="Preview PostgreSQL or MySQL DDL without execution."
+        to="/sql-import/new"
+      />
       <AvailabilityCard
         title="Portable bundle"
         status="Planned for M4"
@@ -119,10 +124,12 @@ function AvailabilityCard({
   title,
   status,
   detail,
+  to,
 }: {
   readonly title: string;
   readonly status: string;
   readonly detail: string;
+  readonly to?: string;
 }) {
   return (
     <article className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
@@ -131,6 +138,11 @@ function AvailabilityCard({
         <span className="text-xs font-semibold text-cyan-300">{status}</span>
       </div>
       <p className="mt-2 text-sm text-slate-400">{detail}</p>
+      {to ? (
+        <Link className={`${secondaryButtonClass} mt-4`} to={to}>
+          Start SQL import
+        </Link>
+      ) : null}
     </article>
   );
 }

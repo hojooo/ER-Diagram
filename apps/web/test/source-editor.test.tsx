@@ -642,6 +642,22 @@ class SourceProjectApi implements ProjectApi {
     throw new Error("Not used in this test.");
   }
   async deleteProject(): Promise<void> {}
+
+  async previewStandaloneSqlImport(): Promise<never> {
+    throw new Error("SQL import is not used by this fixture.");
+  }
+
+  async createProjectFromSqlImport(): Promise<never> {
+    throw new Error("SQL import is not used by this fixture.");
+  }
+
+  async previewProjectSqlImport(): Promise<never> {
+    throw new Error("SQL import is not used by this fixture.");
+  }
+
+  async applyProjectSqlImport(): Promise<never> {
+    throw new Error("SQL import is not used by this fixture.");
+  }
 }
 
 function renderWorkspace(api: SourceProjectApi) {

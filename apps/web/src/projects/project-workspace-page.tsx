@@ -79,7 +79,15 @@ export function ProjectWorkspacePage({
             Revision {project.schemaRevisionNo} · Parser {project.parserVersion}
           </p>
         </div>
-        <ValidityBadge validity={currentRevision.validity} />
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <Link
+            className="inline-flex min-h-11 items-center rounded-lg border border-cyan-400/50 px-4 font-semibold text-cyan-100 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
+            to={`/projects/${projectId}/sql-import`}
+          >
+            Import SQL
+          </Link>
+          <ValidityBadge validity={currentRevision.validity} />
+        </div>
       </div>
 
       <ProjectSourceWorkspace
