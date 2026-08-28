@@ -127,8 +127,7 @@ function createFixture(primaryDialect: "POSTGRESQL" | "MYSQL" = "POSTGRESQL") {
   const persistence = new FakeSqlImportPersistence();
   let id = 0;
   let epochMs = Date.parse("2026-08-28T01:02:03.000Z");
-  const generateId = () =>
-    `018f0f87-7b5a-7cc0-8000-${(++id).toString(16).padStart(12, "0")}`;
+  const generateId = () => `018f0f87-7b5a-7cc0-8000-${(++id).toString(16).padStart(12, "0")}`;
   const now = () => new Date(epochMs++).toISOString();
   const projects = createProjectApplication({ persistence, generateId, now });
   const imports = createSqlImportApplication({ persistence, generateId, now });
@@ -318,6 +317,100 @@ describe("SQL import apply application", () => {
       appliedAt: applied.appliedAt,
       envelope: { appliedPolicy: applied.policy },
     });
+  });
+
+  it("creates a checkpoint even when the candidate already matches the current draft", async () => {
+    const fixture = createFixture();
+    const created = await fixture.create();
+    const firstPreview = success(
+      await fixture.imports.preview({
+        projectId: created.project.id,
+        expectedSchemaRevisionNo: 1,
+        dialect: "POSTGRESQL",
+        source: POSTGRESQL_DDL,
+      }),
+    );
+    if (!firstPreview.candidate) throw new Error("Expected a successful preview candidate.");
+    const matchingDraft = success(
+      await fixture.projects.saveDraft({
+        projectId: created.project.id,
+        expectedSchemaRevisionNo: 1,
+        source: firstPreview.candidate.dbml,
+      }),
+    );
+    const matchingPreview = success(
+      await fixture.imports.preview({
+        projectId: created.project.id,
+        expectedSchemaRevisionNo: 2,
+        dialect: "POSTGRESQL",
+        source: POSTGRESQL_DDL,
+      }),
+    );
+
+    const applied = success(
+      await fixture.imports.apply({
+        projectId: created.project.id,
+        expectedSchemaRevisionNo: 2,
+        artifactId: matchingPreview.artifactId,
+        previewHash: matchingPreview.previewHash,
+        source: POSTGRESQL_DDL,
+      }),
+    );
+
+    expect(applied.state.project.draftSource).toBe(matchingDraft.state.project.draftSource);
+    expect(applied.state.project.schemaRevisionNo).toBe(3);
+    expect(applied.state.currentRevision).toMatchObject({
+      revisionNo: 3,
+      origin: "SQL_IMPORT",
+    });
+  });
+
+  it("does not apply failed or data-only previews", async () => {
+    const fixture = createFixture();
+    const state = await fixture.create();
+    const failedSource = "CREATE TABLE broken (id bigint";
+    const failedPreview = success(
+      await fixture.imports.preview({
+        projectId: state.project.id,
+        expectedSchemaRevisionNo: 1,
+        dialect: "POSTGRESQL",
+        source: failedSource,
+      }),
+    );
+    expect(
+      failure(
+        await fixture.imports.apply({
+          projectId: state.project.id,
+          expectedSchemaRevisionNo: 1,
+          artifactId: failedPreview.artifactId,
+          previewHash: failedPreview.previewHash,
+          source: failedSource,
+        }),
+      ).error.code,
+    ).toBe("SQL_IMPORT_CONVERSION_FAILED");
+
+    const dataSource = "INSERT INTO users VALUES (1);";
+    const dataOnly = success(
+      await fixture.imports.preview({
+        projectId: state.project.id,
+        expectedSchemaRevisionNo: 1,
+        dialect: "POSTGRESQL",
+        source: dataSource,
+      }),
+    );
+    expect(
+      failure(
+        await fixture.imports.apply({
+          projectId: state.project.id,
+          expectedSchemaRevisionNo: 1,
+          artifactId: dataOnly.artifactId,
+          previewHash: dataOnly.previewHash,
+          source: dataSource,
+          dataStatementHandling: "CONFIRM_DDL_ONLY",
+        }),
+      ).error.code,
+    ).toBe("SQL_IMPORT_NO_SCHEMA_ELEMENTS");
+    expect(fixture.persistence.listRevisions(state.project.id)).toHaveLength(1);
   });
 
   it("requires explicit DDL-only confirmation without changing the original preview hash", async () => {
