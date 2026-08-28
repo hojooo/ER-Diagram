@@ -16,20 +16,27 @@ import {
 } from "./project-state.js";
 import {
   type ApplySqlImportCommand,
+  type CreateProjectFromSqlImportCommand,
   type CreateSqlImportApplicationOptions,
+  isCreateProjectSqlImportEnvelope,
+  type PreviewStandaloneSqlImportCommand,
   type PreviewSqlImportCommand,
+  SQL_IMPORT_CREATE_PREVIEW_VERSION,
   SQL_IMPORT_PREVIEW_VERSION,
   type SqlImportApplication,
   type SqlImportApplicationError,
   type SqlImportApplicationResult,
   type SqlImportApplyMutation,
   type SqlImportArtifact,
+  type SqlImportCreateArtifactEnvelope,
+  type SqlImportCreatePreviewEvidence,
   SqlImportPersistenceInvariantError,
   type SqlImportPersistencePort,
   type SqlImportPersistenceReader,
   type SqlImportPersistenceTransaction,
   type SqlImportPreviewEvidence,
   type SqlImportPreviewMutation,
+  type SqlImportStandalonePreviewMutation,
 } from "./sql-import.js";
 
 class ExpectedSqlImportFailure extends Error {
@@ -43,9 +50,33 @@ export function createSqlImportApplication(
   options: CreateSqlImportApplicationOptions,
 ): SqlImportApplication {
   return {
+    previewStandalone: (command) => previewStandaloneSqlImport(command),
+    createProjectFromPreview: (command) => createProjectFromSqlImport(options, command),
     preview: (command) => previewSqlImport(options, command),
     apply: (command) => applySqlImport(options, command),
   };
+}
+
+export async function computeSqlImportCreatePreviewHash(input: {
+  readonly evidence: SqlImportCreatePreviewEvidence;
+  readonly previewPolicy: SqlImportDataPolicyDecision;
+  readonly originalSqlRetention: OriginalSqlRetentionMode;
+}): Promise<string> {
+  return sha256Utf8(sqlImportCreatePreviewHashPreimage(input));
+}
+
+export function sqlImportCreatePreviewHashPreimage(input: {
+  readonly evidence: SqlImportCreatePreviewEvidence;
+  readonly previewPolicy: SqlImportDataPolicyDecision;
+  readonly originalSqlRetention: OriginalSqlRetentionMode;
+}): string {
+  return canonicalStringify({
+    operation: "CREATE_PROJECT",
+    previewVersion: SQL_IMPORT_CREATE_PREVIEW_VERSION,
+    evidence: input.evidence,
+    previewPolicy: input.previewPolicy,
+    originalSqlRetention: input.originalSqlRetention,
+  });
 }
 
 export async function computeSqlImportPreviewHash(input: {
@@ -67,6 +98,169 @@ export function sqlImportPreviewHashPreimage(input: {
     previewPolicy: input.previewPolicy,
     originalSqlRetention: input.originalSqlRetention,
   });
+}
+
+interface PreparedStandalonePreview {
+  readonly conversion: SqlImportConversionResult;
+  readonly evidence: SqlImportCreatePreviewEvidence;
+  readonly previewPolicy: SqlImportDataPolicyDecision;
+  readonly previewHash: string;
+  readonly originalSqlRetention: OriginalSqlRetentionMode;
+}
+
+async function previewStandaloneSqlImport(
+  command: PreviewStandaloneSqlImportCommand,
+): Promise<SqlImportApplicationResult<SqlImportStandalonePreviewMutation>> {
+  const prepared = await prepareStandalonePreview(command);
+  return success(toStandalonePreviewMutation(prepared));
+}
+
+async function createProjectFromSqlImport(
+  options: CreateSqlImportApplicationOptions,
+  command: CreateProjectFromSqlImportCommand,
+): Promise<SqlImportApplicationResult<SqlImportApplyMutation>> {
+  const name = normalizeProjectName(command.name);
+  if (!name) {
+    return failure({
+      code: "SQL_IMPORT_PROJECT_NAME_INVALID",
+      message: "Project name must not be blank.",
+    });
+  }
+
+  const prepared = await prepareStandalonePreview({
+    dialect: command.primaryDialect,
+    source: command.source,
+    ...(command.filepath === undefined ? {} : { filepath: command.filepath }),
+    ...(command.originalSqlRetention === undefined
+      ? {}
+      : { originalSqlRetention: command.originalSqlRetention }),
+  });
+  if (prepared.previewHash !== command.previewHash) {
+    return failure({
+      code: "SQL_IMPORT_CREATE_PREVIEW_MISMATCH",
+      message: "SQL import preview evidence no longer matches the create request.",
+    });
+  }
+  if (!prepared.conversion.ok) {
+    return failure({
+      code: "SQL_IMPORT_CREATE_CONVERSION_FAILED",
+      message: "A failed SQL import preview cannot create a project.",
+    });
+  }
+
+  const appliedPolicy = evaluateSqlImportDataPolicy(
+    prepared.conversion,
+    command.dataStatementHandling,
+  );
+  const readinessFailure = createApplyReadinessError(appliedPolicy);
+  if (readinessFailure) return failure(readinessFailure);
+
+  const projectId = options.generateId();
+  const revisionId = options.generateId();
+  const artifactId = options.generateId();
+  const appliedAt = options.now();
+  const diagnostics = prepared.conversion.candidate.graph.diagnostics;
+  const revision: SchemaRevision = {
+    id: revisionId,
+    projectId,
+    revisionNo: 1,
+    source: prepared.conversion.candidate.dbml,
+    sourceHash: prepared.conversion.candidate.dbmlHash,
+    validity: "VALID",
+    origin: "SQL_IMPORT",
+    parserVersion: DBML_PARSER_VERSION,
+    diagnosticSummary: summarizeDiagnostics(diagnostics),
+    createdAt: appliedAt,
+  };
+  const project: Project = {
+    id: projectId,
+    name,
+    primaryDialect: command.primaryDialect,
+    draftSource: revision.source,
+    draftHash: revision.sourceHash,
+    lastValidRevisionId: revision.id,
+    parserVersion: revision.parserVersion,
+    schemaRevisionNo: 1,
+    layoutRevisionNo: 0,
+    createdAt: appliedAt,
+    updatedAt: appliedAt,
+  };
+  const envelope: SqlImportCreateArtifactEnvelope = {
+    operation: "CREATE_PROJECT",
+    previewVersion: SQL_IMPORT_CREATE_PREVIEW_VERSION,
+    evidence: prepared.evidence,
+    previewHash: prepared.previewHash,
+    previewPolicy: prepared.previewPolicy,
+    appliedPolicy,
+    originalSqlRetention: prepared.originalSqlRetention,
+  };
+  const artifact: SqlImportArtifact = {
+    id: artifactId,
+    projectId,
+    dialect: command.primaryDialect,
+    originalSql: prepared.originalSqlRetention === "RETAIN" ? command.source : null,
+    originalHash: prepared.evidence.sourceHash,
+    generatedDbml: revision.source,
+    parserVersion: DBML_PARSER_VERSION,
+    envelope,
+    status: "APPLIED",
+    createdAt: appliedAt,
+    appliedAt,
+  };
+
+  return transactionResult(options.persistence, projectId, (transaction) => {
+    transaction.insertProject(project);
+    transaction.insertRevision(revision);
+    transaction.insertImportArtifact(artifact);
+    return {
+      artifactId,
+      artifactStatus: "APPLIED" as const,
+      previewHash: prepared.previewHash,
+      appliedAt,
+      policy: appliedPolicy,
+      state: readProjectState(transaction, projectId),
+      diagnostics,
+      revisionCreated: true as const,
+    };
+  });
+}
+
+async function prepareStandalonePreview(
+  command: PreviewStandaloneSqlImportCommand,
+): Promise<PreparedStandalonePreview> {
+  const originalSqlRetention = command.originalSqlRetention ?? "DISCARD";
+  const conversion = await convertSqlImport(command);
+  const previewPolicy = evaluateSqlImportDataPolicy(conversion);
+  const evidence: SqlImportCreatePreviewEvidence = {
+    dialect: command.dialect,
+    sourceHash: conversion.report.sourceHash,
+    candidateDbmlHash: conversion.ok ? conversion.candidate.dbmlHash : null,
+    report: conversion.report,
+  };
+  const previewHash = await computeSqlImportCreatePreviewHash({
+    evidence,
+    previewPolicy,
+    originalSqlRetention,
+  });
+  return { conversion, evidence, previewPolicy, previewHash, originalSqlRetention };
+}
+
+function toStandalonePreviewMutation(
+  prepared: PreparedStandalonePreview,
+): SqlImportStandalonePreviewMutation {
+  return {
+    previewStatus: prepared.conversion.ok ? "PREVIEWED" : "FAILED",
+    previewHash: prepared.previewHash,
+    originalSqlRetention: prepared.originalSqlRetention,
+    report: prepared.conversion.report,
+    policy: prepared.previewPolicy,
+    candidate: prepared.conversion.ok
+      ? {
+          dbml: prepared.conversion.candidate.dbml,
+          dbmlHash: prepared.conversion.candidate.dbmlHash,
+        }
+      : null,
+  };
 }
 
 async function previewSqlImport(
@@ -142,6 +336,9 @@ async function applySqlImport(
   const integrityFailure = await validateArtifactIntegrity(preflight.value.artifact);
   if (integrityFailure) return failure(integrityFailure);
   const artifact = preflight.value.artifact;
+  if (isCreateProjectSqlImportEnvelope(artifact.envelope)) {
+    return failure(previewMismatch(command.projectId, command.artifactId));
+  }
   if (artifact.status === "APPLIED") {
     return failure(alreadyApplied(command.projectId, command.artifactId));
   }
@@ -202,6 +399,7 @@ async function applySqlImport(
     expectDialect(current.project, artifact.dialect);
     const stored = requireArtifact(transaction, command.projectId, command.artifactId);
     if (
+      isCreateProjectSqlImportEnvelope(stored.envelope) ||
       stored.status !== "PREVIEWED" ||
       canonicalStringify(stored) !== canonicalStringify(artifact)
     ) {
@@ -277,6 +475,12 @@ function createEvidence(
 }
 
 function toPreviewMutation(artifact: SqlImportArtifact): SqlImportPreviewMutation {
+  if (isCreateProjectSqlImportEnvelope(artifact.envelope)) {
+    throw new SqlImportPersistenceInvariantError(
+      artifact.projectId,
+      "Created-project artifact cannot be returned as a replace preview.",
+    );
+  }
   return {
     artifactId: artifact.id,
     artifactStatus: artifact.status === "FAILED" ? "FAILED" : "PREVIEWED",
@@ -302,6 +506,7 @@ async function validateArtifactIntegrity(
   const { envelope } = artifact;
   const invalid = () =>
     invariant(artifact.projectId, "Stored SQL import artifact is inconsistent.");
+  if (isCreateProjectSqlImportEnvelope(envelope)) return invalid();
   if (
     envelope.previewVersion !== SQL_IMPORT_PREVIEW_VERSION ||
     envelope.evidence.projectId !== artifact.projectId ||
@@ -383,6 +588,35 @@ function applyReadinessError(
         artifactId: command.artifactId,
       };
   }
+}
+
+function createApplyReadinessError(
+  policy: SqlImportDataPolicyDecision,
+): SqlImportApplicationError | null {
+  switch (policy.applyReadiness) {
+    case "READY":
+      return null;
+    case "CONVERSION_FAILED":
+      return {
+        code: "SQL_IMPORT_CREATE_CONVERSION_FAILED",
+        message: "A failed SQL import preview cannot create a project.",
+      };
+    case "NO_SCHEMA_ELEMENTS":
+      return {
+        code: "SQL_IMPORT_CREATE_NO_SCHEMA_ELEMENTS",
+        message: "SQL import does not contain an applicable table or enum.",
+      };
+    case "DATA_EXCLUSION_CONFIRMATION_REQUIRED":
+      return {
+        code: "SQL_IMPORT_CREATE_DATA_CONFIRMATION_REQUIRED",
+        message: "DDL-only import requires explicit data-statement exclusion confirmation.",
+      };
+  }
+}
+
+function normalizeProjectName(name: string): string | null {
+  const normalized = name.trim();
+  return normalized.length > 0 ? normalized : null;
 }
 
 function requireArtifact(

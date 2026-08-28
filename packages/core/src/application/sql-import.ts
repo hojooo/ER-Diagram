@@ -16,6 +16,7 @@ import type {
 } from "./project.js";
 
 export const SQL_IMPORT_PREVIEW_VERSION = 1 as const;
+export const SQL_IMPORT_CREATE_PREVIEW_VERSION = 1 as const;
 
 export type SqlImportArtifactStatus = "PREVIEWED" | "APPLIED" | "CANCELLED" | "FAILED";
 
@@ -28,7 +29,7 @@ export interface SqlImportPreviewEvidence {
   readonly report: ConversionReport;
 }
 
-export interface SqlImportArtifactEnvelope {
+export interface SqlImportReplaceArtifactEnvelope {
   readonly previewVersion: typeof SQL_IMPORT_PREVIEW_VERSION;
   readonly evidence: SqlImportPreviewEvidence;
   readonly previewHash: string;
@@ -36,6 +37,27 @@ export interface SqlImportArtifactEnvelope {
   readonly appliedPolicy: SqlImportDataPolicyDecision | null;
   readonly originalSqlRetention: OriginalSqlRetentionMode;
 }
+
+export interface SqlImportCreatePreviewEvidence {
+  readonly dialect: PrimaryDialect;
+  readonly sourceHash: string;
+  readonly candidateDbmlHash: string | null;
+  readonly report: ConversionReport;
+}
+
+export interface SqlImportCreateArtifactEnvelope {
+  readonly operation: "CREATE_PROJECT";
+  readonly previewVersion: typeof SQL_IMPORT_CREATE_PREVIEW_VERSION;
+  readonly evidence: SqlImportCreatePreviewEvidence;
+  readonly previewHash: string;
+  readonly previewPolicy: SqlImportDataPolicyDecision;
+  readonly appliedPolicy: SqlImportDataPolicyDecision;
+  readonly originalSqlRetention: OriginalSqlRetentionMode;
+}
+
+export type SqlImportArtifactEnvelope =
+  | SqlImportReplaceArtifactEnvelope
+  | SqlImportCreateArtifactEnvelope;
 
 export interface SqlImportArtifact {
   readonly id: string;
@@ -66,6 +88,20 @@ export interface ApplySqlImportCommand {
   readonly dataStatementHandling?: SqlDataStatementHandling;
 }
 
+export interface PreviewStandaloneSqlImportCommand extends SqlImportConversionInput {
+  readonly originalSqlRetention?: OriginalSqlRetentionMode;
+}
+
+export interface CreateProjectFromSqlImportCommand {
+  readonly name: string;
+  readonly primaryDialect: PrimaryDialect;
+  readonly source: string;
+  readonly filepath?: string;
+  readonly previewHash: string;
+  readonly originalSqlRetention?: OriginalSqlRetentionMode;
+  readonly dataStatementHandling?: SqlDataStatementHandling;
+}
+
 export interface SqlImportPreviewMutation {
   readonly artifactId: string;
   readonly artifactStatus: "PREVIEWED" | "FAILED";
@@ -90,6 +126,18 @@ export interface SqlImportApplyMutation {
   readonly state: ProjectState;
   readonly diagnostics: readonly Diagnostic[];
   readonly revisionCreated: true;
+}
+
+export interface SqlImportStandalonePreviewMutation {
+  readonly previewStatus: "PREVIEWED" | "FAILED";
+  readonly previewHash: string;
+  readonly originalSqlRetention: OriginalSqlRetentionMode;
+  readonly report: ConversionReport;
+  readonly policy: SqlImportDataPolicyDecision;
+  readonly candidate: {
+    readonly dbml: string;
+    readonly dbmlHash: string;
+  } | null;
 }
 
 export type SqlImportApplicationError =
@@ -152,6 +200,26 @@ export type SqlImportApplicationError =
       readonly code: "SQL_IMPORT_STORAGE_INVARIANT_VIOLATION";
       readonly message: string;
       readonly projectId: string;
+    }
+  | {
+      readonly code: "SQL_IMPORT_PROJECT_NAME_INVALID";
+      readonly message: string;
+    }
+  | {
+      readonly code: "SQL_IMPORT_CREATE_PREVIEW_MISMATCH";
+      readonly message: string;
+    }
+  | {
+      readonly code: "SQL_IMPORT_CREATE_CONVERSION_FAILED";
+      readonly message: string;
+    }
+  | {
+      readonly code: "SQL_IMPORT_CREATE_NO_SCHEMA_ELEMENTS";
+      readonly message: string;
+    }
+  | {
+      readonly code: "SQL_IMPORT_CREATE_DATA_CONFIRMATION_REQUIRED";
+      readonly message: string;
     };
 
 export type SqlImportApplicationResult<T> =
@@ -174,6 +242,12 @@ export interface SqlImportPersistencePort extends SqlImportPersistenceReader {
 }
 
 export interface SqlImportApplication {
+  previewStandalone(
+    command: PreviewStandaloneSqlImportCommand,
+  ): Promise<SqlImportApplicationResult<SqlImportStandalonePreviewMutation>>;
+  createProjectFromPreview(
+    command: CreateProjectFromSqlImportCommand,
+  ): Promise<SqlImportApplicationResult<SqlImportApplyMutation>>;
   preview(
     command: PreviewSqlImportCommand,
   ): Promise<SqlImportApplicationResult<SqlImportPreviewMutation>>;
@@ -210,4 +284,10 @@ export function parseSqlImportArtifactEnvelope(
     );
   }
   return parsed.data;
+}
+
+export function isCreateProjectSqlImportEnvelope(
+  envelope: SqlImportArtifactEnvelope,
+): envelope is SqlImportCreateArtifactEnvelope {
+  return "operation" in envelope && envelope.operation === "CREATE_PROJECT";
 }
