@@ -18,6 +18,8 @@ import {
   generateUuidV7,
   importArtifacts,
   openSqliteStorage,
+  projects,
+  schemaRevisions,
   type SqliteStorage,
   toUtcIsoTimestamp,
 } from "../src/index.js";
@@ -66,6 +68,73 @@ afterEach(() => {
 });
 
 describe("SQLite SQL import artifact repository", () => {
+  it("atomically creates and reopens a revision 1 SQL project with a direct applied artifact", async () => {
+    const filename = databasePath();
+    const firstStorage = trackedOpen(filename);
+    const first = fixture(firstStorage);
+    const preview = success(
+      await first.imports.previewStandalone({
+        dialect: "POSTGRESQL",
+        source: POSTGRESQL_DDL,
+        originalSqlRetention: "RETAIN",
+      }),
+    );
+    const applied = success(
+      await first.imports.createProjectFromPreview({
+        name: "Created import",
+        primaryDialect: "POSTGRESQL",
+        source: POSTGRESQL_DDL,
+        previewHash: preview.previewHash,
+        originalSqlRetention: "RETAIN",
+      }),
+    );
+    firstStorage.close();
+    storages.delete(firstStorage);
+
+    const reopened = trackedOpen(filename);
+    const reopenedApplications = fixture(reopened);
+    expect(
+      success(await reopenedApplications.projects.getProject(applied.state.project.id)),
+    ).toEqual(applied.state);
+    expect(
+      createSqliteSqlImportRepository(reopened).getImportArtifact(
+        applied.state.project.id,
+        applied.artifactId,
+      ),
+    ).toMatchObject({
+      status: "APPLIED",
+      originalSql: POSTGRESQL_DDL,
+      envelope: { operation: "CREATE_PROJECT", appliedPolicy: applied.policy },
+    });
+    expect(reopened.database.select().from(diagramLayouts).all()).toEqual([]);
+  });
+
+  it("rolls back a new project when direct artifact insertion fails", async () => {
+    const storage = trackedOpen(databasePath());
+    const applications = fixture(storage);
+    const preview = success(
+      await applications.imports.previewStandalone({
+        dialect: "POSTGRESQL",
+        source: POSTGRESQL_DDL,
+      }),
+    );
+    storage.database.run(`CREATE TRIGGER force_created_artifact_failure
+      BEFORE INSERT ON import_artifacts
+      BEGIN SELECT RAISE(ABORT, 'forced created artifact failure'); END`);
+
+    await expect(
+      applications.imports.createProjectFromPreview({
+        name: "Rollback import",
+        primaryDialect: "POSTGRESQL",
+        source: POSTGRESQL_DDL,
+        previewHash: preview.previewHash,
+      }),
+    ).rejects.toThrow("forced created artifact failure");
+    expect(storage.database.select().from(projects).all()).toEqual([]);
+    expect(storage.database.select().from(schemaRevisions).all()).toEqual([]);
+    expect(storage.database.select().from(importArtifacts).all()).toEqual([]);
+  });
+
   it("round-trips successful and failed preview artifacts across a reopen", async () => {
     const filename = databasePath();
     const firstStorage = trackedOpen(filename);
