@@ -7,6 +7,15 @@ export * from "./application/project-application.js";
 export * from "./dbml-parser.js";
 export * from "./hash.js";
 export * from "./schema-graph.js";
-export * from "./schema-semantics.js";
+export {
+  computeSchemaHash,
+  diffSchemaGraphs,
+  SCHEMA_SEMANTICS_VERSION,
+} from "./schema-semantics.js";
+export type {
+  SchemaElementChange,
+  SchemaGraphDiff,
+  SchemaRenameCandidate,
+} from "./schema-semantics.js";
 export * from "./sql-capabilities.js";
 export * from "./sql-smoke.js";
