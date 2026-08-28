@@ -1,3 +1,4 @@
+export { createSqliteLayoutRepository } from "./layout-repository.js";
 export { createSqliteProjectRepository } from "./project-repository.js";
 export {
   appMetadata,
