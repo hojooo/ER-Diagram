@@ -67,6 +67,15 @@ Workspace에서는 project session의 ephemeral state로 관리하고, group sta
 선택하지 않으며 source 이동을 제공하지 않는다. Exact source 탐색은 outline을 사용하고, 선택된 hidden
 reference는 aggregate edge와 representative group을 강조하는 데만 사용한다.
 
+`DiagramView` visibility projection, current-view search index, visible inventory와 focus target은 normalized
+graph와 현재 view filter에서 매번 재생성하는 파생 데이터다. View 전환이나 검색은 parser를 다시
+호출하거나 canonical source와 schema revision을 변경하지 않는다. 현재 view에서 숨겨진 source symbol은
+자동으로 다른 view에 노출하지 않고 사용자가 명시적으로 Global view로 전환한 경우에만 선택·focus한다.
+
+M1-011의 view별 detail level과 collapsed group key는 workspace session 상태로 관리한다. Stable view/group
+key가 유지되는 동안만 상태를 보존하고 삭제된 key는 폐기한다. 이 상태의 durable ownership은 M1-012에서
+같은 view key의 layout sidecar로 옮기며 schema semantics의 정본으로 승격하지 않는다.
+
 Visual mutation은 source position을 기준으로 가장 작은 `TextEdit[]`를 만든다. Edit는 offset 내림차순으로 적용하고 수정된 전체 source를 DBML v2로 다시 parse한다. Reparse 결과의 semantic diff가 command가 기대한 변경과 정확히 일치할 때만 source를 commit한다. 실패하면 원본을 유지하고 diagnostic을 반환한다.
 
 M0에서는 `CreateColumn` 한 종류로 이 경계를 증명한다. 대상 block 밖의 comment, partial, view와 formatting은 byte-identical이어야 하며 full-model DBML regeneration은 canonical source 갱신 경로로 사용하지 않는다.
