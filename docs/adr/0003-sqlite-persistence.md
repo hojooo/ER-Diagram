@@ -63,7 +63,10 @@ transaction을 rollback한다.
 revision origin에서 파생한다. `SQL_IMPORT`, `RESTORE`, `PARSER_MIGRATION`은 checkpoint이며
 `SOURCE_EDIT`, `VISUAL_COMMAND`는 pruning 대상이다. 현재 last-valid pointer가 가리키는 revision은
 100개 한도 밖이어도 보호한다. 이 경우 non-checkpoint revision은 최대 101개가 남을 수 있다. Original
-SQL은 사용자가 명시적으로 선택한 경우만 저장한다.
+SQL은 `DISCARD`를 기본값으로 사용해 `original_sql=null`로 저장하고, 사용자가 `RETAIN`을 명시한 경우에만
+conversion 성공 여부와 관계없이 byte-identical 원문을 저장한다. P0는 별도 TTL을 두지 않으며 retained
+source는 import artifact 또는 project 삭제 시 함께 제거한다. Core policy는 persistence 전용 입력만
+선택하고 실제 artifact write와 transaction은 import application 경계가 담당한다.
 
 하나의 server process만 SQLite에 write한다. Multi-process horizontal write와 shared network filesystem database는 P0 범위가 아니다.
 

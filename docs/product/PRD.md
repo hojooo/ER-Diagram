@@ -407,7 +407,7 @@ UI는 각 construct의 지원 수준을 capability badge와 도움말로 공개�
 | `SQLI-004` | P0 | conversion report를 생성한다. | statement/clause별 `EXACT`, `NORMALIZED`, `PARTIAL`, `UNSUPPORTED`, `ERROR`가 표시된다. |
 | `SQLI-005` | P0 | importer가 무시한 option을 silent success로 처리하지 않는다. | engine, tablespace, generated column, partial index 등 부분 지원 clause가 warning에 나타난다. |
 | `SQLI-006` | P0 | 지원되지 않는 `ALTER TABLE` column mutation, `CREATE VIEW`, `DROP` 등을 명시한다. | 원본 statement range와 미지원 이유가 report에 포함된다. |
-| `SQLI-007` | P0 | 원본 SQL을 import artifact로 선택 보존한다. | 사용자가 원본 보존 여부와 retention을 선택할 수 있다. |
+| `SQLI-007` | P0 | 원본 SQL을 import artifact로 선택 보존한다. | 기본값은 `DISCARD`이며, `RETAIN`을 선택하면 artifact 또는 project 삭제 시까지 전체 원문을 보존한다. |
 | `SQLI-008` | P0 | current project replace 전 revision을 만든다. | import 결과가 부정확하면 이전 source로 복원할 수 있다. |
 | `SQLI-009` | P0 | P0는 기존 DBML과 import SQL의 자동 merge를 제공하지 않는다. | UI는 new project 또는 replace만 제공한다. |
 | `SQLI-010` | P0 | `INSERT`, `UPDATE`, `DELETE`, `COPY`와 data payload를 schema로 가져오지 않는다. | DML은 별도 `UNSUPPORTED_DATA_STATEMENT`로 보고하고, 사용자가 확인한 경우에만 DDL 부분을 적용한다. |
@@ -428,6 +428,17 @@ candidate를 공개하지 않고 `ERROR`로 처리한다. Report는 source text,
 용도로 만들 수 있지만 `applyEligible=false`다. Import 가능한 table 또는 enum이 하나도 없는 candidate도
 적용할 수 없다. DML이 포함된 candidate를 사용자가 명시적으로 승인하는 workflow는 `SQLI-010`에 따라
 후속 import preview/apply 단계에서 제공한다.
+
+`ConversionReport.applyEligible`은 추가 확인 없이 적용할 수 있는 conversion 사실이며 사용자 승인에 따라
+변경하지 않는다. 별도 data policy는 `REJECT`를 기본값으로 사용하고, 사용자가
+`CONFIRM_DDL_ONLY`를 선택한 경우에만 schema element가 있는 candidate를 `READY`로 판단한다. Conversion
+실패, schema element 부재와 data 확인 필요 상태는 각각 `CONVERSION_FAILED`, `NO_SCHEMA_ELEMENTS`,
+`DATA_EXCLUSION_CONFIRMATION_REQUIRED`로 구분한다.
+
+Original SQL retention은 `DISCARD`가 기본값이다. `RETAIN`을 명시한 경우 conversion 성공 여부와 관계없이
+전체 원문을 byte-identical하게 persistence 입력에 포함하고, 그렇지 않으면 `originalSql=null`만 전달한다.
+P0는 time-based TTL을 두지 않으며 retained source는 artifact 또는 project 삭제 시 제거된다. Report,
+diagnostics와 candidate에는 retention 선택과 관계없이 SQL row literal을 포함하지 않는다.
 
 ### 11.4 SQL export
 
@@ -710,7 +721,7 @@ Layout row가 아직 없는 view의 조회는 오류가 아니라 current projec
 | --- | --- |
 | `id`, `projectId` | import identity |
 | `dialect` | input SQL dialect |
-| `originalSql` | 사용자 선택 시 보존하는 원본 |
+| `originalSql` | `RETAIN` 선택 시 artifact 또는 project 삭제까지 보존하는 byte-identical 원본. 기본값은 null |
 | `originalHash` | 중복·provenance 확인 |
 | `generatedDbml` | preview candidate |
 | `parserVersion` | 변환 version |
@@ -832,7 +843,7 @@ P0 대표 fixture는 약 200 KB, 143 tables, 573 refs, 15 groups, 7 views다.
 ### 17.3 보존
 
 - DBML·SQL에는 실제 schema name과 업무 정보가 포함될 수 있으므로 project data는 외부 전송하지 않는다.
-- original SQL artifact 보존은 선택 가능해야 한다.
+- original SQL artifact는 기본적으로 보존하지 않으며, 명시적 opt-in 시 artifact 또는 project 삭제까지 보존한다.
 - project 삭제는 mounted volume의 application record를 제거하되 backup copy 존재 가능성을 안내한다.
 - log와 conversion report에는 source 전체 대신 hash·range·diagnostic code를 우선 기록한다.
 

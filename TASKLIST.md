@@ -223,8 +223,9 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - 검증: `pnpm --filter @er-diagram/core test test/sql-capabilities.test.ts`
 - [x] `M2-002` SQL import와 clause별 `ConversionReport`, graph A→DBML→graph B 비교
   - 검증: `pnpm --filter @er-diagram/core test test/sql-import.test.ts`
-- [ ] `M2-003` DML/민감 data exclusion과 opt-in original SQL retention
-  - 검증: `pnpm --filter @er-diagram/core test data-exclusion`
+- [x] `M2-003` DML/민감 data exclusion과 opt-in original SQL retention
+  - conversion report와 사용자 DDL-only 승인 상태를 분리하고 original SQL은 opt-in일 때만 보존한다.
+  - 검증: `pnpm --filter @er-diagram/core test test/data-exclusion.test.ts`
 - [ ] `M2-004` import preview/apply API, hash 재검증, checkpoint/rollback
   - 검증: `pnpm --filter @er-diagram/server test:integration sql-import`
 - [ ] `M2-005` new-project/replace-only import preview UI
