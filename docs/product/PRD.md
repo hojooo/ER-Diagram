@@ -880,7 +880,7 @@ P0는 public growth metric보다 정확성과 개인 workflow 완성을 우선�
 
 ### 21.4 End-to-end acceptance fixture
 
-현재 약 199 KB DBML fixture를 사용해 다음을 검증한다.
+고정된 default seed로 생성하는 public synthetic DBML fidelity fixture를 사용해 다음을 검증한다.
 
 1. 143 tables, 86 enums, 4 partials, 15 groups, 7 views, 573 refs를 인식한다.
 2. 15 groups를 모두 collapse/expand할 수 있다.
