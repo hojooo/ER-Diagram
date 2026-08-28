@@ -1,5 +1,9 @@
 import { type ErrorResponse, errorResponseSchema } from "@er-diagram/contracts";
-import type { LayoutApplicationError, ProjectApplicationError } from "@er-diagram/core";
+import type {
+  LayoutApplicationError,
+  ProjectApplicationError,
+  SqlImportApplicationError,
+} from "@er-diagram/core";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 interface ContractParseSuccess<T> {
@@ -82,6 +86,39 @@ export function sendLayoutApplicationError(
         500,
         error.code,
         "Stored layout data failed an integrity check.",
+      );
+  }
+  return assertNever(error);
+}
+
+export function sendSqlImportApplicationError(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  error: SqlImportApplicationError,
+): FastifyReply {
+  switch (error.code) {
+    case "SQL_IMPORT_PROJECT_NOT_FOUND":
+    case "SQL_IMPORT_ARTIFACT_NOT_FOUND":
+      return sendError(request, reply, 404, error.code, error.message);
+    case "SQL_IMPORT_SCHEMA_REVISION_CONFLICT":
+      return sendError(request, reply, 409, error.code, error.message, {
+        currentRevisionNo: error.currentSchemaRevisionNo,
+      });
+    case "SQL_IMPORT_PREVIEW_MISMATCH":
+    case "SQL_IMPORT_ARTIFACT_ALREADY_APPLIED":
+      return sendError(request, reply, 409, error.code, error.message);
+    case "SQL_IMPORT_DIALECT_MISMATCH":
+    case "SQL_IMPORT_CONVERSION_FAILED":
+    case "SQL_IMPORT_NO_SCHEMA_ELEMENTS":
+    case "SQL_IMPORT_DATA_CONFIRMATION_REQUIRED":
+      return sendError(request, reply, 422, error.code, error.message);
+    case "SQL_IMPORT_STORAGE_INVARIANT_VIOLATION":
+      return sendError(
+        request,
+        reply,
+        500,
+        error.code,
+        "Stored SQL import data failed an integrity check.",
       );
   }
   return assertNever(error);

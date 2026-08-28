@@ -6,7 +6,12 @@ import {
   projectResponseSchema,
   projectRevisionsResponseSchema,
 } from "@er-diagram/contracts";
-import { createLayoutApplication, createProjectApplication, parseDbmlV2 } from "@er-diagram/core";
+import {
+  createLayoutApplication,
+  createProjectApplication,
+  parseDbmlV2,
+  type SqlImportApplication,
+} from "@er-diagram/core";
 import {
   createSqliteLayoutRepository,
   createSqliteProjectRepository,
@@ -51,6 +56,7 @@ function createFixture(filename = temporaryDatabasePath()) {
     layoutApplication: createLayoutApplication({
       persistence: createSqliteLayoutRepository(storage),
     }),
+    sqlImportApplication: {} as SqlImportApplication,
   });
   openServers.add(server);
   return { filename, server, storage };
