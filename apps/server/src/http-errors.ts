@@ -1,5 +1,5 @@
 import { type ErrorResponse, errorResponseSchema } from "@er-diagram/contracts";
-import type { ProjectApplicationError } from "@er-diagram/core";
+import type { LayoutApplicationError, ProjectApplicationError } from "@er-diagram/core";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 interface ContractParseSuccess<T> {
@@ -56,6 +56,32 @@ export function sendProjectApplicationError(
         500,
         error.code,
         "Stored project data failed an integrity check.",
+      );
+  }
+  return assertNever(error);
+}
+
+export function sendLayoutApplicationError(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  error: LayoutApplicationError,
+): FastifyReply {
+  switch (error.code) {
+    case "LAYOUT_PROJECT_NOT_FOUND":
+      return sendError(request, reply, 404, error.code, error.message);
+    case "LAYOUT_REVISION_CONFLICT":
+      return sendError(request, reply, 409, error.code, error.message, {
+        currentRevisionNo: error.currentLayoutRevisionNo,
+      });
+    case "LAYOUT_INPUT_INVALID":
+      return sendError(request, reply, 422, error.code, error.message);
+    case "LAYOUT_STORAGE_INVARIANT_VIOLATION":
+      return sendError(
+        request,
+        reply,
+        500,
+        error.code,
+        "Stored layout data failed an integrity check.",
       );
   }
   return assertNever(error);
@@ -136,5 +162,5 @@ function readErrorProperty(error: unknown, property: string): unknown {
 }
 
 function assertNever(value: never): never {
-  throw new Error(`Unhandled project application error: ${String(value)}`);
+  throw new Error(`Unhandled application error: ${String(value)}`);
 }

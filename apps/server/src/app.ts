@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { correlationIdSchema } from "@er-diagram/contracts";
-import type { ProjectApplication } from "@er-diagram/core";
+import type { LayoutApplication, ProjectApplication } from "@er-diagram/core";
 import Fastify, { type FastifyInstance } from "fastify";
 
 import { registerHttpErrorHandlers } from "./http-errors.js";
+import { registerLayoutRoutes } from "./layout-routes.js";
 import { registerProjectRoutes } from "./project-routes.js";
 
 export interface CreateServerOptions {
   readonly projectApplication: ProjectApplication;
+  readonly layoutApplication: LayoutApplication;
   readonly generateCorrelationId?: () => string;
 }
 
@@ -27,6 +29,7 @@ export function createServer(options: CreateServerOptions): FastifyInstance {
 
   server.get("/health/live", async () => ({ status: "ok" }));
   registerProjectRoutes(server, options.projectApplication);
+  registerLayoutRoutes(server, options.layoutApplication);
 
   return server;
 }

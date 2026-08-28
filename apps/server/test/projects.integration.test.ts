@@ -8,8 +8,14 @@ import {
   projectRevisionsResponseSchema,
   projectsResponseSchema,
 } from "@er-diagram/contracts";
-import { createProjectApplication, type ProjectApplication } from "@er-diagram/core";
 import {
+  createLayoutApplication,
+  createProjectApplication,
+  type LayoutApplication,
+  type ProjectApplication,
+} from "@er-diagram/core";
+import {
+  createSqliteLayoutRepository,
   createSqliteProjectRepository,
   generateUuidV7,
   openSqliteStorage,
@@ -64,9 +70,13 @@ function correlationGenerator(): () => string {
   return () => `123e4567-e89b-42d3-a456-${(++sequence).toString(16).padStart(12, "0")}`;
 }
 
-function trackedServer(application: ProjectApplication): ReturnType<typeof createServer> {
+function trackedServer(
+  application: ProjectApplication,
+  layoutApplication = {} as LayoutApplication,
+): ReturnType<typeof createServer> {
   const server = createServer({
     projectApplication: application,
+    layoutApplication,
     generateCorrelationId: correlationGenerator(),
   });
   openServers.add(server);
@@ -79,7 +89,10 @@ function createFixture(filename = temporaryDatabasePath()): ServerFixture {
   return {
     application,
     filename,
-    server: trackedServer(application),
+    server: trackedServer(
+      application,
+      createLayoutApplication({ persistence: createSqliteLayoutRepository(storage) }),
+    ),
     storage,
   };
 }
