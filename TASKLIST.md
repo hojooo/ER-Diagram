@@ -221,8 +221,8 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
 - [x] `M2-001` versioned PostgreSQL/MySQL DDL capability matrix
   - target/observed status, parser provenance와 atomic golden fixture를 공개 계약으로 유지한다.
   - 검증: `pnpm --filter @er-diagram/core test test/sql-capabilities.test.ts`
-- [ ] `M2-002` SQL import와 clause별 `ConversionReport`, graph A→DBML→graph B 비교
-  - 검증: `pnpm --filter @er-diagram/core test sql-import`
+- [x] `M2-002` SQL import와 clause별 `ConversionReport`, graph A→DBML→graph B 비교
+  - 검증: `pnpm --filter @er-diagram/core test test/sql-import.test.ts`
 - [ ] `M2-003` DML/민감 data exclusion과 opt-in original SQL retention
   - 검증: `pnpm --filter @er-diagram/core test data-exclusion`
 - [ ] `M2-004` import preview/apply API, hash 재검증, checkpoint/rollback

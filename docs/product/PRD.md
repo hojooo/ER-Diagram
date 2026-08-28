@@ -269,8 +269,9 @@ P0에서는 기존 schema와 SQL을 자동 merge하지 않는다. replace 전 �
 1. 사용자가 dialect와 SQL source를 제공한다.
 2. importer는 SQL을 실행하지 않고 parse한다.
 3. supported structure로 DBML candidate를 생성한다.
-4. 원본 SQL과 candidate DBML을 semantic inventory로 비교한다.
-5. 모든 clause를 `EXACT`, `NORMALIZED`, `PARTIAL`, `UNSUPPORTED`, `ERROR`로 분류한다.
+4. 원본 SQL parser model과 candidate DBML graph를 같은 canonical semantics로 비교한다.
+5. statement와 nested clause를 `EXACT`, `NORMALIZED`, `PARTIAL`, `UNSUPPORTED`, `ERROR`로
+   분류한다.
 6. 사용자가 report와 generated DBML을 확인한다.
 7. 확인한 경우에만 new project를 만들거나 current draft를 교체한다.
 8. 교체 전 기존 draft와 layout을 revision으로 보존한다.
@@ -411,6 +412,22 @@ UI는 각 construct의 지원 수준을 capability badge와 도움말로 공개�
 | `SQLI-009` | P0 | P0는 기존 DBML과 import SQL의 자동 merge를 제공하지 않는다. | UI는 new project 또는 replace만 제공한다. |
 | `SQLI-010` | P0 | `INSERT`, `UPDATE`, `DELETE`, `COPY`와 data payload를 schema로 가져오지 않는다. | DML은 별도 `UNSUPPORTED_DATA_STATEMENT`로 보고하고, 사용자가 확인한 경우에만 DDL 부분을 적용한다. |
 | `SQLI-011` | P0 | DML이 포함된 입력의 original SQL 보존은 기본적으로 끈다. | 사용자가 명시적으로 선택하지 않으면 preview 종료 후 row data가 durable store에 남지 않는다. |
+
+`ConversionReport` version 1은 statement와 clause의 UTF-16 half-open source range를 함께
+제공한다. Dependency-free source analyzer는 이 범위와 capability evidence만 계산하며 PostgreSQL·MySQL
+문법의 authoritative acceptance는 pinned dialect parser가 담당한다. Parser가 입력을 수용해도 catalog에
+없는 statement 또는 known statement의 top-level clause는 각각
+`SQL_UNSUPPORTED_UNKNOWN_STATEMENT`, `SQL_UNSUPPORTED_UNKNOWN_CLAUSE`로 fail-closed 분류한다.
+
+Candidate DBML은 최초 SQL parse model을 `includeRecords: false`로 export한 뒤 DBML v2로 다시 parse한다.
+SQL model A와 DBML graph B의 supported semantics가 다르거나 candidate DBML이 유효하지 않으면
+candidate를 공개하지 않고 `ERROR`로 처리한다. Report는 source text, SQL literal과 native parser message를
+보존하지 않고 source hash, static code·message와 range만 포함한다.
+
+`INSERT`, `UPDATE`, `DELETE`, `COPY`가 섞인 입력은 row data를 제외한 DDL-only candidate를 preview
+용도로 만들 수 있지만 `applyEligible=false`다. Import 가능한 table 또는 enum이 하나도 없는 candidate도
+적용할 수 없다. DML이 포함된 candidate를 사용자가 명시적으로 승인하는 workflow는 `SQLI-010`에 따라
+후속 import preview/apply 단계에서 제공한다.
 
 ### 11.4 SQL export
 
@@ -562,7 +579,7 @@ golden hash와 normalized semantic hash를 같은 변경에서 갱신한다.
 ```text
 SQL input
   → dialect parser
-  → normalized graph A
+  → canonical SQL schema model A
   → generated DBML
   → DBML v2 parser
   → normalized graph B
@@ -572,6 +589,10 @@ SQL input
 ```
 
 - `A`와 `B`의 supported subset이 같아야 import를 성공으로 처리한다.
+- SQL parser model은 source token이 없으므로 가짜 source range를 가진 `SchemaGraph`로 변환하지 않고,
+  range 없는 canonical semantic document로 직접 투영한다.
+- capability report가 설명하는 known parser/exporter loss는 A projection에 명시적으로 반영하고, 그 밖의
+  A/B 차이는 internal semantic mismatch로 candidate를 차단한다.
 - `B`와 `C`의 exportable subset이 같아야 export를 성공으로 처리한다.
 - order, whitespace, generated constraint name처럼 비의미적 차이는 normalized comparison에서 제외한다.
 - type, nullability, PK/FK endpoint, cardinality, default, unique, check, index 의미의 차이는 report 대상이다.
@@ -892,7 +913,9 @@ P0는 public growth metric보다 정확성과 개인 workflow 완성을 우선�
   `CREATE VIEW`, `DROP`, trigger, procedure와 DML
 - M2-001은 `SQL → dialect importer → generated DBML → DBML v2 SchemaGraph`의 DBML hash,
   semantic hash와 preserved/dropped construct를 검증한다.
-- SQL → DBML → same-dialect SQL semantic comparison과 clause range report는 M2-002 이후에 검증한다.
+- M2-002는 versioned multi-statement fixture로 statement·clause range, literal-redacted report,
+  `SQL model A → DBML → graph B` semantic equality를 검증한다.
+- SQL → DBML → same-dialect SQL export semantic comparison은 M2-006에서 검증한다.
 
 ### 21.3 Visual command contract test
 
