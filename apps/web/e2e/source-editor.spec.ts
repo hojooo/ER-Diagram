@@ -64,6 +64,7 @@ test("validates and autosaves Monaco source with revision-safe recovery", async 
   await expect(leaveDialog.getByRole("button", { name: "Stay" })).toBeFocused();
   await leaveDialog.getByRole("button", { name: "Stay" }).click();
   await expect(page).toHaveURL(`/projects/${PROJECT_ID}`);
+  await expect.poll(() => api.writes.length).toBe(3);
   api.releaseSave();
   await expect(sourcePanel.getByTestId("persistence-status")).toHaveText(/Saved/);
 
