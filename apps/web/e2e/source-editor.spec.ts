@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { expect, type Page, test } from "@playwright/test";
 
+import { createControlledLayoutApi } from "./controlled-layout-api.js";
+
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-0123456789ab";
 const CREATED_AT = "2026-08-27T01:02:03.004Z";
 const INITIAL_SOURCE = "Table users {\n  id int [pk]\n}\n";
@@ -57,7 +59,7 @@ test("validates and autosaves Monaco source with revision-safe recovery", async 
   api.holdNextSave();
   await appendEditorSource(page, "// local unsaved note\n", false);
   await page.getByRole("link", { name: "Back to projects" }).click();
-  const leaveDialog = page.getByRole("dialog", { name: "Leave source workspace?" });
+  const leaveDialog = page.getByRole("dialog", { name: "Leave schema workspace?" });
   await expect(leaveDialog).toBeVisible();
   await expect(leaveDialog.getByRole("button", { name: "Stay" })).toBeFocused();
   await leaveDialog.getByRole("button", { name: "Stay" }).click();
@@ -108,6 +110,7 @@ async function pasteSource(input: ReturnType<Page["getByRole"]>, source: string)
 async function installSourceApi(page: Page) {
   let state = projectState(INITIAL_SOURCE, 1, "VALID", null);
   const writes: Array<Record<string, unknown>> = [];
+  const layouts = createControlledLayoutApi(PROJECT_ID);
   let shouldHoldNextSave = false;
   let releasePendingSave: (() => void) | undefined;
 
@@ -122,6 +125,8 @@ async function installSourceApi(page: Page) {
       "x-correlation-id": "123e4567-e89b-42d3-a456-426614174000",
       ...(commandId ? { "x-command-id": commandId } : {}),
     };
+
+    if (await layouts.fulfillIfMatched({ route, pathname, method, command, headers })) return;
 
     if (method === "GET" && pathname === "/api/v1/projects") {
       await route.fulfill({

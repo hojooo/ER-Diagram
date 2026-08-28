@@ -2,7 +2,13 @@ import {
   correlationIdSchema,
   createProjectRequestSchema,
   deleteProjectRequestSchema,
+  type DiagramLayoutValue,
+  diagramViewKeySchema,
   errorResponseSchema,
+  type LayoutMutationResponse,
+  layoutMutationResponseSchema,
+  type LayoutResponse,
+  layoutResponseSchema,
   type PrimaryDialect,
   type ProjectMutationResponse,
   type ProjectResponse,
@@ -12,6 +18,7 @@ import {
   projectResponseSchema,
   projectsResponseSchema,
   renameProjectRequestSchema,
+  saveLayoutRequestSchema,
   saveDraftRequestSchema,
 } from "@er-diagram/contracts";
 
@@ -44,6 +51,16 @@ export interface SaveDraftInput {
   readonly expectedSchemaRevisionNo: number;
 }
 
+export interface GetLayoutInput {
+  readonly projectId: string;
+  readonly viewKey: string;
+}
+
+export interface SaveLayoutInput extends GetLayoutInput {
+  readonly expectedLayoutRevisionNo: number;
+  readonly layout: DiagramLayoutValue;
+}
+
 export interface ProjectApi {
   listProjects(): Promise<ProjectsResponse>;
   getProject(projectId: string): Promise<ProjectResponse>;
@@ -51,6 +68,8 @@ export interface ProjectApi {
   renameProject(input: RenameProjectInput): Promise<ProjectResponse>;
   duplicateProject(input: DuplicateProjectInput): Promise<ProjectMutationResponse>;
   saveDraft(input: SaveDraftInput): Promise<ProjectMutationResponse>;
+  getLayout(input: GetLayoutInput): Promise<LayoutResponse>;
+  saveLayout(input: SaveLayoutInput): Promise<LayoutMutationResponse>;
   deleteProject(input: DeleteProjectInput): Promise<void>;
 }
 
@@ -189,6 +208,34 @@ export function createHttpProjectApi(options: HttpProjectApiOptions = {}): Proje
         path: `/projects/${encodeURIComponent(projectId)}/draft`,
         expectedStatus: 200,
         responseSchema: projectMutationResponseSchema,
+        body,
+        commandId,
+      });
+    },
+    getLayout: (input) => {
+      const projectId = parseClientInput(projectIdSchema, input.projectId);
+      const viewKey = parseClientInput(diagramViewKeySchema, input.viewKey);
+      return request(fetcher, basePath, {
+        method: "GET",
+        path: `/projects/${encodeURIComponent(projectId)}/layouts/${encodeURIComponent(viewKey)}`,
+        expectedStatus: 200,
+        responseSchema: layoutResponseSchema,
+      });
+    },
+    saveLayout: (input) => {
+      const projectId = parseClientInput(projectIdSchema, input.projectId);
+      const viewKey = parseClientInput(diagramViewKeySchema, input.viewKey);
+      const commandId = generateCommandId();
+      const body = parseClientInput(saveLayoutRequestSchema, {
+        commandId,
+        expectedLayoutRevisionNo: input.expectedLayoutRevisionNo,
+        layout: input.layout,
+      });
+      return request(fetcher, basePath, {
+        method: "PUT",
+        path: `/projects/${encodeURIComponent(projectId)}/layouts/${encodeURIComponent(viewKey)}`,
+        expectedStatus: 200,
+        responseSchema: layoutMutationResponseSchema,
         body,
         commandId,
       });

@@ -1,12 +1,32 @@
-import type { ProjectState } from "@er-diagram/contracts";
+import type {
+  DiagramLayoutValue,
+  DiagramPosition,
+  DiagramViewport,
+  ProjectResponse,
+  ProjectsResponse,
+  ProjectState,
+} from "@er-diagram/contracts";
+import { diffSchemaGraphs, recoverLayoutStableKeys, type SchemaGraph } from "@er-diagram/core";
 import * as Dialog from "@radix-ui/react-dialog";
 import type { QueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker } from "react-router-dom";
 
-import type { BaseSchemaDiagramComponent } from "../diagram/base-schema-diagram-contract.js";
+import type {
+  BaseSchemaDiagramComponent,
+  DiagramLayoutRequest,
+  DiagramLayoutRequestResult,
+} from "../diagram/base-schema-diagram-contract.js";
 import { toggleCollapsedGroup } from "../diagram/collapse-state.js";
 import { DiagramWorkspaceControls } from "../diagram/diagram-workspace-controls.js";
+import {
+  createDefaultLayoutValue,
+  createLayoutSession,
+  type LayoutConflictState,
+  type LayoutSessionController,
+  type LayoutSessionSnapshot,
+  type LayoutViewSnapshot,
+} from "../diagram/layout-session.js";
 import {
   createDiagramVisibility,
   GLOBAL_VIEW_KEY,
@@ -27,13 +47,7 @@ import type {
   DiagramViewKey,
   DiagramVisibility,
 } from "../diagram/types.js";
-import {
-  createDefaultDiagramViewSessionState,
-  type DiagramViewSessions,
-  reconcileDiagramViewSessions,
-  resolveDiagramViewKey,
-  updateDiagramViewSession,
-} from "../diagram/view-session-state.js";
+import { resolveDiagramViewKey } from "../diagram/view-session-state.js";
 import type { ProjectApi } from "../projects/project-api.js";
 import { projectQueryKeys } from "../projects/project-queries.js";
 import type { SourceEditorComponent, SourceEditorHandle } from "./editor-contract.js";
@@ -59,6 +73,8 @@ const LazyBaseSchemaDiagram = lazy(async () => {
   return { default: module.BaseSchemaDiagram };
 });
 
+const NO_COLLAPSED_GROUP_KEYS: ReadonlySet<string> = new Set();
+
 export interface ProjectWorkspaceAdapters {
   readonly createParserClient?: () => DbmlParserWorkerClient;
   readonly SourceEditor?: SourceEditorComponent;
@@ -78,15 +94,28 @@ export function ProjectSourceWorkspace({
 }) {
   const [sessionSnapshot, setSessionSnapshot] = useState<SourceSessionSnapshot | null>(null);
   const sessionRef = useRef<SourceSessionController | null>(null);
+  const [layoutSnapshot, setLayoutSnapshot] = useState<LayoutSessionSnapshot | null>(null);
+  const layoutSessionRef = useRef<LayoutSessionController | null>(null);
   const editorRef = useRef<SourceEditorHandle>(null);
   const lastCursorPositionRef = useRef<SourceCursorPosition | null>(null);
   const flushedBlockedNavigationRef = useRef(false);
+  const flushedBlockedLayoutNavigationRef = useRef(false);
   const focusRequestIdRef = useRef(0);
+  const layoutRequestIdRef = useRef(0);
+  const previousGraphRef = useRef<SchemaGraph | null>(null);
+  const renderedLayoutRef = useRef<{
+    readonly viewKey: DiagramViewKey;
+    readonly positions: Readonly<Record<string, DiagramPosition>>;
+    readonly viewport: DiagramViewport;
+  } | null>(null);
   const [selectionStore] = useState(createDiagramSelectionStore);
   const [activeViewKey, setActiveViewKey] = useState<DiagramViewKey>(GLOBAL_VIEW_KEY);
-  const [viewSessions, setViewSessions] = useState<DiagramViewSessions>(new Map());
   const [searchQuery, setSearchQuery] = useState("");
   const [focusRequest, setFocusRequest] = useState<DiagramFocusRequest | null>(null);
+  const [layoutRequest, setLayoutRequest] = useState<DiagramLayoutRequest | null>(null);
+  const [layoutPreview, setLayoutPreview] = useState<DiagramLayoutRequestResult | null>(null);
+  const [layoutWorkflowError, setLayoutWorkflowError] = useState<string | null>(null);
+  const [layoutRecoveryNotice, setLayoutRecoveryNotice] = useState<string | null>(null);
   const [hiddenSourceSelection, setHiddenSourceSelection] = useState<{
     selection: DiagramSelection;
     viewLabel: string;
@@ -100,8 +129,23 @@ export function ProjectSourceWorkspace({
   const resolvedViewKey = activeGraph
     ? resolveDiagramViewKey(activeGraph, activeViewKey)
     : GLOBAL_VIEW_KEY;
-  const activeViewSession =
-    viewSessions.get(resolvedViewKey) ?? createDefaultDiagramViewSessionState();
+  const defaultLayout = useMemo(
+    () => createDefaultLayoutValue(activeGraph?.schemaHash ?? "0".repeat(64)),
+    [activeGraph?.schemaHash],
+  );
+  const activeLayoutView = layoutSnapshot?.views.get(resolvedViewKey) ?? null;
+  const activeLayout = activeLayoutView?.layout ?? defaultLayout;
+  const availableGroupKeys = useMemo(
+    () => new Set(activeGraph?.groups.map((group) => group.key) ?? []),
+    [activeGraph],
+  );
+  const activeCollapsedGroupKeys = useMemo(
+    () =>
+      new Set(
+        activeLayout.collapsedGroupKeys.filter((groupKey) => availableGroupKeys.has(groupKey)),
+      ),
+    [activeLayout.collapsedGroupKeys, availableGroupKeys],
+  );
   const visibility = useMemo(
     () => (activeGraph ? createDiagramVisibility(activeGraph, resolvedViewKey) : null),
     [activeGraph, resolvedViewKey],
@@ -117,6 +161,18 @@ export function ProjectSourceWorkspace({
   const navigationIndex = useMemo(
     () => (activeGraph ? createDiagramNavigationIndex(activeGraph) : null),
     [activeGraph],
+  );
+  const layoutInteractionLocked = layoutRequest !== null;
+
+  const editActiveLayout = useCallback(
+    (update: (current: DiagramLayoutValue) => DiagramLayoutValue) => {
+      if (!activeGraph || layoutInteractionLocked) return;
+      const controller = layoutSessionRef.current;
+      const current = controller?.getSnapshot().views.get(resolvedViewKey);
+      if (!controller || !current || current.status === "LOADING") return;
+      controller.edit(resolvedViewKey, update(current.layout));
+    },
+    [activeGraph, layoutInteractionLocked, resolvedViewKey],
   );
 
   const handleCursorPositionChange = useCallback(
@@ -155,31 +211,40 @@ export function ProjectSourceWorkspace({
 
   const handleToggleGroup = useCallback(
     (groupKey: string) => {
-      setViewSessions((current) => {
-        const state = current.get(resolvedViewKey) ?? createDefaultDiagramViewSessionState();
-        return updateDiagramViewSession(current, resolvedViewKey, {
-          ...state,
-          collapsedGroupKeys: toggleCollapsedGroup(state.collapsedGroupKeys, groupKey),
-        });
+      editActiveLayout((current) => {
+        const collapsed = toggleCollapsedGroup(new Set(current.collapsedGroupKeys), groupKey);
+        return {
+          ...current,
+          collapsedGroupKeys: [...collapsed],
+          baseSchemaHash: activeGraph?.schemaHash ?? current.baseSchemaHash,
+        };
       });
     },
-    [resolvedViewKey],
+    [activeGraph?.schemaHash, editActiveLayout],
   );
 
-  const handleViewChange = useCallback((viewKey: DiagramViewKey) => {
-    setActiveViewKey(viewKey);
-    setFocusRequest(null);
-  }, []);
+  const handleViewChange = useCallback(
+    (viewKey: DiagramViewKey) => {
+      if (layoutInteractionLocked) return;
+      setActiveViewKey(viewKey);
+      setFocusRequest(null);
+      setLayoutWorkflowError(null);
+    },
+    [layoutInteractionLocked],
+  );
 
   const handleDetailLevelChange = useCallback(
     (detailLevel: DiagramLod) => {
-      setViewSessions((current) => {
-        const state = current.get(resolvedViewKey) ?? createDefaultDiagramViewSessionState();
-        return updateDiagramViewSession(current, resolvedViewKey, { ...state, detailLevel });
+      editActiveLayout((current) => {
+        return {
+          ...current,
+          detailLevel,
+          baseSchemaHash: activeGraph?.schemaHash ?? current.baseSchemaHash,
+        };
       });
       setFocusRequest(null);
     },
-    [resolvedViewKey],
+    [activeGraph?.schemaHash, editActiveLayout],
   );
 
   const handleActivateSearchResult = useCallback(
@@ -227,10 +292,55 @@ export function ProjectSourceWorkspace({
 
   useEffect(() => {
     if (!activeGraph) return;
-    setViewSessions((current) => reconcileDiagramViewSessions(activeGraph, current));
+    layoutSessionRef.current?.retainViews(
+      new Set([GLOBAL_VIEW_KEY, ...activeGraph.views.map((view) => view.key)]),
+    );
     setActiveViewKey((current) => resolveDiagramViewKey(activeGraph, current));
     setFocusRequest(null);
+
+    const previousGraph = previousGraphRef.current;
+    if (previousGraph && previousGraph.schemaHash !== activeGraph.schemaHash) {
+      setLayoutRequest(null);
+      setLayoutPreview(null);
+      renderedLayoutRef.current = null;
+      const renameCandidates = diffSchemaGraphs(previousGraph, activeGraph).renameCandidates;
+      const controller = layoutSessionRef.current;
+      let recoveredCount = 0;
+      if (controller && renameCandidates.length > 0) {
+        for (const [viewKey, view] of controller.getSnapshot().views) {
+          const recovered = recoverLayoutStableKeys(view.layout, renameCandidates);
+          if (recovered.recoveredKeys.length === 0) continue;
+          recoveredCount += recovered.recoveredKeys.length;
+          controller.edit(viewKey, {
+            ...recovered.layout,
+            positions: Object.fromEntries(
+              Object.entries(recovered.layout.positions).map(([key, position]) => [
+                key,
+                { ...position },
+              ]),
+            ),
+            collapsedGroupKeys: [...recovered.layout.collapsedGroupKeys],
+            hiddenElementKeys: [...recovered.layout.hiddenElementKeys],
+            baseSchemaHash: activeGraph.schemaHash,
+          });
+        }
+      }
+      setLayoutRecoveryNotice(
+        recoveredCount > 0
+          ? `Recovered ${recoveredCount} renamed layout ${recoveredCount === 1 ? "key" : "keys"}. Previous keys were retained for safe fallback.`
+          : null,
+      );
+    }
+    previousGraphRef.current = activeGraph;
   }, [activeGraph]);
+
+  useEffect(() => {
+    if (!activeGraph) return;
+    void layoutSessionRef.current?.hydrate(
+      resolvedViewKey,
+      createDefaultLayoutValue(activeGraph.schemaHash),
+    );
+  }, [activeGraph, resolvedViewKey]);
 
   useEffect(() => {
     if (!sourceNavigationEnabled) {
@@ -244,12 +354,49 @@ export function ProjectSourceWorkspace({
   useEffect(() => {
     if (!projectId) return;
     setActiveViewKey(GLOBAL_VIEW_KEY);
-    setViewSessions(new Map());
     setSearchQuery("");
     setFocusRequest(null);
+    setLayoutRequest(null);
+    setLayoutPreview(null);
+    setLayoutWorkflowError(null);
+    setLayoutRecoveryNotice(null);
     setHiddenSourceSelection(null);
+    previousGraphRef.current = null;
+    renderedLayoutRef.current = null;
     lastCursorPositionRef.current = null;
   }, [projectId]);
+
+  useEffect(() => {
+    const layoutSession = createLayoutSession({
+      projectId,
+      initialLayoutRevisionNo: initialStateRef.current.project.layoutRevisionNo,
+      loadLayout: async (viewKey) => {
+        const response = await api.getLayout({ projectId, viewKey });
+        queryClient.setQueryData(projectQueryKeys.layout(projectId, viewKey), response);
+        return response;
+      },
+      saveLayout: async (input) => {
+        const response = await api.saveLayout(input);
+        queryClient.setQueryData(projectQueryKeys.layout(projectId, input.viewKey), response.state);
+        return response;
+      },
+      onLayoutRevision: (revisionNo) => {
+        updateCachedLayoutRevision(queryClient, projectId, revisionNo);
+      },
+    });
+    layoutSessionRef.current = layoutSession;
+    const unsubscribe = layoutSession.subscribe(() => {
+      setLayoutSnapshot(layoutSession.getSnapshot());
+    });
+    setLayoutSnapshot(layoutSession.getSnapshot());
+
+    return () => {
+      unsubscribe();
+      layoutSession.dispose();
+      if (layoutSessionRef.current === layoutSession) layoutSessionRef.current = null;
+      setLayoutSnapshot(null);
+    };
+  }, [api, projectId, queryClient]);
 
   useEffect(() => {
     const parserClient = (adapters?.createParserClient ?? createDbmlParserWorkerClient)();
@@ -263,7 +410,21 @@ export function ProjectSourceWorkspace({
         return response.state;
       },
       onServerState: (state) => {
-        queryClient.setQueryData(projectQueryKeys.detail(projectId), { state });
+        queryClient.setQueryData<ProjectResponse>(
+          projectQueryKeys.detail(projectId),
+          (current) => ({
+            state: {
+              ...state,
+              project: {
+                ...state.project,
+                layoutRevisionNo: Math.max(
+                  state.project.layoutRevisionNo,
+                  current?.state.project.layoutRevisionNo ?? 0,
+                ),
+              },
+            },
+          }),
+        );
         void queryClient.invalidateQueries({ queryKey: projectQueryKeys.list });
       },
     });
@@ -280,12 +441,174 @@ export function ProjectSourceWorkspace({
     };
   }, [adapters, api, projectId, queryClient]);
 
+  const handlePositionsCommit = useCallback(
+    (positions: Readonly<Record<string, DiagramPosition>>) => {
+      editActiveLayout((current) => ({
+        ...current,
+        positions: { ...current.positions, ...positions },
+        baseSchemaHash: activeGraph?.schemaHash ?? current.baseSchemaHash,
+      }));
+    },
+    [activeGraph?.schemaHash, editActiveLayout],
+  );
+
+  const handleViewportCommit = useCallback(
+    (viewport: DiagramViewport) => {
+      editActiveLayout((current) => ({
+        ...current,
+        viewport: { ...viewport },
+        baseSchemaHash: activeGraph?.schemaHash ?? current.baseSchemaHash,
+      }));
+    },
+    [activeGraph?.schemaHash, editActiveLayout],
+  );
+
+  const handleRenderedLayoutReady = useCallback(
+    (positions: Readonly<Record<string, DiagramPosition>>, viewport: DiagramViewport) => {
+      renderedLayoutRef.current = {
+        viewKey: resolvedViewKey,
+        positions,
+        viewport,
+      };
+    },
+    [resolvedViewKey],
+  );
+
+  const persistCurrentLayoutBaseline = useCallback(
+    async (includeRenderedLayout: boolean): Promise<boolean> => {
+      const controller = layoutSessionRef.current;
+      const graph = activeGraph;
+      const view = controller?.getSnapshot().views.get(resolvedViewKey);
+      if (!controller || !graph || !view || view.status === "LOADING") return false;
+      if (view.status === "CONFLICT") {
+        setLayoutWorkflowError("Resolve the layout conflict before starting auto-layout.");
+        return false;
+      }
+      let baseline = view.layout;
+      const rendered = renderedLayoutRef.current;
+      if (includeRenderedLayout && rendered?.viewKey === resolvedViewKey) {
+        baseline = {
+          ...baseline,
+          positions: { ...baseline.positions, ...rendered.positions },
+          viewport: { ...rendered.viewport },
+          baseSchemaHash: graph.schemaHash,
+        };
+      }
+      await controller.replaceAndFlush(resolvedViewKey, baseline);
+      const status = controller.getSnapshot().views.get(resolvedViewKey)?.status;
+      if (status === "ERROR" || status === "CONFLICT") {
+        setLayoutWorkflowError("The current layout could not be saved as an auto-layout baseline.");
+        return false;
+      }
+      return true;
+    },
+    [activeGraph, resolvedViewKey],
+  );
+
+  const handlePreviewAutoLayout = useCallback(async () => {
+    if (layoutRequest || !activeGraph) return;
+    setLayoutWorkflowError(null);
+    if (!(await persistCurrentLayoutBaseline(true))) return;
+    layoutRequestIdRef.current += 1;
+    setLayoutPreview(null);
+    setLayoutRequest({ requestId: layoutRequestIdRef.current, mode: "PREVIEW" });
+  }, [activeGraph, layoutRequest, persistCurrentLayoutBaseline]);
+
+  const handleCancelAutoLayout = useCallback(() => {
+    setLayoutPreview(null);
+    setLayoutRequest(null);
+    setLayoutWorkflowError(null);
+  }, []);
+
+  const handleApplyAutoLayout = useCallback(async () => {
+    if (layoutPreview?.mode !== "PREVIEW" || !activeGraph) return;
+    const controller = layoutSessionRef.current;
+    const view = controller?.getSnapshot().views.get(resolvedViewKey);
+    if (!controller || !view) return;
+    const next: DiagramLayoutValue = {
+      ...view.layout,
+      positions: { ...view.layout.positions, ...layoutPreview.positions },
+      viewport: { ...layoutPreview.viewport },
+      baseSchemaHash: activeGraph.schemaHash,
+    };
+    await controller.replaceAndFlush(resolvedViewKey, next);
+    const status = controller.getSnapshot().views.get(resolvedViewKey)?.status;
+    setLayoutPreview(null);
+    setLayoutRequest(null);
+    if (status === "ERROR" || status === "CONFLICT") {
+      setLayoutWorkflowError(
+        status === "CONFLICT"
+          ? "The auto-layout is preserved locally. Resolve the layout conflict to continue."
+          : "The auto-layout could not be saved. The previous durable layout is unchanged.",
+      );
+    }
+  }, [activeGraph, layoutPreview, resolvedViewKey]);
+
+  const handleResetLayout = useCallback(async () => {
+    if (layoutRequest || !activeGraph) return;
+    setLayoutWorkflowError(null);
+    if (!(await persistCurrentLayoutBaseline(false))) return;
+    layoutRequestIdRef.current += 1;
+    setLayoutPreview(null);
+    setLayoutRequest({ requestId: layoutRequestIdRef.current, mode: "RESET" });
+  }, [activeGraph, layoutRequest, persistCurrentLayoutBaseline]);
+
+  const handleLayoutRequestReady = useCallback(
+    (result: DiagramLayoutRequestResult) => {
+      if (
+        result.requestId !== layoutRequest?.requestId ||
+        result.mode !== layoutRequest.mode ||
+        !activeGraph
+      ) {
+        return;
+      }
+      if (!result.succeeded) {
+        setLayoutWorkflowError("Automatic layout failed. The durable layout was not changed.");
+        setLayoutRequest(null);
+        setLayoutPreview(null);
+        return;
+      }
+      if (result.mode === "PREVIEW") {
+        setLayoutPreview(result);
+        return;
+      }
+
+      const controller = layoutSessionRef.current;
+      const view = controller?.getSnapshot().views.get(resolvedViewKey);
+      if (!controller || !view) return;
+      const resetLayout: DiagramLayoutValue = {
+        positions: { ...result.positions },
+        collapsedGroupKeys: [],
+        hiddenElementKeys: [],
+        viewport: { ...result.viewport },
+        detailLevel: "FULL",
+        baseSchemaHash: activeGraph.schemaHash,
+      };
+      void controller.replaceAndFlush(resolvedViewKey, resetLayout).then(() => {
+        const status = controller.getSnapshot().views.get(resolvedViewKey)?.status;
+        setLayoutRequest(null);
+        setLayoutPreview(null);
+        if (status === "ERROR" || status === "CONFLICT") {
+          setLayoutWorkflowError(
+            status === "CONFLICT"
+              ? "The reset layout is preserved locally. Resolve the layout conflict to continue."
+              : "The reset layout could not be saved. The previous durable layout is unchanged.",
+          );
+        }
+      });
+    },
+    [activeGraph, layoutRequest, resolvedViewKey],
+  );
+
   const hasUnsavedSource = sessionSnapshot !== null && sessionSnapshot.persistence !== "SAVED";
-  const navigationBlocker = useBlocker(hasUnsavedSource);
+  const hasUnsavedLayout = layoutSnapshot?.hasUnsavedChanges ?? false;
+  const hasUnsavedWorkspace = hasUnsavedSource || hasUnsavedLayout;
+  const navigationBlocker = useBlocker(hasUnsavedWorkspace);
 
   useEffect(() => {
     if (navigationBlocker.state !== "blocked") {
       flushedBlockedNavigationRef.current = false;
+      flushedBlockedLayoutNavigationRef.current = false;
       return;
     }
     if (!sessionSnapshot) return;
@@ -293,18 +616,22 @@ export function ProjectSourceWorkspace({
       flushedBlockedNavigationRef.current = true;
       sessionRef.current?.flush();
     }
-    if (sessionSnapshot.persistence === "SAVED") navigationBlocker.proceed();
-  }, [navigationBlocker, sessionSnapshot]);
+    if (hasUnsavedLayout && !flushedBlockedLayoutNavigationRef.current) {
+      flushedBlockedLayoutNavigationRef.current = true;
+      void layoutSessionRef.current?.flush();
+    }
+    if (!hasUnsavedSource && !hasUnsavedLayout) navigationBlocker.proceed();
+  }, [hasUnsavedLayout, hasUnsavedSource, navigationBlocker, sessionSnapshot]);
 
   useEffect(() => {
-    if (!hasUnsavedSource) return;
+    if (!hasUnsavedWorkspace) return;
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [hasUnsavedSource]);
+  }, [hasUnsavedWorkspace]);
 
   if (!sessionSnapshot) {
     return (
@@ -372,13 +699,23 @@ export function ProjectSourceWorkspace({
             visibility={visibility}
             viewKey={resolvedViewKey}
             viewLabel={viewLabel}
-            detailLevel={activeViewSession.detailLevel}
-            collapsedGroupKeys={activeViewSession.collapsedGroupKeys}
+            detailLevel={layoutRequest?.mode === "RESET" ? "FULL" : activeLayout.detailLevel}
+            collapsedGroupKeys={
+              layoutRequest?.mode === "RESET" ? NO_COLLAPSED_GROUP_KEYS : activeCollapsedGroupKeys
+            }
             focusRequest={focusRequest}
             searchQuery={searchQuery}
             selectionStore={selectionStore}
             DiagramComponent={DiagramComponent}
             sourceNavigationEnabled={sourceNavigationEnabled}
+            layoutView={activeLayoutView}
+            layoutConflict={layoutSnapshot?.conflict ?? null}
+            layoutPositions={activeLayout.positions}
+            layoutViewport={activeLayoutView?.persistedLayout ? activeLayout.viewport : null}
+            layoutRequest={layoutRequest}
+            layoutPreview={layoutPreview}
+            layoutWorkflowError={layoutWorkflowError}
+            layoutRecoveryNotice={layoutRecoveryNotice}
             onToggleGroup={handleToggleGroup}
             onViewChange={handleViewChange}
             onDetailLevelChange={handleDetailLevelChange}
@@ -386,6 +723,20 @@ export function ProjectSourceWorkspace({
             onActivateSearchResult={handleActivateSearchResult}
             onNavigateSource={handleNavigateSource}
             onFocusSource={() => editorRef.current?.focus()}
+            onPositionsCommit={handlePositionsCommit}
+            onViewportCommit={handleViewportCommit}
+            onRenderedLayoutReady={handleRenderedLayoutReady}
+            onLayoutRequestReady={handleLayoutRequestReady}
+            onPreviewAutoLayout={() => void handlePreviewAutoLayout()}
+            onApplyAutoLayout={() => void handleApplyAutoLayout()}
+            onCancelAutoLayout={handleCancelAutoLayout}
+            onResetLayout={() => void handleResetLayout()}
+            onRetryLayout={() => void layoutSessionRef.current?.retrySave()}
+            onRetryLocalLayout={() => void layoutSessionRef.current?.retryLocalLayout()}
+            onLoadServerLayout={() => void layoutSessionRef.current?.loadServerLayout()}
+            onReloadLayout={() =>
+              void layoutSessionRef.current?.hydrate(resolvedViewKey, defaultLayout)
+            }
           />
         </div>
 
@@ -439,7 +790,7 @@ export function ProjectSourceWorkspace({
             graph={activeGraph}
             visibility={visibility}
             viewLabel={viewLabel}
-            collapsedGroupKeys={activeViewSession.collapsedGroupKeys}
+            collapsedGroupKeys={activeCollapsedGroupKeys}
             selectionStore={selectionStore}
             sourceNavigationEnabled={sourceNavigationEnabled}
             onToggleGroup={handleToggleGroup}
@@ -468,7 +819,11 @@ export function ProjectSourceWorkspace({
         {validationLabel(sessionSnapshot.validation)}.
       </p>
 
-      <UnsavedNavigationDialog blocker={navigationBlocker} snapshot={sessionSnapshot} />
+      <UnsavedNavigationDialog
+        blocker={navigationBlocker}
+        snapshot={sessionSnapshot}
+        hasUnsavedLayout={hasUnsavedLayout}
+      />
     </>
   );
 }
@@ -485,6 +840,14 @@ function DiagramPanel({
   selectionStore,
   DiagramComponent,
   sourceNavigationEnabled,
+  layoutView,
+  layoutConflict,
+  layoutPositions,
+  layoutViewport,
+  layoutRequest,
+  layoutPreview,
+  layoutWorkflowError,
+  layoutRecoveryNotice,
   onToggleGroup,
   onViewChange,
   onDetailLevelChange,
@@ -492,6 +855,18 @@ function DiagramPanel({
   onActivateSearchResult,
   onNavigateSource,
   onFocusSource,
+  onPositionsCommit,
+  onViewportCommit,
+  onRenderedLayoutReady,
+  onLayoutRequestReady,
+  onPreviewAutoLayout,
+  onApplyAutoLayout,
+  onCancelAutoLayout,
+  onResetLayout,
+  onRetryLayout,
+  onRetryLocalLayout,
+  onLoadServerLayout,
+  onReloadLayout,
 }: {
   readonly snapshot: SourceSessionSnapshot;
   readonly visibility: DiagramVisibility | null;
@@ -504,6 +879,14 @@ function DiagramPanel({
   readonly selectionStore: ReturnType<typeof createDiagramSelectionStore>;
   readonly DiagramComponent: BaseSchemaDiagramComponent;
   readonly sourceNavigationEnabled: boolean;
+  readonly layoutView: LayoutViewSnapshot | null;
+  readonly layoutConflict: LayoutConflictState | null;
+  readonly layoutPositions: Readonly<Record<string, DiagramPosition>>;
+  readonly layoutViewport: DiagramViewport | null;
+  readonly layoutRequest: DiagramLayoutRequest | null;
+  readonly layoutPreview: DiagramLayoutRequestResult | null;
+  readonly layoutWorkflowError: string | null;
+  readonly layoutRecoveryNotice: string | null;
   readonly onToggleGroup: (groupKey: string) => void;
   readonly onViewChange: (viewKey: DiagramViewKey) => void;
   readonly onDetailLevelChange: (detailLevel: DiagramLod) => void;
@@ -511,10 +894,32 @@ function DiagramPanel({
   readonly onActivateSearchResult: (result: DiagramSearchResult) => void;
   readonly onNavigateSource: (selection: DiagramSelection) => void;
   readonly onFocusSource: () => void;
+  readonly onPositionsCommit: (positions: Readonly<Record<string, DiagramPosition>>) => void;
+  readonly onViewportCommit: (viewport: DiagramViewport) => void;
+  readonly onRenderedLayoutReady: (
+    positions: Readonly<Record<string, DiagramPosition>>,
+    viewport: DiagramViewport,
+  ) => void;
+  readonly onLayoutRequestReady: (result: DiagramLayoutRequestResult) => void;
+  readonly onPreviewAutoLayout: () => void;
+  readonly onApplyAutoLayout: () => void;
+  readonly onCancelAutoLayout: () => void;
+  readonly onResetLayout: () => void;
+  readonly onRetryLayout: () => void;
+  readonly onRetryLocalLayout: () => void;
+  readonly onLoadServerLayout: () => void;
+  readonly onReloadLayout: () => void;
 }) {
   const graph = snapshot.activeGraph;
   const showingLastValid = snapshot.activeGraphSource === "LAST_VALID";
   const lastValidRevisionNo = snapshot.serverState.lastValidRevision?.revisionNo;
+  const layoutBusy = layoutRequest !== null;
+  const layoutHydrating = layoutView === null || layoutView.status === "LOADING";
+  const layoutLoadFailed = layoutView?.status === "ERROR" && !layoutView.hydrated;
+  const schemaHashMismatch =
+    graph !== null &&
+    layoutView?.persistedLayout != null &&
+    layoutView?.layout.baseSchemaHash !== graph.schemaHash;
 
   return (
     <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
@@ -542,6 +947,24 @@ function DiagramPanel({
             onActivateSearchResult={onActivateSearchResult}
             onViewChange={onViewChange}
             onDetailLevelChange={onDetailLevelChange}
+            disabled={layoutBusy}
+          />
+          <LayoutToolbar
+            viewKey={viewKey}
+            layoutView={layoutView}
+            layoutConflict={layoutConflict}
+            layoutRequest={layoutRequest}
+            layoutPreview={layoutPreview}
+            workflowError={layoutWorkflowError}
+            recoveryNotice={layoutRecoveryNotice}
+            schemaHashMismatch={schemaHashMismatch}
+            onPreview={onPreviewAutoLayout}
+            onApply={onApplyAutoLayout}
+            onCancel={onCancelAutoLayout}
+            onReset={onResetLayout}
+            onRetry={onRetryLayout}
+            onRetryLocal={onRetryLocalLayout}
+            onLoadServer={onLoadServerLayout}
           />
           <Suspense
             fallback={
@@ -550,17 +973,47 @@ function DiagramPanel({
               </div>
             }
           >
-            <DiagramComponent
-              graph={graph}
-              viewKey={viewKey}
-              detailLevel={detailLevel}
-              collapsedGroupKeys={collapsedGroupKeys}
-              focusRequest={focusRequest}
-              selectionStore={selectionStore}
-              sourceNavigationEnabled={sourceNavigationEnabled}
-              onToggleGroup={onToggleGroup}
-              onNavigateSource={onNavigateSource}
-            />
+            {layoutHydrating ? (
+              <div className="grid min-h-[32rem] place-items-center bg-slate-950 text-slate-300">
+                <p aria-live="polite">Loading layout…</p>
+              </div>
+            ) : layoutLoadFailed ? (
+              <div className="grid min-h-[32rem] place-items-center bg-slate-950 p-6 text-center">
+                <div>
+                  <p className="font-semibold text-red-100">Layout could not be loaded</p>
+                  <p className="mt-2 text-sm text-slate-400">
+                    The diagram remains protected from overwriting an unknown server layout.
+                  </p>
+                  <button
+                    className={`${secondaryButtonClass} mt-4`}
+                    type="button"
+                    onClick={onReloadLayout}
+                  >
+                    Retry layout load
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <DiagramComponent
+                graph={graph}
+                viewKey={viewKey}
+                detailLevel={detailLevel}
+                collapsedGroupKeys={collapsedGroupKeys}
+                focusRequest={focusRequest}
+                selectionStore={selectionStore}
+                sourceNavigationEnabled={sourceNavigationEnabled}
+                onToggleGroup={onToggleGroup}
+                onNavigateSource={onNavigateSource}
+                layoutPositions={layoutPositions}
+                layoutViewport={layoutViewport}
+                layoutRequest={layoutRequest}
+                interactionDisabled={layoutBusy || layoutConflict !== null}
+                onPositionsCommit={onPositionsCommit}
+                onViewportCommit={onViewportCommit}
+                onRenderedLayoutReady={onRenderedLayoutReady}
+                onLayoutRequestReady={onLayoutRequestReady}
+              />
+            )}
           </Suspense>
           <p className="sr-only" aria-live="polite">
             Showing {viewLabel} at {detailLevel.toLowerCase().replaceAll("_", " ")} detail.
@@ -585,6 +1038,253 @@ function DiagramPanel({
       )}
     </section>
   );
+}
+
+function LayoutToolbar({
+  viewKey,
+  layoutView,
+  layoutConflict,
+  layoutRequest,
+  layoutPreview,
+  workflowError,
+  recoveryNotice,
+  schemaHashMismatch,
+  onPreview,
+  onApply,
+  onCancel,
+  onReset,
+  onRetry,
+  onRetryLocal,
+  onLoadServer,
+}: {
+  readonly viewKey: string;
+  readonly layoutView: LayoutViewSnapshot | null;
+  readonly layoutConflict: LayoutConflictState | null;
+  readonly layoutRequest: DiagramLayoutRequest | null;
+  readonly layoutPreview: DiagramLayoutRequestResult | null;
+  readonly workflowError: string | null;
+  readonly recoveryNotice: string | null;
+  readonly schemaHashMismatch: boolean;
+  readonly onPreview: () => void;
+  readonly onApply: () => void;
+  readonly onCancel: () => void;
+  readonly onReset: () => void;
+  readonly onRetry: () => void;
+  readonly onRetryLocal: () => void;
+  readonly onLoadServer: () => void;
+}) {
+  const unavailable =
+    layoutView === null ||
+    layoutView.status === "LOADING" ||
+    layoutView.status === "ERROR" ||
+    layoutConflict !== null;
+  return (
+    <div className="border-b border-slate-700 bg-slate-950/50 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs font-semibold text-slate-300" aria-live="polite">
+          {layoutRequest?.mode === "PREVIEW"
+            ? layoutPreview
+              ? "Auto-layout preview ready"
+              : "Previewing auto layout"
+            : layoutRequest?.mode === "RESET"
+              ? "Resetting layout"
+              : layoutStatusLabel(layoutView)}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {layoutRequest?.mode === "PREVIEW" && layoutPreview ? (
+            <>
+              <button className={primaryButtonClass} type="button" onClick={onApply}>
+                Apply auto layout
+              </button>
+              <button className={secondaryButtonClass} type="button" onClick={onCancel}>
+                Cancel preview
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                className={secondaryButtonClass}
+                type="button"
+                disabled={unavailable || layoutRequest !== null}
+                onClick={onPreview}
+              >
+                Preview auto layout
+              </button>
+              <ResetLayoutDialog
+                disabled={unavailable || layoutRequest !== null}
+                viewKey={viewKey}
+                onReset={onReset}
+              />
+            </>
+          )}
+          {layoutView?.status === "ERROR" ? (
+            <button className={secondaryButtonClass} type="button" onClick={onRetry}>
+              Retry layout save
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {schemaHashMismatch ? (
+        <p className="mt-2 text-xs text-amber-200" role="status">
+          This layout was saved for an earlier schema. Matching stable keys were restored; new
+          elements use automatic positions.
+        </p>
+      ) : null}
+      {recoveryNotice ? (
+        <p className="mt-2 text-xs text-cyan-200" role="status">
+          {recoveryNotice}
+        </p>
+      ) : null}
+      {workflowError ? (
+        <p className="mt-2 text-xs text-red-200" role="alert">
+          {workflowError}
+        </p>
+      ) : null}
+      {layoutView?.error?.correlationId ? (
+        <p className="mt-2 text-xs text-red-200">
+          Correlation ID: {layoutView.error.correlationId}
+        </p>
+      ) : null}
+      {layoutConflict ? (
+        <div
+          className="mt-3 rounded-lg border border-amber-300/50 bg-amber-950/30 p-3"
+          role="alert"
+        >
+          <p className="font-semibold text-amber-100">Layout conflict</p>
+          <p className="mt-1 text-xs text-amber-100/80">
+            Autosave is paused. Local layouts remain available until you choose a recovery action.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button className={primaryButtonClass} type="button" onClick={onRetryLocal}>
+              Retry local layout
+            </button>
+            <LayoutConflictLoadDialog viewKey={layoutConflict.viewKey} onLoad={onLoadServer} />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ResetLayoutDialog({
+  disabled,
+  viewKey,
+  onReset,
+}: {
+  readonly disabled: boolean;
+  readonly viewKey: string;
+  readonly onReset: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  return (
+    <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Trigger asChild>
+        <button className={secondaryButtonClass} type="button" disabled={disabled}>
+          Reset layout
+        </button>
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-slate-950/80" />
+        <Dialog.Content
+          className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,32rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-700 bg-slate-900 p-6 text-slate-100 shadow-2xl"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            cancelRef.current?.focus();
+          }}
+        >
+          <Dialog.Title className="text-xl font-semibold">Reset this view layout?</Dialog.Title>
+          <Dialog.Description className="mt-3 text-sm leading-6 text-slate-300">
+            {viewKey} will return to Full detail, all groups expanded, no hidden elements, and a
+            fresh automatic layout. Other views are not changed.
+          </Dialog.Description>
+          <div className="mt-6 flex flex-row-reverse flex-wrap gap-3">
+            <button
+              className="min-h-11 rounded-lg bg-red-300 px-4 font-semibold text-red-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-300"
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onReset();
+              }}
+            >
+              Reset this view
+            </button>
+            <Dialog.Close asChild>
+              <button ref={cancelRef} className={secondaryButtonClass} type="button">
+                Cancel
+              </button>
+            </Dialog.Close>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function LayoutConflictLoadDialog({
+  viewKey,
+  onLoad,
+}: {
+  readonly viewKey: string;
+  readonly onLoad: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  return (
+    <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Trigger asChild>
+        <button className={secondaryButtonClass} type="button">
+          Load server layout
+        </button>
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-slate-950/80" />
+        <Dialog.Content
+          className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,32rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-700 bg-slate-900 p-6 text-slate-100 shadow-2xl"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            cancelRef.current?.focus();
+          }}
+        >
+          <Dialog.Title className="text-xl font-semibold">Load server layout?</Dialog.Title>
+          <Dialog.Description className="mt-3 text-sm leading-6 text-slate-300">
+            This replaces the unsaved local layout for {viewKey}. Pending layouts for other views
+            remain unchanged.
+          </Dialog.Description>
+          <div className="mt-6 flex flex-row-reverse flex-wrap gap-3">
+            <button
+              className="min-h-11 rounded-lg bg-red-300 px-4 font-semibold text-red-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-300"
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onLoad();
+              }}
+            >
+              Load server layout
+            </button>
+            <Dialog.Close asChild>
+              <button ref={cancelRef} className={secondaryButtonClass} type="button">
+                Cancel
+              </button>
+            </Dialog.Close>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function layoutStatusLabel(view: LayoutViewSnapshot | null): string {
+  if (!view) return "Loading layout";
+  return {
+    LOADING: "Loading layout",
+    SAVED: "Layout saved",
+    DIRTY: "Unsaved layout changes",
+    SAVING: "Saving layout",
+    ERROR: "Layout save error",
+    CONFLICT: "Layout conflict",
+  }[view.status];
 }
 
 function SessionRecoveryPanel({
@@ -774,9 +1474,11 @@ function ConflictLoadDialog({
 function UnsavedNavigationDialog({
   blocker,
   snapshot,
+  hasUnsavedLayout,
 }: {
   readonly blocker: ReturnType<typeof useBlocker>;
   readonly snapshot: SourceSessionSnapshot;
+  readonly hasUnsavedLayout: boolean;
 }) {
   const stayRef = useRef<HTMLButtonElement>(null);
   const open = blocker.state === "blocked";
@@ -796,11 +1498,13 @@ function UnsavedNavigationDialog({
             stayRef.current?.focus();
           }}
         >
-          <Dialog.Title className="text-xl font-semibold">Leave source workspace?</Dialog.Title>
+          <Dialog.Title className="text-xl font-semibold">Leave schema workspace?</Dialog.Title>
           <Dialog.Description className="mt-3 text-sm leading-6 text-slate-300">
-            {snapshot.persistence === "SAVING" || snapshot.persistence === "DIRTY"
-              ? "The current draft is being saved. Navigation will continue automatically after it succeeds."
-              : "Local edits have not been saved. Leaving now discards edits that were not sent; a write already sent to the server may still commit."}
+            {snapshot.persistence === "SAVING" ||
+            snapshot.persistence === "DIRTY" ||
+            hasUnsavedLayout
+              ? "Source and layout changes are being flushed. Navigation will continue automatically after every write succeeds."
+              : "Local source or layout changes have not been saved. Leaving now discards changes that were not sent; a write already sent to the server may still commit."}
           </Dialog.Description>
           <div className="mt-6 flex flex-row-reverse flex-wrap gap-3">
             <button
@@ -897,5 +1601,33 @@ function isSelectionVisible(selection: DiagramSelection, visibility: DiagramVisi
   return selection.tableKeys.every((tableKey) => visibility.tableKeys.has(tableKey));
 }
 
+function updateCachedLayoutRevision(
+  queryClient: QueryClient,
+  projectId: string,
+  layoutRevisionNo: number,
+): void {
+  queryClient.setQueryData<ProjectResponse>(projectQueryKeys.detail(projectId), (current) =>
+    current
+      ? {
+          state: {
+            ...current.state,
+            project: { ...current.state.project, layoutRevisionNo },
+          },
+        }
+      : current,
+  );
+  queryClient.setQueryData<ProjectsResponse>(projectQueryKeys.list, (current) =>
+    current
+      ? {
+          projects: current.projects.map((project) =>
+            project.id === projectId ? { ...project, layoutRevisionNo } : project,
+          ),
+        }
+      : current,
+  );
+}
+
 const secondaryButtonClass =
   "min-h-10 rounded-lg border border-slate-600 px-3 text-sm font-semibold text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:opacity-50";
+const primaryButtonClass =
+  "min-h-10 rounded-lg bg-cyan-300 px-3 text-sm font-semibold text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:opacity-50";

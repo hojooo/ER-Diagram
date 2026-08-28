@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { expect, type Page, test } from "@playwright/test";
 
+import { createControlledLayoutApi } from "./controlled-layout-api.js";
+
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-0123456789ab";
 const COPY_ID = "019d3f4e-7b6c-7def-9abc-0123456789ab";
 const CREATED_AT = "2026-08-27T01:02:03.004Z";
@@ -81,6 +83,7 @@ function projectSummary(state: TestProjectState) {
 
 async function installProjectApi(page: Page) {
   let projects: TestProjectState[] = [];
+  const layoutApis = [createControlledLayoutApi(PROJECT_ID), createControlledLayoutApi(COPY_ID)];
   await page.route("**/api/v1/projects**", async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -92,6 +95,10 @@ async function installProjectApi(page: Page) {
       "x-correlation-id": "123e4567-e89b-42d3-a456-426614174000",
       ...(commandId ? { "x-command-id": commandId } : {}),
     };
+
+    for (const layouts of layoutApis) {
+      if (await layouts.fulfillIfMatched({ route, pathname, method, command, headers })) return;
+    }
 
     if (method === "GET" && pathname === "/api/v1/projects") {
       await route.fulfill({

@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
+import { createControlledLayoutApi } from "./controlled-layout-api.js";
+
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-1123456789ab";
 const CREATED_AT = "2026-08-28T01:02:03.004Z";
 const INITIAL_SOURCE = `TableGroup Identity [color: #778899] {
@@ -76,6 +78,7 @@ test("collapses TableGroups without mutating source and preserves last-valid nav
   ).toBeVisible();
   await page.waitForTimeout(900);
   expect(api.writes).toHaveLength(0);
+  const layoutWritesBeforeInvalid = api.layouts.writes.length;
 
   await page.getByRole("button", { name: "Focus relationship post_account in diagram" }).click();
   await expect(page.locator(".react-flow__edge.selected")).toHaveCount(1);
@@ -99,6 +102,10 @@ test("collapses TableGroups without mutating source and preserves last-valid nav
     page.getByRole("button", { name: "Open source for group at line 1" }),
   ).toBeDisabled();
 
+  await page.getByRole("button", { name: "Expand public.Identity", exact: true }).click();
+  await expect.poll(() => api.layouts.writes.length).toBe(layoutWritesBeforeInvalid + 1);
+  expect(api.writes).toHaveLength(1);
+
   expect(browserErrors).toEqual([]);
 });
 
@@ -118,6 +125,7 @@ async function replaceEditorSource(editor: Locator, source: string): Promise<voi
 async function installTableGroupApi(page: Page) {
   let state = projectState(INITIAL_SOURCE, 1, "VALID", null);
   const writes: Array<Record<string, unknown>> = [];
+  const layouts = createControlledLayoutApi(PROJECT_ID);
 
   await page.route("**/api/v1/projects**", async (route) => {
     const request = route.request();
@@ -130,6 +138,8 @@ async function installTableGroupApi(page: Page) {
       "x-correlation-id": "123e4567-e89b-42d3-a456-426614174000",
       ...(commandId ? { "x-command-id": commandId } : {}),
     };
+
+    if (await layouts.fulfillIfMatched({ route, pathname, method, command, headers })) return;
 
     if (method === "GET" && pathname === `/api/v1/projects/${PROJECT_ID}`) {
       await route.fulfill({ status: 200, headers, body: JSON.stringify({ state }) });
@@ -169,7 +179,7 @@ async function installTableGroupApi(page: Page) {
     });
   });
 
-  return { writes };
+  return { layouts, writes };
 }
 
 function projectState(

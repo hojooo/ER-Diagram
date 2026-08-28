@@ -14,7 +14,7 @@ import { useStore } from "zustand";
 
 import { App, createAppRoutes } from "../src/App.js";
 import type { BaseSchemaDiagramProps } from "../src/diagram/base-schema-diagram-contract.js";
-import type { ProjectApi, SaveDraftInput } from "../src/projects/project-api.js";
+import type { ProjectApi, SaveDraftInput, SaveLayoutInput } from "../src/projects/project-api.js";
 import { ProjectApiError } from "../src/projects/project-api.js";
 import type {
   SourceEditorHandle,
@@ -191,14 +191,14 @@ describe("DBML source workspace", () => {
 
     fireEvent.change(editor, { target: { value: SECOND_VALID_SOURCE } });
     fireEvent.click(screen.getByRole("link", { name: "Back to projects" }));
-    const dialog = await screen.findByRole("dialog", { name: "Leave source workspace?" });
+    const dialog = await screen.findByRole("dialog", { name: "Leave schema workspace?" });
     expect(within(dialog).getByRole("button", { name: "Stay" })).toHaveFocus();
     expect(editor).toHaveValue(domValue(SECOND_VALID_SOURCE));
     fireEvent.click(within(dialog).getByRole("button", { name: "Stay" }));
     expect(router.state.location.pathname).toBe(`/projects/${PROJECT_ID}`);
 
     fireEvent.click(screen.getByRole("link", { name: "Back to projects" }));
-    await screen.findByRole("dialog", { name: "Leave source workspace?" });
+    await screen.findByRole("dialog", { name: "Leave schema workspace?" });
     pendingSave.resolve(mutation(SECOND_VALID_SOURCE, 2, "VALID"));
     await waitFor(() => expect(router.state.location.pathname).toBe("/"));
   });
@@ -270,6 +270,7 @@ describe("DBML source workspace", () => {
     const viewSelector = screen.getByRole("combobox", { name: "Diagram view" });
     const identityOption = within(viewSelector).getByRole("option", { name: "identity_only" });
     fireEvent.change(viewSelector, { target: { value: identityOption.getAttribute("value") } });
+    await screen.findByRole("button", { name: "Toggle first fake group" });
     fireEvent.change(screen.getByRole("combobox", { name: "Detail level" }), {
       target: { value: "KEYS_ONLY" },
     });
@@ -279,11 +280,16 @@ describe("DBML source workspace", () => {
     expect(screen.getByTestId("fake-diagram-collapse-count")).toHaveTextContent("1");
 
     fireEvent.change(viewSelector, { target: { value: "GLOBAL" } });
+    await waitFor(() =>
+      expect(screen.getByTestId("fake-diagram-view")).toHaveTextContent("Global"),
+    );
     fireEvent.change(screen.getByRole("combobox", { name: "Detail level" }), {
       target: { value: "NAME_ONLY" },
     });
     fireEvent.change(viewSelector, { target: { value: identityOption.getAttribute("value") } });
-    expect(screen.getByTestId("fake-diagram-detail")).toHaveTextContent("KEYS_ONLY");
+    await waitFor(() =>
+      expect(screen.getByTestId("fake-diagram-detail")).toHaveTextContent("KEYS_ONLY"),
+    );
     expect(screen.getByTestId("fake-diagram-collapse-count")).toHaveTextContent("1");
 
     const hiddenTableOffset = VIEW_SOURCE.indexOf("Table orders") + "Table ".length;
@@ -571,6 +577,30 @@ class SourceProjectApi implements ProjectApi {
   async getProject(projectId: string) {
     if (projectId !== PROJECT_ID) throw new Error("PROJECT_NOT_FOUND");
     return { state: this.state };
+  }
+
+  async getLayout() {
+    return { layout: null, currentLayoutRevisionNo: this.state.project.layoutRevisionNo };
+  }
+
+  async saveLayout(input: SaveLayoutInput) {
+    const revisionNo = input.expectedLayoutRevisionNo + 1;
+    this.state = {
+      ...this.state,
+      project: { ...this.state.project, layoutRevisionNo: revisionNo },
+    };
+    return {
+      state: {
+        layout: {
+          projectId: input.projectId,
+          viewKey: input.viewKey,
+          revisionNo,
+          ...input.layout,
+        },
+        currentLayoutRevisionNo: revisionNo,
+      },
+      layoutUpdated: true,
+    };
   }
 
   async saveDraft(input: SaveDraftInput) {

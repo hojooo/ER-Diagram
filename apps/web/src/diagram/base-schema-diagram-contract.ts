@@ -1,3 +1,4 @@
+import type { DiagramPosition, DiagramViewport } from "@er-diagram/contracts";
 import type { SchemaElementKey, SchemaGraph } from "@er-diagram/core";
 import type { ComponentType } from "react";
 
@@ -21,6 +22,32 @@ export interface BaseSchemaDiagramProps {
   readonly onToggleGroup: (groupKey: SchemaElementKey) => void;
   readonly onNavigateSource: (selection: DiagramSelection) => void;
   readonly requestLayout?: (projection: DiagramProjection) => Promise<DiagramProjection>;
+  readonly layoutPositions?: Readonly<Record<SchemaElementKey, DiagramPosition>>;
+  readonly layoutViewport?: DiagramViewport | null;
+  readonly layoutRequest?: DiagramLayoutRequest | null;
+  readonly interactionDisabled?: boolean;
+  readonly onPositionsCommit?: (
+    positions: Readonly<Record<SchemaElementKey, DiagramPosition>>,
+  ) => void;
+  readonly onViewportCommit?: (viewport: DiagramViewport) => void;
+  readonly onLayoutRequestReady?: (result: DiagramLayoutRequestResult) => void;
+  readonly onRenderedLayoutReady?: (
+    positions: Readonly<Record<SchemaElementKey, DiagramPosition>>,
+    viewport: DiagramViewport,
+  ) => void;
+}
+
+export interface DiagramLayoutRequest {
+  readonly requestId: number;
+  readonly mode: "PREVIEW" | "RESET";
+}
+
+export interface DiagramLayoutRequestResult {
+  readonly requestId: number;
+  readonly mode: DiagramLayoutRequest["mode"];
+  readonly succeeded: boolean;
+  readonly positions: Readonly<Record<SchemaElementKey, DiagramPosition>>;
+  readonly viewport: DiagramViewport;
 }
 
 export type BaseSchemaDiagramComponent = ComponentType<BaseSchemaDiagramProps>;

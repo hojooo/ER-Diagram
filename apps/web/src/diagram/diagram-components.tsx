@@ -77,6 +77,9 @@ export function TableDiagramNodeComponent({ data }: NodeProps<TableDiagramNode>)
     >
       <Handle type="target" position={Position.Left} />
       <header className="diagram-table__header">
+        <span className="diagram-table__drag-handle" aria-hidden="true">
+          ⋮⋮
+        </span>
         <button
           className="nodrag nopan diagram-table__table-action"
           type="button"

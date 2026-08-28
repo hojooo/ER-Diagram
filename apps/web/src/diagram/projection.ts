@@ -282,6 +282,7 @@ function createTableNodes(
     const node: TableDiagramNode = {
       id: table.key,
       type: "table",
+      dragHandle: ".diagram-table__drag-handle",
       focusable: false,
       position,
       style: {
