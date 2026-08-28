@@ -68,6 +68,20 @@ conversion 성공 여부와 관계없이 byte-identical 원문을 저장한다. 
 source는 import artifact 또는 project 삭제 시 함께 제거한다. Core policy는 persistence 전용 입력만
 선택하고 실제 artifact write와 transaction은 import application 경계가 담당한다.
 
+SQL import preview는 conversion 성공과 실패를 각각 `PREVIEWED`, `FAILED` artifact로 저장한다. 이
+transaction은 expected schema revision과 primary dialect를 다시 확인하지만 project source, revision,
+last-valid pointer, layout과 project `updated_at`을 변경하지 않는다. Artifact의 `report_json`은 versioned
+preview evidence, canonical SHA-256, initial data policy, nullable applied policy와 retention 선택을 담는다.
+Repository는 envelope contract뿐 아니라 row dialect, original/candidate hash, status와 applied timestamp의
+조합을 읽는 시점에 재검증한다.
+
+SQL import Apply는 `BEGIN IMMEDIATE` 안에서 project와 artifact를 다시 읽고 schema revision과
+`PREVIEWED` status를 compare-and-set한다. 새 `VALID + SQL_IMPORT` revision insert, project draft와
+last-valid pointer update, artifact의 `APPLIED`·`applied_at`·applied policy update와 pruning 중 하나라도
+실패하면 전체 transaction을 rollback한다. Candidate가 current source와 같아도 checkpoint를 만들며 기존
+current revision 자체가 rollback 기준이므로 별도 pre-import duplicate revision은 만들지 않는다. Apply는
+layout row와 `layout_revision_no`를 변경하지 않는다.
+
 하나의 server process만 SQLite에 write한다. Multi-process horizontal write와 shared network filesystem database는 P0 범위가 아니다.
 
 ## Alternatives considered

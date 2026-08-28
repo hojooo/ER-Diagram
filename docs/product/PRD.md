@@ -408,7 +408,7 @@ UI는 각 construct의 지원 수준을 capability badge와 도움말로 공개�
 | `SQLI-005` | P0 | importer가 무시한 option을 silent success로 처리하지 않는다. | engine, tablespace, generated column, partial index 등 부분 지원 clause가 warning에 나타난다. |
 | `SQLI-006` | P0 | 지원되지 않는 `ALTER TABLE` column mutation, `CREATE VIEW`, `DROP` 등을 명시한다. | 원본 statement range와 미지원 이유가 report에 포함된다. |
 | `SQLI-007` | P0 | 원본 SQL을 import artifact로 선택 보존한다. | 기본값은 `DISCARD`이며, `RETAIN`을 선택하면 artifact 또는 project 삭제 시까지 전체 원문을 보존한다. |
-| `SQLI-008` | P0 | current project replace 전 revision을 만든다. | import 결과가 부정확하면 이전 source로 복원할 수 있다. |
+| `SQLI-008` | P0 | current project replace를 새 `SQL_IMPORT` checkpoint revision으로 저장한다. | 기존 current revision을 rollback 기준으로 보존하고 별도 pre-import duplicate revision은 만들지 않는다. |
 | `SQLI-009` | P0 | P0는 기존 DBML과 import SQL의 자동 merge를 제공하지 않는다. | UI는 new project 또는 replace만 제공한다. |
 | `SQLI-010` | P0 | `INSERT`, `UPDATE`, `DELETE`, `COPY`와 data payload를 schema로 가져오지 않는다. | DML은 별도 `UNSUPPORTED_DATA_STATEMENT`로 보고하고, 사용자가 확인한 경우에만 DDL 부분을 적용한다. |
 | `SQLI-011` | P0 | DML이 포함된 입력의 original SQL 보존은 기본적으로 끈다. | 사용자가 명시적으로 선택하지 않으면 preview 종료 후 row data가 durable store에 남지 않는다. |
@@ -439,6 +439,25 @@ Original SQL retention은 `DISCARD`가 기본값이다. `RETAIN`을 명시한 �
 전체 원문을 byte-identical하게 persistence 입력에 포함하고, 그렇지 않으면 `originalSql=null`만 전달한다.
 P0는 time-based TTL을 두지 않으며 retained source는 artifact 또는 project 삭제 시 제거된다. Report,
 diagnostics와 candidate에는 retention 선택과 관계없이 SQL row literal을 포함하지 않는다.
+
+Preview endpoint는 project primary dialect와 `expectedSchemaRevisionNo`를 확인한 뒤 conversion을 수행하고,
+성공 결과는 `PREVIEWED`, conversion 실패는 `FAILED` artifact로 저장한다. Conversion 실패도 report를
+검토할 수 있도록 HTTP `200`을 반환하되 candidate는 `null`이다. Preview transaction은 project source,
+schema revision, last-valid pointer, layout과 project `updatedAt`을 변경하지 않는다. 사용자가 Apply를
+실행하지 않은 `PREVIEWED` artifact는 그대로 남으며 별도 cancel endpoint와 `CANCELLED` 전이는 P0의 이
+단계에서 제공하지 않는다.
+
+`SQL_IMPORT_PREVIEW_VERSION=1` hash는 project ID, base schema revision, dialect, source hash, nullable
+candidate DBML hash, version provenance를 포함한 전체 `ConversionReport`, initial `REJECT` data policy와
+original SQL retention 선택의 canonical JSON을 SHA-256으로 계산한다. Apply의
+`CONFIRM_DDL_ONLY`는 사용자 승인 상태이므로 preview hash를 변경하지 않는다.
+
+Apply endpoint는 client source와 preview hash를 artifact evidence와 비교하고 같은 dialect로 SQL을 다시
+parse하여 report, record-free candidate와 preview hash를 재생성한다. Stored evidence와 byte·semantic
+결과가 모두 같고 data policy가 `READY`일 때만 새 `VALID + SQL_IMPORT` checkpoint revision을 만든다.
+Candidate가 current draft와 byte-identical해도 import 이력을 보존하기 위해 revision을 생략하지 않는다.
+Revision insert, project draft·last-valid pointer update, artifact `APPLIED` 전이와 retention pruning은 하나의
+transaction으로 commit하거나 rollback하며 layout row와 `layoutRevisionNo`는 변경하지 않는다.
 
 ### 11.4 SQL export
 
@@ -725,9 +744,13 @@ Layout row가 아직 없는 view의 조회는 오류가 아니라 current projec
 | `originalHash` | 중복·provenance 확인 |
 | `generatedDbml` | preview candidate |
 | `parserVersion` | 변환 version |
-| `report` | statement/clause diagnostics |
+| `report` | versioned preview evidence, hash, initial/applied data policy와 statement/clause diagnostics |
 | `status` | `PREVIEWED`, `APPLIED`, `CANCELLED`, `FAILED` |
 | `createdAt`, `appliedAt` | 시각 |
+
+Preview conversion 실패도 `FAILED` row로 보존한다. 성공 Apply에서만 `appliedPolicy`와 `appliedAt`을
+채우며, row dialect·source/candidate hash·report envelope가 불일치하면 fail-closed storage invariant로
+처리한다. Project 삭제는 artifact를 cascade 삭제하고 project 복제는 artifact를 복사하지 않는다.
 
 ### 14.5 파생 데이터
 
