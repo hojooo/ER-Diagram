@@ -24,7 +24,6 @@ import {
   type SqlImportApplicationResult,
   type SqlImportApplyMutation,
   type SqlImportArtifact,
-  type SqlImportArtifactEnvelope,
   SqlImportPersistenceInvariantError,
   type SqlImportPersistencePort,
   type SqlImportPersistenceReader,

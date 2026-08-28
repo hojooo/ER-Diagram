@@ -8,7 +8,6 @@ import {
   createProjectApplication,
   createSqlImportApplication,
   type Project,
-  type ProjectPersistenceTransaction,
   type SchemaRevision,
   type SqlImportApplicationResult,
   type SqlImportArtifact,
