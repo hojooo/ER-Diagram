@@ -5,6 +5,12 @@ export const contractPackage = "@er-diagram/contracts";
 export const primaryDialectSchema = z.enum(["POSTGRESQL", "MYSQL"]);
 export type PrimaryDialect = z.infer<typeof primaryDialectSchema>;
 
+export const sqlDataStatementHandlingSchema = z.enum(["REJECT", "CONFIRM_DDL_ONLY"]);
+export type SqlDataStatementHandling = z.infer<typeof sqlDataStatementHandlingSchema>;
+
+export const originalSqlRetentionModeSchema = z.enum(["DISCARD", "RETAIN"]);
+export type OriginalSqlRetentionMode = z.infer<typeof originalSqlRetentionModeSchema>;
+
 export const sourceRangeSchema = z
   .object({
     filepath: z.string().min(1),
@@ -272,9 +278,23 @@ const duplicateProjectOperationSchema = z
   })
   .strict();
 
+const createProjectFromSqlImportOperationSchema = z
+  .object({
+    operation: z.literal("CREATE_FROM_SQL_IMPORT"),
+    commandId: commandIdSchema,
+    name: z.string(),
+    primaryDialect: primaryDialectSchema,
+    source: z.string(),
+    previewHash: sha256HexSchema,
+    originalSqlRetention: originalSqlRetentionModeSchema.optional(),
+    dataStatementHandling: sqlDataStatementHandlingSchema.optional(),
+  })
+  .strict();
+
 export const createProjectRequestSchema = z.discriminatedUnion("operation", [
   createProjectOperationSchema,
   duplicateProjectOperationSchema,
+  createProjectFromSqlImportOperationSchema,
 ]);
 export type CreateProjectRequest = z.infer<typeof createProjectRequestSchema>;
 
@@ -521,12 +541,6 @@ export const conversionReportSchema = z
   .strict();
 export type ConversionReport = z.infer<typeof conversionReportSchema>;
 
-export const sqlDataStatementHandlingSchema = z.enum(["REJECT", "CONFIRM_DDL_ONLY"]);
-export type SqlDataStatementHandling = z.infer<typeof sqlDataStatementHandlingSchema>;
-
-export const originalSqlRetentionModeSchema = z.enum(["DISCARD", "RETAIN"]);
-export type OriginalSqlRetentionMode = z.infer<typeof originalSqlRetentionModeSchema>;
-
 export const sqlImportApplyReadinessSchema = z.enum([
   "READY",
   "CONVERSION_FAILED",
@@ -611,6 +625,49 @@ export const sqlImportPreviewResponseSchema = z.discriminatedUnion("artifactStat
 ]);
 export type SqlImportPreviewResponse = z.infer<typeof sqlImportPreviewResponseSchema>;
 
+export const sqlImportStandalonePreviewRequestSchema = z
+  .object({
+    commandId: commandIdSchema,
+    dialect: primaryDialectSchema,
+    source: z.string(),
+    originalSqlRetention: originalSqlRetentionModeSchema.optional(),
+  })
+  .strict();
+export type SqlImportStandalonePreviewRequest = z.infer<
+  typeof sqlImportStandalonePreviewRequestSchema
+>;
+
+const sqlImportStandalonePreviewResponseBase = {
+  previewHash: sha256HexSchema,
+  originalSqlRetention: originalSqlRetentionModeSchema,
+  report: conversionReportSchema,
+  policy: sqlImportDataPolicyDecisionSchema,
+};
+
+const sqlImportStandaloneSuccessfulPreviewResponseSchema = z
+  .object({
+    ...sqlImportStandalonePreviewResponseBase,
+    previewStatus: z.literal("PREVIEWED"),
+    candidate: z.object({ dbml: z.string(), dbmlHash: sha256HexSchema }).strict(),
+  })
+  .strict();
+
+const sqlImportStandaloneFailedPreviewResponseSchema = z
+  .object({
+    ...sqlImportStandalonePreviewResponseBase,
+    previewStatus: z.literal("FAILED"),
+    candidate: z.null(),
+  })
+  .strict();
+
+export const sqlImportStandalonePreviewResponseSchema = z.discriminatedUnion("previewStatus", [
+  sqlImportStandaloneSuccessfulPreviewResponseSchema,
+  sqlImportStandaloneFailedPreviewResponseSchema,
+]);
+export type SqlImportStandalonePreviewResponse = z.infer<
+  typeof sqlImportStandalonePreviewResponseSchema
+>;
+
 export const sqlImportApplyRequestSchema = z
   .object({
     commandId: commandIdSchema,
@@ -649,7 +706,7 @@ export const sqlImportPreviewEvidenceSchema = z
   .strict();
 export type SqlImportPreviewEvidence = z.infer<typeof sqlImportPreviewEvidenceSchema>;
 
-export const sqlImportArtifactEnvelopeSchema = z
+export const sqlImportReplaceArtifactEnvelopeSchema = z
   .object({
     previewVersion: z.literal(1),
     evidence: sqlImportPreviewEvidenceSchema,
@@ -659,6 +716,33 @@ export const sqlImportArtifactEnvelopeSchema = z
     originalSqlRetention: originalSqlRetentionModeSchema,
   })
   .strict();
+
+export const sqlImportCreatePreviewEvidenceSchema = z
+  .object({
+    dialect: primaryDialectSchema,
+    sourceHash: sha256HexSchema,
+    candidateDbmlHash: sha256HexSchema.nullable(),
+    report: conversionReportSchema,
+  })
+  .strict();
+export type SqlImportCreatePreviewEvidence = z.infer<typeof sqlImportCreatePreviewEvidenceSchema>;
+
+export const sqlImportCreateArtifactEnvelopeSchema = z
+  .object({
+    operation: z.literal("CREATE_PROJECT"),
+    previewVersion: z.literal(1),
+    evidence: sqlImportCreatePreviewEvidenceSchema,
+    previewHash: sha256HexSchema,
+    previewPolicy: sqlImportDataPolicyDecisionSchema,
+    appliedPolicy: sqlImportDataPolicyDecisionSchema,
+    originalSqlRetention: originalSqlRetentionModeSchema,
+  })
+  .strict();
+
+export const sqlImportArtifactEnvelopeSchema = z.union([
+  sqlImportReplaceArtifactEnvelopeSchema,
+  sqlImportCreateArtifactEnvelopeSchema,
+]);
 export type SqlImportArtifactEnvelope = z.infer<typeof sqlImportArtifactEnvelopeSchema>;
 
 export const projectsResponseSchema = z
