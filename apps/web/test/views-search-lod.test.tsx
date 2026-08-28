@@ -1,14 +1,30 @@
-import type { DiagramViewNode, SchemaGraph } from "@er-diagram/core";
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+
+import "@testing-library/jest-dom/vitest";
+
+import { type DiagramViewNode, parseDbmlV2, type SchemaGraph } from "@er-diagram/core";
+import { fixtureInventory, generateFidelityFixture } from "@er-diagram/test-fixtures";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { demoSchemaGraph } from "../src/diagram/demo-schema.js";
+import { DiagramWorkspaceControls } from "../src/diagram/diagram-workspace-controls.js";
 import {
   createDiagramProjection,
   createDiagramVisibility,
   GLOBAL_VIEW_KEY,
   listDiagramViews,
 } from "../src/diagram/projection.js";
+import { SchemaOutline } from "../src/diagram/schema-outline.js";
 import { searchDiagramVisibility } from "../src/diagram/search-index.js";
+import { createDiagramSelectionStore } from "../src/diagram/selection-store.js";
+import {
+  reconcileDiagramViewSessions,
+  resolveDiagramViewKey,
+  updateDiagramViewSession,
+} from "../src/diagram/view-session-state.js";
+
+afterEach(cleanup);
 
 describe("DiagramView visibility", () => {
   it("lists Global and schema-qualified source views without ambiguous labels", () => {
@@ -160,9 +176,289 @@ describe("current-view search index", () => {
     expect(schemaResult?.tableKeys).toHaveLength(3);
     expect(schemaResult?.groupKeys).toHaveLength(1);
 
-    const limited = searchDiagramVisibility(demoSchemaGraph, visibility, "i", 2);
-    expect(limited.results).toHaveLength(2);
-    expect(limited.total).toBeGreaterThan(limited.results.length);
+    const template = requiredTable(demoSchemaGraph, "user");
+    const largeGraph: SchemaGraph = {
+      ...demoSchemaGraph,
+      tables: Array.from({ length: 60 }, (_, index) => ({
+        ...template,
+        key: `table:["public","match_${index.toString().padStart(2, "0")}"]`,
+        schemaName: "public",
+        name: `match_${index.toString().padStart(2, "0")}`,
+        columns: [],
+      })),
+      groups: [],
+      references: [],
+      views: [],
+    };
+    const limited = searchDiagramVisibility(
+      largeGraph,
+      createDiagramVisibility(largeGraph, GLOBAL_VIEW_KEY),
+      "match",
+    );
+    expect(limited.results).toHaveLength(50);
+    expect(limited.total).toBe(60);
+  });
+
+  it("projects a fidelity view within the 300 ms acceptance boundary without reparsing", async () => {
+    const parsed = await parseDbmlV2(generateFidelityFixture());
+    if (!parsed.ok) throw new Error(JSON.stringify(parsed.diagnostics));
+    const view = parsed.graph.views[1];
+    if (!view) throw new Error("Missing fidelity DiagramView");
+    const schemaHash = parsed.graph.schemaHash;
+
+    const startedAt = performance.now();
+    const projection = createDiagramProjection(parsed.graph, {
+      viewKey: view.key,
+      collapsedGroupKeys: new Set(),
+      lod: "FULL",
+    });
+    const elapsedMs = performance.now() - startedAt;
+
+    expect(projection.nodes.length).toBeGreaterThan(0);
+    expect(parsed.graph.views).toHaveLength(fixtureInventory.fidelity.diagramViews);
+    expect(parsed.graph.schemaHash).toBe(schemaHash);
+    expect(elapsedMs).toBeLessThan(300);
+  });
+});
+
+describe("per-view diagram session state", () => {
+  it("keeps detail and collapse state independent for every stable view key", () => {
+    const identityView = requiredView(demoSchemaGraph, "identity_only");
+    const identityGroup = demoSchemaGraph.groups.find((group) => group.name === "Identity");
+    if (!identityGroup) throw new Error("Missing identity group");
+
+    let sessions = reconcileDiagramViewSessions(demoSchemaGraph, new Map());
+    sessions = updateDiagramViewSession(sessions, GLOBAL_VIEW_KEY, {
+      detailLevel: "NAME_ONLY",
+      collapsedGroupKeys: new Set(),
+    });
+    sessions = updateDiagramViewSession(sessions, identityView.key, {
+      detailLevel: "KEYS_ONLY",
+      collapsedGroupKeys: new Set([identityGroup.key]),
+    });
+
+    expect(sessions.get(GLOBAL_VIEW_KEY)).toEqual({
+      detailLevel: "NAME_ONLY",
+      collapsedGroupKeys: new Set(),
+    });
+    expect(sessions.get(identityView.key)).toEqual({
+      detailLevel: "KEYS_ONLY",
+      collapsedGroupKeys: new Set([identityGroup.key]),
+    });
+    expect(sessions.get(requiredView(demoSchemaGraph, "commerce_only").key)).toEqual({
+      detailLevel: "FULL",
+      collapsedGroupKeys: new Set(),
+    });
+  });
+
+  it("falls back to Global and prunes deleted views and groups", () => {
+    const identityView = requiredView(demoSchemaGraph, "identity_only");
+    const [identityGroup, commerceGroup] = demoSchemaGraph.groups;
+    if (!identityGroup || !commerceGroup) throw new Error("Missing groups");
+
+    let sessions = reconcileDiagramViewSessions(demoSchemaGraph, new Map());
+    sessions = updateDiagramViewSession(sessions, GLOBAL_VIEW_KEY, {
+      detailLevel: "FULL",
+      collapsedGroupKeys: new Set([commerceGroup.key]),
+    });
+    sessions = updateDiagramViewSession(sessions, identityView.key, {
+      detailLevel: "KEYS_ONLY",
+      collapsedGroupKeys: new Set([identityGroup.key, commerceGroup.key]),
+    });
+    const nextGraph = {
+      ...demoSchemaGraph,
+      views: demoSchemaGraph.views.filter((view) => view.key !== identityView.key),
+      groups: demoSchemaGraph.groups.filter((group) => group.key !== commerceGroup.key),
+    };
+
+    const reconciled = reconcileDiagramViewSessions(nextGraph, sessions);
+    expect(reconciled.has(identityView.key)).toBe(false);
+    expect(
+      [...(reconciled.get(GLOBAL_VIEW_KEY)?.collapsedGroupKeys ?? [])].includes(commerceGroup.key),
+    ).toBe(false);
+    expect(resolveDiagramViewKey(nextGraph, identityView.key)).toBe(GLOBAL_VIEW_KEY);
+  });
+});
+
+describe("accessible view, search, and detail controls", () => {
+  it("switches source-defined views and detail levels without schema mutations", () => {
+    const identityView = requiredView(demoSchemaGraph, "identity_only");
+    const visibility = createDiagramVisibility(demoSchemaGraph, identityView.key);
+    const onViewChange = vi.fn();
+    const onDetailLevelChange = vi.fn();
+
+    render(
+      <DiagramWorkspaceControls
+        graph={demoSchemaGraph}
+        visibility={visibility}
+        viewKey={identityView.key}
+        detailLevel="FULL"
+        searchQuery=""
+        onSearchQueryChange={vi.fn()}
+        onActivateSearchResult={vi.fn()}
+        onViewChange={onViewChange}
+        onDetailLevelChange={onDetailLevelChange}
+      />,
+    );
+
+    const viewSelector = screen.getByRole("combobox", { name: "Diagram view" });
+    expect(viewSelector).toHaveValue(identityView.key);
+    expect(viewSelector.querySelectorAll("option")).toHaveLength(demoSchemaGraph.views.length + 1);
+    fireEvent.change(viewSelector, { target: { value: GLOBAL_VIEW_KEY } });
+    expect(onViewChange).toHaveBeenCalledWith(GLOBAL_VIEW_KEY);
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Detail level" }), {
+      target: { value: "KEYS_ONLY" },
+    });
+    expect(onDetailLevelChange).toHaveBeenCalledWith("KEYS_ONLY");
+    expect(screen.getByText("2 tables · 1 group · 1 relationship")).toBeVisible();
+  });
+
+  it("activates current-view results with an accessible keyboard-only combobox", () => {
+    const identityView = requiredView(demoSchemaGraph, "identity_only");
+    const visibility = createDiagramVisibility(demoSchemaGraph, identityView.key);
+    const onSearchQueryChange = vi.fn();
+    const onActivateSearchResult = vi.fn();
+
+    const { rerender } = render(
+      <DiagramWorkspaceControls
+        graph={demoSchemaGraph}
+        visibility={visibility}
+        viewKey={identityView.key}
+        detailLevel="FULL"
+        searchQuery=""
+        onSearchQueryChange={onSearchQueryChange}
+        onActivateSearchResult={onActivateSearchResult}
+        onViewChange={vi.fn()}
+        onDetailLevelChange={vi.fn()}
+      />,
+    );
+    const search = screen.getByRole("combobox", { name: "Search current view" });
+    fireEvent.change(search, { target: { value: "user" } });
+    expect(onSearchQueryChange).toHaveBeenCalledWith("user");
+
+    rerender(
+      <DiagramWorkspaceControls
+        graph={demoSchemaGraph}
+        visibility={visibility}
+        viewKey={identityView.key}
+        detailLevel="FULL"
+        searchQuery="user"
+        onSearchQueryChange={onSearchQueryChange}
+        onActivateSearchResult={onActivateSearchResult}
+        onViewChange={vi.fn()}
+        onDetailLevelChange={vi.fn()}
+      />,
+    );
+
+    expect(search).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("option", { name: /table identity\.user/i })).toBeVisible();
+    fireEvent.keyDown(search, { key: "ArrowDown" });
+    const activeOption = screen.getByRole("option", { name: /table identity\.user/i });
+    expect(activeOption).toHaveAttribute("aria-selected", "true");
+    expect(search).toHaveAttribute("aria-activedescendant", activeOption.id);
+    fireEvent.keyDown(search, { key: "Enter" });
+    expect(onActivateSearchResult).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "table", qualifiedLabel: "identity.user" }),
+    );
+
+    fireEvent.keyDown(search, { key: "Escape" });
+    expect(onSearchQueryChange).toHaveBeenLastCalledWith("");
+  });
+
+  it("filters the accessible outline with the same visibility inventory", () => {
+    const identityView = requiredView(demoSchemaGraph, "identity_only");
+    const visibility = createDiagramVisibility(demoSchemaGraph, identityView.key);
+
+    render(
+      <SchemaOutline
+        graph={demoSchemaGraph}
+        visibility={visibility}
+        viewLabel="identity_only"
+        collapsedGroupKeys={new Set()}
+        selectionStore={createDiagramSelectionStore()}
+        sourceNavigationEnabled
+        onToggleGroup={vi.fn()}
+        onNavigateSource={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Schema outline · identity_only" })).toBeVisible();
+    expect(screen.getByText("2 tables · 1 group · 1 relationship")).toBeVisible();
+    expect(screen.getByText("identity.user", { exact: true })).toBeVisible();
+    expect(screen.getByText("identity.profile", { exact: true })).toBeVisible();
+    expect(screen.queryByText("commerce.product", { exact: true })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Focus relationship profile_user in diagram" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Focus relationship order_product in diagram" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders script-like search labels as inert text", () => {
+    const user = requiredTable(demoSchemaGraph, "user");
+    const graph: SchemaGraph = {
+      ...demoSchemaGraph,
+      tables: demoSchemaGraph.tables.map((table) =>
+        table.key === user.key ? { ...table, name: "<script>😀" } : table,
+      ),
+    };
+    const visibility = createDiagramVisibility(graph, GLOBAL_VIEW_KEY);
+
+    render(
+      <DiagramWorkspaceControls
+        graph={graph}
+        visibility={visibility}
+        viewKey={GLOBAL_VIEW_KEY}
+        detailLevel="FULL"
+        searchQuery="script"
+        onSearchQueryChange={vi.fn()}
+        onActivateSearchResult={vi.fn()}
+        onViewChange={vi.fn()}
+        onDetailLevelChange={vi.fn()}
+      />,
+    );
+    fireEvent.focus(screen.getByRole("combobox", { name: "Search current view" }));
+
+    expect(screen.getByRole("option", { name: "table identity.<script>😀" })).toBeVisible();
+    expect(document.body.querySelector("script")).toBeNull();
+  });
+
+  it("assigns unique option ids when stable keys contain colliding punctuation", () => {
+    const user = requiredTable(demoSchemaGraph, "user");
+    const profile = requiredTable(demoSchemaGraph, "profile");
+    const graph: SchemaGraph = {
+      ...demoSchemaGraph,
+      tables: [
+        { ...user, key: "collision/a", name: "alpha" },
+        { ...profile, key: "collision.a", name: "alpine" },
+      ],
+      groups: [],
+      references: [],
+      views: [],
+    };
+
+    render(
+      <DiagramWorkspaceControls
+        graph={graph}
+        visibility={createDiagramVisibility(graph, GLOBAL_VIEW_KEY)}
+        viewKey={GLOBAL_VIEW_KEY}
+        detailLevel="FULL"
+        searchQuery="al"
+        onSearchQueryChange={vi.fn()}
+        onActivateSearchResult={vi.fn()}
+        onViewChange={vi.fn()}
+        onDetailLevelChange={vi.fn()}
+      />,
+    );
+    fireEvent.focus(screen.getByRole("combobox", { name: "Search current view" }));
+
+    const optionIds = screen
+      .getAllByRole("option", { name: /^table identity\.al/ })
+      .map((option) => option.id);
+    expect(optionIds).toHaveLength(2);
+    expect(new Set(optionIds).size).toBe(optionIds.length);
   });
 });
 

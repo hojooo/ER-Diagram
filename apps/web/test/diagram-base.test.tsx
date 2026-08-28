@@ -69,14 +69,15 @@ vi.mock("@xyflow/react", async () => {
 });
 
 import { BaseSchemaDiagram } from "../src/diagram/base-schema-diagram.js";
-import { createBaseDiagramProjection } from "../src/diagram/projection.js";
+import { demoSchemaGraph } from "../src/diagram/demo-schema.js";
+import { createBaseDiagramProjection, createDiagramVisibility } from "../src/diagram/projection.js";
 import { SchemaOutline } from "../src/diagram/schema-outline.js";
 import { createDiagramSelectionStore } from "../src/diagram/selection-store.js";
 import {
   createDiagramNavigationIndex,
   findDiagramSelectionAtCursor,
 } from "../src/diagram/source-navigation.js";
-import type { TableDiagramNode } from "../src/diagram/types.js";
+import type { DiagramProjection, TableDiagramNode } from "../src/diagram/types.js";
 
 const BASE_SOURCE = `TablePartial audit_fields {
   tenant_id int
@@ -248,6 +249,8 @@ describe("diagram source navigation", () => {
     const rendered = render(
       <SchemaOutline
         graph={graph}
+        visibility={createDiagramVisibility(graph, "GLOBAL")}
+        viewLabel="Global"
         collapsedGroupKeys={new Set()}
         selectionStore={selectionStore}
         sourceNavigationEnabled
@@ -276,6 +279,8 @@ describe("diagram source navigation", () => {
     rendered.rerender(
       <SchemaOutline
         graph={graph}
+        visibility={createDiagramVisibility(graph, "GLOBAL")}
+        viewLabel="Global"
         collapsedGroupKeys={new Set()}
         selectionStore={selectionStore}
         sourceNavigationEnabled={false}
@@ -295,6 +300,8 @@ describe("diagram source navigation", () => {
     render(
       <SchemaOutline
         graph={graph}
+        visibility={createDiagramVisibility(graph, "GLOBAL")}
+        viewLabel="Global"
         collapsedGroupKeys={new Set()}
         selectionStore={createDiagramSelectionStore()}
         sourceNavigationEnabled
@@ -309,12 +316,109 @@ describe("diagram source navigation", () => {
 });
 
 describe("base schema diagram canvas", () => {
+  it("projects the selected view and LOD while keeping stable element identity", async () => {
+    const identityView = demoSchemaGraph.views.find((view) => view.name === "identity_only");
+    const identityGroup = demoSchemaGraph.groups.find((group) => group.name === "Identity");
+    if (!identityView || !identityGroup) throw new Error("Missing identity view fixture.");
+    const requestLayout = vi.fn(async (projection: DiagramProjection) => projection);
+    const rendered = render(
+      <BaseSchemaDiagram
+        graph={demoSchemaGraph}
+        viewKey={identityView.key}
+        detailLevel="FULL"
+        collapsedGroupKeys={new Set()}
+        selectionStore={createDiagramSelectionStore()}
+        sourceNavigationEnabled
+        onToggleGroup={vi.fn()}
+        onNavigateSource={vi.fn()}
+        requestLayout={requestLayout}
+      />,
+    );
+    await waitFor(() => expect(requestLayout).toHaveBeenCalledTimes(1));
+    const fullProjection = requestLayout.mock.calls[0]?.[0];
+    expect(fullProjection?.nodes.filter((node) => node.type === "table")).toHaveLength(2);
+    expect(fullProjection?.edges).toHaveLength(1);
+
+    rendered.rerender(
+      <BaseSchemaDiagram
+        graph={demoSchemaGraph}
+        viewKey={identityView.key}
+        detailLevel="NAME_ONLY"
+        collapsedGroupKeys={new Set()}
+        focusRequest={{
+          requestId: 1,
+          tableKeys: identityGroup.tableKeys,
+          groupKeys: [identityGroup.key],
+        }}
+        selectionStore={createDiagramSelectionStore()}
+        sourceNavigationEnabled
+        onToggleGroup={vi.fn()}
+        onNavigateSource={vi.fn()}
+        requestLayout={requestLayout}
+      />,
+    );
+    await waitFor(() => expect(requestLayout).toHaveBeenCalledTimes(2));
+    const nameProjection = requestLayout.mock.calls[1]?.[0];
+    expect(nameProjection?.nodes.map((node) => node.id)).toEqual(
+      fullProjection?.nodes.map((node) => node.id),
+    );
+    expect(nameProjection?.edges.map((edge) => edge.id)).toEqual(
+      fullProjection?.edges.map((edge) => edge.id),
+    );
+    expect(
+      nameProjection?.nodes
+        .filter((node) => node.type === "table")
+        .every((node) => node.data.lod === "NAME_ONLY"),
+    ).toBe(true);
+    await waitFor(() =>
+      expect(flowSpies.fitView).toHaveBeenCalledWith(
+        expect.objectContaining({
+          nodes: expect.arrayContaining([expect.objectContaining({ id: identityGroup.key })]),
+        }),
+      ),
+    );
+  });
+
+  it("distinguishes an empty DiagramView from an empty Global schema", () => {
+    const template = demoSchemaGraph.views[0];
+    if (!template) throw new Error("Missing view fixture.");
+    const emptyView = {
+      ...template,
+      key: 'view:[null,"empty"]',
+      name: "empty",
+      visibleTableKeys: null,
+      visibleGroupKeys: null,
+      visibleSchemaNames: null,
+    };
+    const graph = { ...demoSchemaGraph, views: [...demoSchemaGraph.views, emptyView] };
+    const requestLayout = vi.fn();
+
+    render(
+      <BaseSchemaDiagram
+        graph={graph}
+        viewKey={emptyView.key}
+        detailLevel="FULL"
+        collapsedGroupKeys={new Set()}
+        selectionStore={createDiagramSelectionStore()}
+        sourceNavigationEnabled
+        onToggleGroup={vi.fn()}
+        onNavigateSource={vi.fn()}
+        requestLayout={requestLayout}
+      />,
+    );
+
+    expect(screen.getByText("No tables are visible in empty")).toBeVisible();
+    expect(requestLayout).not.toHaveBeenCalled();
+  });
+
   it("skips worker layout for an empty valid graph", async () => {
     const graph = await parseGraph("");
     const requestLayout = vi.fn();
     render(
       <BaseSchemaDiagram
         graph={graph}
+        viewKey="GLOBAL"
+        detailLevel="FULL"
         collapsedGroupKeys={new Set()}
         selectionStore={createDiagramSelectionStore()}
         sourceNavigationEnabled
@@ -342,6 +446,8 @@ describe("base schema diagram canvas", () => {
     const rendered = render(
       <BaseSchemaDiagram
         graph={firstGraph}
+        viewKey="GLOBAL"
+        detailLevel="FULL"
         collapsedGroupKeys={new Set()}
         selectionStore={selectionStore}
         sourceNavigationEnabled
@@ -354,6 +460,8 @@ describe("base schema diagram canvas", () => {
     rendered.rerender(
       <BaseSchemaDiagram
         graph={secondGraph}
+        viewKey="GLOBAL"
+        detailLevel="FULL"
         collapsedGroupKeys={new Set()}
         selectionStore={selectionStore}
         sourceNavigationEnabled
@@ -391,6 +499,8 @@ describe("base schema diagram canvas", () => {
     render(
       <BaseSchemaDiagram
         graph={graph}
+        viewKey="GLOBAL"
+        detailLevel="FULL"
         collapsedGroupKeys={new Set()}
         selectionStore={createDiagramSelectionStore()}
         sourceNavigationEnabled={false}

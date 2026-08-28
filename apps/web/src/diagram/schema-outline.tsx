@@ -5,9 +5,12 @@ import { useStore } from "zustand";
 import { createBaseDiagramProjection, formatMultiplicity } from "./projection.js";
 import type { DiagramSelectionStore } from "./selection-store.js";
 import type { DiagramSelection } from "./source-navigation.js";
+import type { DiagramVisibility } from "./types.js";
 
 export function SchemaOutline({
   graph,
+  visibility,
+  viewLabel,
   collapsedGroupKeys,
   selectionStore,
   sourceNavigationEnabled,
@@ -15,6 +18,8 @@ export function SchemaOutline({
   onNavigateSource,
 }: {
   readonly graph: SchemaGraph;
+  readonly visibility: DiagramVisibility;
+  readonly viewLabel: string;
   readonly collapsedGroupKeys: ReadonlySet<string>;
   readonly selectionStore: DiagramSelectionStore;
   readonly sourceNavigationEnabled: boolean;
@@ -33,6 +38,18 @@ export function SchemaOutline({
   const tableByKey = useMemo(
     () => new Map(graph.tables.map((table) => [table.key, table])),
     [graph.tables],
+  );
+  const visibleTables = useMemo(
+    () => graph.tables.filter((table) => visibility.tableKeys.has(table.key)),
+    [graph.tables, visibility.tableKeys],
+  );
+  const visibleGroups = useMemo(
+    () => graph.groups.filter((group) => visibility.groupKeys.has(group.key)),
+    [graph.groups, visibility.groupKeys],
+  );
+  const visibleReferences = useMemo(
+    () => graph.references.filter((reference) => visibility.referenceKeys.has(reference.key)),
+    [graph.references, visibility.referenceKeys],
   );
   const selectedTableDetailsRef = useRef<HTMLDetailsElement>(null);
 
@@ -56,23 +73,22 @@ export function SchemaOutline({
       aria-label="Schema outline"
     >
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-semibold text-white">Schema outline</h2>
+        <h2 className="font-semibold text-white">Schema outline · {viewLabel}</h2>
         <span className="text-xs text-slate-400">
-          {graph.tables.length} tables · {graph.groups.length} groups · {graph.references.length}{" "}
-          relationships
+          {formatInventory(visibleTables.length, visibleGroups.length, visibleReferences.length)}
         </span>
       </div>
       <p className="mt-2 text-xs text-slate-400">
         Focus an element in the diagram or use its line action to open the canonical source.
       </p>
 
-      {graph.groups.length > 0 ? (
+      {visibleGroups.length > 0 ? (
         <div className="mt-5">
           <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
             Table groups
           </h3>
           <ol className="mt-3 grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-            {graph.groups.map((group) => {
+            {visibleGroups.map((group) => {
               const groupSelection: DiagramSelection = {
                 elementKey: group.key,
                 kind: "group",
@@ -80,7 +96,10 @@ export function SchemaOutline({
               };
               const collapsed = collapsedGroupKeys.has(group.key);
               const qualifiedName = `${group.schemaName}.${group.name}`;
-              const memberNames = group.tableKeys.map(
+              const visibleMemberKeys = group.tableKeys.filter((tableKey) =>
+                visibility.tableKeys.has(tableKey),
+              );
+              const memberNames = visibleMemberKeys.map(
                 (tableKey) => tableByKey.get(tableKey)?.name ?? tableKey,
               );
               return (
@@ -90,7 +109,7 @@ export function SchemaOutline({
                 >
                   <p className="font-semibold text-slate-100">{qualifiedName}</p>
                   <p className="mt-1 text-slate-400">
-                    {group.tableKeys.length} tables · Color {group.color ?? "default"} ·{" "}
+                    {visibleMemberKeys.length} tables · Color {group.color ?? "default"} ·{" "}
                     {collapsed ? "Collapsed" : "Expanded"}
                   </p>
                   <p className="mt-2 break-words text-slate-300">
@@ -131,7 +150,7 @@ export function SchemaOutline({
         <div>
           <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Tables</h3>
           <ol className="mt-3 space-y-2">
-            {graph.tables.map((table) => {
+            {visibleTables.map((table) => {
               const tableSelection = selectionForTable(table);
               const selectedTable = selection?.tableKeys.includes(table.key) ?? false;
               const projectedTable = nodeByTableKey.get(table.key);
@@ -216,11 +235,11 @@ export function SchemaOutline({
           <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
             Relationships
           </h3>
-          {graph.references.length === 0 ? (
+          {visibleReferences.length === 0 ? (
             <p className="mt-3 text-sm text-slate-400">No relationships.</p>
           ) : (
             <ol className="mt-3 space-y-2">
-              {graph.references.map((reference) => {
+              {visibleReferences.map((reference) => {
                 const referenceSelection = selectionForReference(reference);
                 return (
                   <li
@@ -346,4 +365,12 @@ function formatReference(
       return `${table ? qualifiedTableName(table) : endpoint.tableKey}.(${columns.join(", ")}) ${formatMultiplicity(endpoint)}`;
     })
     .join(" ↔ ");
+}
+
+function formatInventory(tables: number, groups: number, references: number): string {
+  return `${tables} ${plural(tables, "table")} · ${groups} ${plural(groups, "group")} · ${references} ${plural(references, "relationship")}`;
+}
+
+function plural(count: number, noun: string): string {
+  return count === 1 ? noun : `${noun}s`;
 }

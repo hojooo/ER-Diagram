@@ -33,6 +33,40 @@ const VALID_SOURCE = "Table users {\r\n  id int [pk]\r\n}\r\n";
 const SECOND_VALID_SOURCE = "Table users {\r\n  id int [pk]\r\n  email varchar\r\n}\r\n";
 const INVALID_SOURCE = "Table users {\r\n  id int [pk]\r\n";
 const SERVER_SOURCE = "Table server_state { id int [pk] }";
+const VIEW_SOURCE = `TableGroup Identity {
+  accounts
+  profiles
+}
+
+Table accounts {
+  id int [pk]
+}
+
+Table profiles {
+  id int [pk]
+  account_id int
+}
+
+Table orders {
+  id int [pk]
+  account_id int
+}
+
+Ref profile_account: profiles.account_id > accounts.id
+Ref order_account: orders.account_id > accounts.id
+
+DiagramView identity_only {
+  Tables {
+    accounts
+    profiles
+  }
+  TableGroups {
+    Identity
+  }
+  Schemas {
+  }
+}
+`;
 
 const navigateToDiagnostic = vi.fn();
 const replaceSource = vi.fn();
@@ -225,6 +259,44 @@ describe("DBML source workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Focus source editor" }));
     expect(focusSource).toHaveBeenCalledOnce();
   });
+
+  it("keeps view-specific collapse and LOD state while requiring explicit Global navigation", async () => {
+    const api = new SourceProjectApi(projectState(VIEW_SOURCE, 1, "VALID"));
+    const { parserClient } = renderWorkspace(api);
+    const editor = (await screen.findByLabelText("DBML source editor")) as HTMLTextAreaElement;
+    await findWorkspaceStatus("Draft valid");
+    const initialParseCalls = parserClient.parseCalls;
+
+    const viewSelector = screen.getByRole("combobox", { name: "Diagram view" });
+    const identityOption = within(viewSelector).getByRole("option", { name: "identity_only" });
+    fireEvent.change(viewSelector, { target: { value: identityOption.getAttribute("value") } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Detail level" }), {
+      target: { value: "KEYS_ONLY" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Toggle first fake group" }));
+    expect(screen.getByTestId("fake-diagram-view")).toHaveTextContent("identity_only");
+    expect(screen.getByTestId("fake-diagram-detail")).toHaveTextContent("KEYS_ONLY");
+    expect(screen.getByTestId("fake-diagram-collapse-count")).toHaveTextContent("1");
+
+    fireEvent.change(viewSelector, { target: { value: "GLOBAL" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Detail level" }), {
+      target: { value: "NAME_ONLY" },
+    });
+    fireEvent.change(viewSelector, { target: { value: identityOption.getAttribute("value") } });
+    expect(screen.getByTestId("fake-diagram-detail")).toHaveTextContent("KEYS_ONLY");
+    expect(screen.getByTestId("fake-diagram-collapse-count")).toHaveTextContent("1");
+
+    const hiddenTableOffset = VIEW_SOURCE.indexOf("Table orders") + "Table ".length;
+    editor.setSelectionRange(hiddenTableOffset, hiddenTableOffset);
+    fireEvent.select(editor);
+    expect(await screen.findByText("This symbol is hidden by identity_only.")).toBeVisible();
+    expect(screen.getByTestId("fake-diagram-selection")).toHaveTextContent("none");
+    fireEvent.click(screen.getByRole("button", { name: "Show in Global" }));
+    expect(viewSelector).toHaveValue("GLOBAL");
+    expect(screen.getByTestId("fake-diagram-selection")).toHaveTextContent("table");
+    expect(api.saveDraftInputs).toHaveLength(0);
+    expect(parserClient.parseCalls).toBe(initialParseCalls);
+  });
 });
 
 describe("Monaco DBML adapter", () => {
@@ -394,8 +466,10 @@ const FakeSourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(
 
 class FakeParserClient implements DbmlParserWorkerClient {
   readonly dispose = vi.fn();
+  parseCalls = 0;
 
   async parse(source: string): Promise<DbmlWorkerParseResult> {
+    this.parseCalls += 1;
     const parsed = await parseDbmlV2(source);
     if (!parsed.ok) {
       return {
@@ -423,8 +497,12 @@ class FakeParserClient implements DbmlParserWorkerClient {
 
 function FakeSchemaDiagram({
   graph,
+  viewKey,
+  detailLevel,
+  collapsedGroupKeys,
   selectionStore,
   sourceNavigationEnabled,
+  onToggleGroup,
   onNavigateSource,
 }: BaseSchemaDiagramProps) {
   const selection = useStore(selectionStore, (state) => state.selection);
@@ -432,6 +510,18 @@ function FakeSchemaDiagram({
   return (
     <div role="application" aria-label="ER diagram canvas">
       <output data-testid="fake-diagram-selection">{selection?.kind ?? "none"}</output>
+      <output data-testid="fake-diagram-view">
+        {viewKey === "GLOBAL"
+          ? "Global"
+          : (graph.views.find((view) => view.key === viewKey)?.name ?? "Unknown")}
+      </output>
+      <output data-testid="fake-diagram-detail">{detailLevel}</output>
+      <output data-testid="fake-diagram-collapse-count">{collapsedGroupKeys.size}</output>
+      {graph.groups[0] ? (
+        <button type="button" onClick={() => onToggleGroup(graph.groups[0]?.key ?? "")}>
+          Toggle first fake group
+        </button>
+      ) : null}
       {table ? (
         <button
           type="button"
@@ -528,18 +618,19 @@ function renderWorkspace(api: SourceProjectApi) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+  const parserClient = new FakeParserClient();
   const router = createMemoryRouter(
     createAppRoutes({
       workspaceAdapters: {
         SourceEditor: FakeSourceEditor,
         SchemaDiagram: FakeSchemaDiagram,
-        createParserClient: () => new FakeParserClient(),
+        createParserClient: () => parserClient,
       },
     }),
     { initialEntries: [`/projects/${PROJECT_ID}`] },
   );
   const rendered = render(<App api={api} queryClient={queryClient} router={router} />);
-  return { ...rendered, queryClient, router };
+  return { ...rendered, queryClient, router, parserClient };
 }
 
 function mutation(

@@ -92,7 +92,10 @@ import {
   retainAvailableCollapsedGroups,
   toggleCollapsedGroup,
 } from "../src/diagram/collapse-state.js";
-import { createGroupedDiagramProjection } from "../src/diagram/projection.js";
+import {
+  createDiagramVisibility,
+  createGroupedDiagramProjection,
+} from "../src/diagram/projection.js";
 import { SchemaOutline } from "../src/diagram/schema-outline.js";
 import { createDiagramSelectionStore } from "../src/diagram/selection-store.js";
 import {
@@ -337,6 +340,8 @@ describe("TableGroup navigation and collapse interactions", () => {
     render(
       <BaseSchemaDiagram
         graph={graph}
+        viewKey="GLOBAL"
+        detailLevel="FULL"
         collapsedGroupKeys={new Set()}
         selectionStore={createDiagramSelectionStore()}
         sourceNavigationEnabled
@@ -377,6 +382,8 @@ describe("TableGroup navigation and collapse interactions", () => {
     render(
       <BaseSchemaDiagram
         graph={unsafeColorGraph}
+        viewKey="GLOBAL"
+        detailLevel="FULL"
         collapsedGroupKeys={new Set()}
         selectionStore={createDiagramSelectionStore()}
         sourceNavigationEnabled
@@ -408,6 +415,8 @@ describe("TableGroup navigation and collapse interactions", () => {
     render(
       <BaseSchemaDiagram
         graph={graph}
+        viewKey="GLOBAL"
+        detailLevel="FULL"
         collapsedGroupKeys={collapsedGroupKeys}
         selectionStore={selectionStore}
         sourceNavigationEnabled
@@ -449,6 +458,8 @@ describe("TableGroup navigation and collapse interactions", () => {
     const rendered = render(
       <SchemaOutline
         graph={graph}
+        visibility={createDiagramVisibility(graph, "GLOBAL")}
+        viewLabel="Global"
         collapsedGroupKeys={new Set()}
         selectionStore={selectionStore}
         sourceNavigationEnabled
@@ -479,6 +490,8 @@ describe("TableGroup navigation and collapse interactions", () => {
     rendered.rerender(
       <SchemaOutline
         graph={graph}
+        visibility={createDiagramVisibility(graph, "GLOBAL")}
+        viewLabel="Global"
         collapsedGroupKeys={new Set()}
         selectionStore={selectionStore}
         sourceNavigationEnabled={false}
@@ -505,6 +518,8 @@ describe("TableGroup navigation and collapse interactions", () => {
     const rendered = render(
       <BaseSchemaDiagram
         graph={graph}
+        viewKey="GLOBAL"
+        detailLevel="FULL"
         collapsedGroupKeys={new Set()}
         selectionStore={createDiagramSelectionStore()}
         sourceNavigationEnabled
@@ -517,6 +532,8 @@ describe("TableGroup navigation and collapse interactions", () => {
     rendered.rerender(
       <BaseSchemaDiagram
         graph={graph}
+        viewKey="GLOBAL"
+        detailLevel="FULL"
         collapsedGroupKeys={new Set([group.key])}
         selectionStore={createDiagramSelectionStore()}
         sourceNavigationEnabled

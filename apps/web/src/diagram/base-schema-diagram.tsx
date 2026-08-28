@@ -18,9 +18,15 @@ import {
   TableDiagramNodeComponent,
 } from "./diagram-components.js";
 import { requestWorkerLayout } from "./layout-worker-client.js";
-import { createGroupedDiagramProjection } from "./projection.js";
+import {
+  createDiagramProjection,
+  createDiagramVisibility,
+  GLOBAL_VIEW_KEY,
+  listDiagramViews,
+} from "./projection.js";
 import type { DiagramSelection } from "./source-navigation.js";
 import type {
+  DiagramFocusRequest,
   DiagramProjection,
   GroupDiagramNode,
   SchemaDiagramEdge,
@@ -38,7 +44,10 @@ type LayoutStatus = "LAYING_OUT" | "READY" | "ERROR";
 
 export function BaseSchemaDiagram({
   graph,
+  viewKey,
+  detailLevel,
   collapsedGroupKeys,
+  focusRequest = null,
   selectionStore,
   sourceNavigationEnabled,
   onToggleGroup,
@@ -46,8 +55,18 @@ export function BaseSchemaDiagram({
   requestLayout = requestWorkerLayout,
 }: BaseSchemaDiagramProps) {
   const projection = useMemo(
-    () => createGroupedDiagramProjection(graph, collapsedGroupKeys),
-    [collapsedGroupKeys, graph],
+    () =>
+      createDiagramProjection(graph, {
+        viewKey,
+        collapsedGroupKeys,
+        lod: detailLevel,
+      }),
+    [collapsedGroupKeys, detailLevel, graph, viewKey],
+  );
+  const visibility = useMemo(() => createDiagramVisibility(graph, viewKey), [graph, viewKey]);
+  const viewLabel = useMemo(
+    () => listDiagramViews(graph).find((view) => view.key === viewKey)?.label ?? "Global",
+    [graph, viewKey],
   );
   const [displayProjection, setDisplayProjection] = useState(projection);
   const [layoutStatus, setLayoutStatus] = useState<LayoutStatus>(
@@ -62,6 +81,7 @@ export function BaseSchemaDiagram({
   const requestGenerationRef = useRef(0);
   const activeLayoutRequestRef = useRef("");
   const fittedLayoutRequestRef = useRef<string | null>(null);
+  const focusedRequestRef = useRef<number | null>(null);
   const referenceByKey = useMemo(
     () => new Map(graph.references.map((reference) => [reference.key, reference])),
     [graph.references],
@@ -125,6 +145,27 @@ export function BaseSchemaDiagram({
     return () => cancelAnimationFrame(animationFrame);
   }, [displayProjection, flowInstance, selection]);
 
+  useEffect(() => {
+    if (
+      !focusRequest ||
+      focusedRequestRef.current === focusRequest.requestId ||
+      layoutStatus === "LAYING_OUT" ||
+      !settledLayoutRequestId ||
+      !flowInstance ||
+      displayProjection.nodes.length === 0
+    ) {
+      return;
+    }
+    const selectedNodeIds = representativeNodeIdsForFocus(displayProjection, focusRequest);
+    const selectedNodes = displayProjection.nodes.filter((node) => selectedNodeIds.has(node.id));
+    if (selectedNodes.length === 0) return;
+    focusedRequestRef.current = focusRequest.requestId;
+    const animationFrame = requestAnimationFrame(() => {
+      void flowInstance.fitView({ nodes: selectedNodes, padding: 0.35, duration: 250 });
+    });
+    return () => cancelAnimationFrame(animationFrame);
+  }, [displayProjection, flowInstance, focusRequest, layoutStatus, settledLayoutRequestId]);
+
   const activateElement = useCallback(
     (nextSelection: DiagramSelection) => {
       selectionStore.getState().setSelection(nextSelection);
@@ -175,13 +216,19 @@ export function BaseSchemaDiagram({
     };
   }, [displayProjection, selection]);
 
-  if (projection.nodes.length === 0) {
+  if (visibility.tableKeys.size === 0) {
     return (
       <div className="grid min-h-[32rem] place-items-center bg-slate-950 p-6 text-center">
         <div>
-          <p className="font-semibold text-slate-100">No tables in this valid draft</p>
+          <p className="font-semibold text-slate-100">
+            {viewKey === GLOBAL_VIEW_KEY
+              ? "No tables in this valid draft"
+              : `No tables are visible in ${viewLabel}`}
+          </p>
           <p className="mt-2 text-sm text-slate-400">
-            Add a DBML table to render the read-only ER diagram.
+            {viewKey === GLOBAL_VIEW_KEY
+              ? "Add a DBML table to render the read-only ER diagram."
+              : "Update the DiagramView filters in DBML or switch to another view."}
           </p>
         </div>
       </div>
@@ -264,6 +311,29 @@ export function BaseSchemaDiagram({
       </DiagramInteractionContext.Provider>
     </div>
   );
+}
+
+function representativeNodeIdsForFocus(
+  projection: DiagramProjection,
+  focusRequest: DiagramFocusRequest,
+): ReadonlySet<string> {
+  const result = new Set<string>();
+  const nodeById = new Map(projection.nodes.map((node) => [node.id, node]));
+  for (const groupKey of focusRequest.groupKeys) {
+    if (nodeById.get(groupKey)?.type === "group") result.add(groupKey);
+  }
+  for (const tableKey of focusRequest.tableKeys) {
+    if (nodeById.get(tableKey)?.type === "table") {
+      result.add(tableKey);
+      continue;
+    }
+    const representative = projection.nodes.find(
+      (node) =>
+        node.type === "group" && node.data.collapsed && node.data.tableKeys.includes(tableKey),
+    );
+    if (representative) result.add(representative.id);
+  }
+  return result;
 }
 
 function representativeNodeIds(

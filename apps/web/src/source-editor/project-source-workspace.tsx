@@ -5,7 +5,13 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useBlocker } from "react-router-dom";
 
 import type { BaseSchemaDiagramComponent } from "../diagram/base-schema-diagram-contract.js";
-import { retainAvailableCollapsedGroups, toggleCollapsedGroup } from "../diagram/collapse-state.js";
+import { toggleCollapsedGroup } from "../diagram/collapse-state.js";
+import { DiagramWorkspaceControls } from "../diagram/diagram-workspace-controls.js";
+import {
+  createDiagramVisibility,
+  GLOBAL_VIEW_KEY,
+  listDiagramViews,
+} from "../diagram/projection.js";
 import { SchemaOutline } from "../diagram/schema-outline.js";
 import { createDiagramSelectionStore } from "../diagram/selection-store.js";
 import {
@@ -14,6 +20,20 @@ import {
   findDiagramSelectionAtCursor,
   type SourceCursorPosition,
 } from "../diagram/source-navigation.js";
+import type {
+  DiagramFocusRequest,
+  DiagramLod,
+  DiagramSearchResult,
+  DiagramViewKey,
+  DiagramVisibility,
+} from "../diagram/types.js";
+import {
+  createDefaultDiagramViewSessionState,
+  type DiagramViewSessions,
+  reconcileDiagramViewSessions,
+  resolveDiagramViewKey,
+  updateDiagramViewSession,
+} from "../diagram/view-session-state.js";
 import type { ProjectApi } from "../projects/project-api.js";
 import { projectQueryKeys } from "../projects/project-queries.js";
 import type { SourceEditorComponent, SourceEditorHandle } from "./editor-contract.js";
@@ -59,15 +79,41 @@ export function ProjectSourceWorkspace({
   const [sessionSnapshot, setSessionSnapshot] = useState<SourceSessionSnapshot | null>(null);
   const sessionRef = useRef<SourceSessionController | null>(null);
   const editorRef = useRef<SourceEditorHandle>(null);
+  const lastCursorPositionRef = useRef<SourceCursorPosition | null>(null);
   const flushedBlockedNavigationRef = useRef(false);
+  const focusRequestIdRef = useRef(0);
   const [selectionStore] = useState(createDiagramSelectionStore);
-  const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<ReadonlySet<string>>(new Set());
+  const [activeViewKey, setActiveViewKey] = useState<DiagramViewKey>(GLOBAL_VIEW_KEY);
+  const [viewSessions, setViewSessions] = useState<DiagramViewSessions>(new Map());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [focusRequest, setFocusRequest] = useState<DiagramFocusRequest | null>(null);
+  const [hiddenSourceSelection, setHiddenSourceSelection] = useState<{
+    selection: DiagramSelection;
+    viewLabel: string;
+  } | null>(null);
   const projectId = initialState.project.id;
   const initialStateRef = useRef(initialState);
   const EditorComponent = adapters?.SourceEditor ?? LazyMonacoDbmlEditor;
   const DiagramComponent = adapters?.SchemaDiagram ?? LazyBaseSchemaDiagram;
   const activeGraph = sessionSnapshot?.activeGraph ?? null;
   const sourceNavigationEnabled = sessionSnapshot?.activeGraphSource === "CURRENT_DRAFT";
+  const resolvedViewKey = activeGraph
+    ? resolveDiagramViewKey(activeGraph, activeViewKey)
+    : GLOBAL_VIEW_KEY;
+  const activeViewSession =
+    viewSessions.get(resolvedViewKey) ?? createDefaultDiagramViewSessionState();
+  const visibility = useMemo(
+    () => (activeGraph ? createDiagramVisibility(activeGraph, resolvedViewKey) : null),
+    [activeGraph, resolvedViewKey],
+  );
+  const viewLabel = useMemo(
+    () =>
+      activeGraph
+        ? (listDiagramViews(activeGraph).find((view) => view.key === resolvedViewKey)?.label ??
+          "Global")
+        : "Global",
+    [activeGraph, resolvedViewKey],
+  );
   const navigationIndex = useMemo(
     () => (activeGraph ? createDiagramNavigationIndex(activeGraph) : null),
     [activeGraph],
@@ -77,13 +123,25 @@ export function ProjectSourceWorkspace({
     (position: SourceCursorPosition) => {
       if (!sourceNavigationEnabled || !navigationIndex) {
         selectionStore.getState().setSelection(null);
+        setHiddenSourceSelection(null);
         return;
       }
-      selectionStore
-        .getState()
-        .setSelection(findDiagramSelectionAtCursor(navigationIndex, position));
+      lastCursorPositionRef.current = position;
+      const selection = findDiagramSelectionAtCursor(navigationIndex, position);
+      if (!selection) {
+        selectionStore.getState().setSelection(null);
+        setHiddenSourceSelection(null);
+        return;
+      }
+      if (visibility && isSelectionVisible(selection, visibility)) {
+        selectionStore.getState().setSelection(selection);
+        setHiddenSourceSelection(null);
+        return;
+      }
+      selectionStore.getState().setSelection(null);
+      setHiddenSourceSelection({ selection, viewLabel });
     },
-    [navigationIndex, selectionStore, sourceNavigationEnabled],
+    [navigationIndex, selectionStore, sourceNavigationEnabled, viewLabel, visibility],
   );
 
   const handleNavigateSource = useCallback(
@@ -95,25 +153,102 @@ export function ProjectSourceWorkspace({
     [activeGraph, sourceNavigationEnabled],
   );
 
-  const handleToggleGroup = useCallback((groupKey: string) => {
-    setCollapsedGroupKeys((current) => toggleCollapsedGroup(current, groupKey));
+  const handleToggleGroup = useCallback(
+    (groupKey: string) => {
+      setViewSessions((current) => {
+        const state = current.get(resolvedViewKey) ?? createDefaultDiagramViewSessionState();
+        return updateDiagramViewSession(current, resolvedViewKey, {
+          ...state,
+          collapsedGroupKeys: toggleCollapsedGroup(state.collapsedGroupKeys, groupKey),
+        });
+      });
+    },
+    [resolvedViewKey],
+  );
+
+  const handleViewChange = useCallback((viewKey: DiagramViewKey) => {
+    setActiveViewKey(viewKey);
+    setFocusRequest(null);
   }, []);
+
+  const handleDetailLevelChange = useCallback(
+    (detailLevel: DiagramLod) => {
+      setViewSessions((current) => {
+        const state = current.get(resolvedViewKey) ?? createDefaultDiagramViewSessionState();
+        return updateDiagramViewSession(current, resolvedViewKey, { ...state, detailLevel });
+      });
+      setFocusRequest(null);
+    },
+    [resolvedViewKey],
+  );
+
+  const handleActivateSearchResult = useCallback(
+    (result: DiagramSearchResult) => {
+      setHiddenSourceSelection(null);
+      if (result.kind === "schema") {
+        selectionStore.getState().setSelection(null);
+        focusRequestIdRef.current += 1;
+        setFocusRequest({
+          requestId: focusRequestIdRef.current,
+          tableKeys: result.tableKeys,
+          groupKeys: result.groupKeys,
+        });
+        return;
+      }
+      setFocusRequest(null);
+      selectionStore.getState().setSelection({
+        elementKey: result.elementKey,
+        kind: result.kind,
+        tableKeys: result.tableKeys,
+      });
+    },
+    [selectionStore],
+  );
+
+  const handleShowHiddenSelectionInGlobal = useCallback(() => {
+    if (!hiddenSourceSelection) return;
+    setActiveViewKey(GLOBAL_VIEW_KEY);
+    setFocusRequest(null);
+    selectionStore.getState().setSelection(hiddenSourceSelection.selection);
+    setHiddenSourceSelection(null);
+  }, [hiddenSourceSelection, selectionStore]);
 
   useEffect(() => {
     const currentSelection = selectionStore.getState().selection;
-    if (!activeGraph || (currentSelection && !activeGraph.sourceMap[currentSelection.elementKey])) {
+    if (
+      !activeGraph ||
+      (currentSelection &&
+        (!activeGraph.sourceMap[currentSelection.elementKey] ||
+          (visibility && !isSelectionVisible(currentSelection, visibility))))
+    ) {
       selectionStore.getState().setSelection(null);
     }
-  }, [activeGraph, selectionStore]);
+  }, [activeGraph, selectionStore, visibility]);
 
   useEffect(() => {
-    const availableGroupKeys = new Set(activeGraph?.groups.map((group) => group.key) ?? []);
-    setCollapsedGroupKeys((current) => retainAvailableCollapsedGroups(current, availableGroupKeys));
+    if (!activeGraph) return;
+    setViewSessions((current) => reconcileDiagramViewSessions(activeGraph, current));
+    setActiveViewKey((current) => resolveDiagramViewKey(activeGraph, current));
+    setFocusRequest(null);
   }, [activeGraph]);
 
   useEffect(() => {
+    if (!sourceNavigationEnabled) {
+      setHiddenSourceSelection(null);
+      return;
+    }
+    const position = lastCursorPositionRef.current;
+    if (position) handleCursorPositionChange(position);
+  }, [handleCursorPositionChange, sourceNavigationEnabled]);
+
+  useEffect(() => {
     if (!projectId) return;
-    setCollapsedGroupKeys(new Set());
+    setActiveViewKey(GLOBAL_VIEW_KEY);
+    setViewSessions(new Map());
+    setSearchQuery("");
+    setFocusRequest(null);
+    setHiddenSourceSelection(null);
+    lastCursorPositionRef.current = null;
   }, [projectId]);
 
   useEffect(() => {
@@ -234,11 +369,21 @@ export function ProjectSourceWorkspace({
 
           <DiagramPanel
             snapshot={sessionSnapshot}
-            collapsedGroupKeys={collapsedGroupKeys}
+            visibility={visibility}
+            viewKey={resolvedViewKey}
+            viewLabel={viewLabel}
+            detailLevel={activeViewSession.detailLevel}
+            collapsedGroupKeys={activeViewSession.collapsedGroupKeys}
+            focusRequest={focusRequest}
+            searchQuery={searchQuery}
             selectionStore={selectionStore}
             DiagramComponent={DiagramComponent}
             sourceNavigationEnabled={sourceNavigationEnabled}
             onToggleGroup={handleToggleGroup}
+            onViewChange={handleViewChange}
+            onDetailLevelChange={handleDetailLevelChange}
+            onSearchQueryChange={setSearchQuery}
+            onActivateSearchResult={handleActivateSearchResult}
             onNavigateSource={handleNavigateSource}
             onFocusSource={() => editorRef.current?.focus()}
           />
@@ -289,15 +434,32 @@ export function ProjectSourceWorkspace({
           />
         </aside>
 
-        {activeGraph ? (
+        {activeGraph && visibility ? (
           <SchemaOutline
             graph={activeGraph}
-            collapsedGroupKeys={collapsedGroupKeys}
+            visibility={visibility}
+            viewLabel={viewLabel}
+            collapsedGroupKeys={activeViewSession.collapsedGroupKeys}
             selectionStore={selectionStore}
             sourceNavigationEnabled={sourceNavigationEnabled}
             onToggleGroup={handleToggleGroup}
             onNavigateSource={handleNavigateSource}
           />
+        ) : null}
+        {hiddenSourceSelection ? (
+          <section
+            className="rounded-2xl border border-amber-300/50 bg-amber-950/30 p-4 text-sm text-amber-100"
+            role="status"
+          >
+            <p>This symbol is hidden by {hiddenSourceSelection.viewLabel}.</p>
+            <button
+              className="mt-3 min-h-10 rounded-lg border border-amber-200 px-3 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200"
+              type="button"
+              onClick={handleShowHiddenSelectionInGlobal}
+            >
+              Show in Global
+            </button>
+          </section>
         ) : null}
       </div>
 
@@ -313,20 +475,40 @@ export function ProjectSourceWorkspace({
 
 function DiagramPanel({
   snapshot,
+  visibility,
+  viewKey,
+  viewLabel,
+  detailLevel,
   collapsedGroupKeys,
+  focusRequest,
+  searchQuery,
   selectionStore,
   DiagramComponent,
   sourceNavigationEnabled,
   onToggleGroup,
+  onViewChange,
+  onDetailLevelChange,
+  onSearchQueryChange,
+  onActivateSearchResult,
   onNavigateSource,
   onFocusSource,
 }: {
   readonly snapshot: SourceSessionSnapshot;
+  readonly visibility: DiagramVisibility | null;
+  readonly viewKey: DiagramViewKey;
+  readonly viewLabel: string;
+  readonly detailLevel: DiagramLod;
   readonly collapsedGroupKeys: ReadonlySet<string>;
+  readonly focusRequest: DiagramFocusRequest | null;
+  readonly searchQuery: string;
   readonly selectionStore: ReturnType<typeof createDiagramSelectionStore>;
   readonly DiagramComponent: BaseSchemaDiagramComponent;
   readonly sourceNavigationEnabled: boolean;
   readonly onToggleGroup: (groupKey: string) => void;
+  readonly onViewChange: (viewKey: DiagramViewKey) => void;
+  readonly onDetailLevelChange: (detailLevel: DiagramLod) => void;
+  readonly onSearchQueryChange: (query: string) => void;
+  readonly onActivateSearchResult: (result: DiagramSearchResult) => void;
   readonly onNavigateSource: (selection: DiagramSelection) => void;
   readonly onFocusSource: () => void;
 }) {
@@ -348,23 +530,42 @@ function DiagramPanel({
               : "Waiting for a valid schema graph."}
         </p>
       </div>
-      {graph ? (
-        <Suspense
-          fallback={
-            <div className="grid min-h-[32rem] place-items-center bg-slate-950 text-slate-300">
-              <p aria-live="polite">Loading local diagram assets…</p>
-            </div>
-          }
-        >
-          <DiagramComponent
+      {graph && visibility ? (
+        <>
+          <DiagramWorkspaceControls
             graph={graph}
-            collapsedGroupKeys={collapsedGroupKeys}
-            selectionStore={selectionStore}
-            sourceNavigationEnabled={sourceNavigationEnabled}
-            onToggleGroup={onToggleGroup}
-            onNavigateSource={onNavigateSource}
+            visibility={visibility}
+            viewKey={viewKey}
+            detailLevel={detailLevel}
+            searchQuery={searchQuery}
+            onSearchQueryChange={onSearchQueryChange}
+            onActivateSearchResult={onActivateSearchResult}
+            onViewChange={onViewChange}
+            onDetailLevelChange={onDetailLevelChange}
           />
-        </Suspense>
+          <Suspense
+            fallback={
+              <div className="grid min-h-[32rem] place-items-center bg-slate-950 text-slate-300">
+                <p aria-live="polite">Loading local diagram assets…</p>
+              </div>
+            }
+          >
+            <DiagramComponent
+              graph={graph}
+              viewKey={viewKey}
+              detailLevel={detailLevel}
+              collapsedGroupKeys={collapsedGroupKeys}
+              focusRequest={focusRequest}
+              selectionStore={selectionStore}
+              sourceNavigationEnabled={sourceNavigationEnabled}
+              onToggleGroup={onToggleGroup}
+              onNavigateSource={onNavigateSource}
+            />
+          </Suspense>
+          <p className="sr-only" aria-live="polite">
+            Showing {viewLabel} at {detailLevel.toLowerCase().replaceAll("_", " ")} detail.
+          </p>
+        </>
       ) : (
         <div className="grid min-h-[32rem] place-items-center bg-slate-950 p-6 text-center">
           <div>
@@ -688,6 +889,12 @@ function validationLabel(status: SourceValidationStatus): string {
     INVALID: "Draft invalid",
     ERROR: "Validation error",
   }[status];
+}
+
+function isSelectionVisible(selection: DiagramSelection, visibility: DiagramVisibility): boolean {
+  if (selection.kind === "group") return visibility.groupKeys.has(selection.elementKey);
+  if (selection.kind === "reference") return visibility.referenceKeys.has(selection.elementKey);
+  return selection.tableKeys.every((tableKey) => visibility.tableKeys.has(tableKey));
 }
 
 const secondaryButtonClass =
