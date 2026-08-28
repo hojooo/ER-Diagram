@@ -241,9 +241,12 @@ P2 항목은 P0 요구사항으로 해석하지 않는다. 특히 database conne
 - generated DBML preview
 - semantic inventory diff
 - conversion diagnostics
+- `PARTIAL`·`UNSUPPORTED` 손실 확인과 DML/COPY 제외 확인
 - `Create New Project`, `Replace Current Draft`, `Cancel`
 
-P0에서는 기존 schema와 SQL을 자동 merge하지 않는다. replace 전 자동 revision을 만들고 사용자가 명시적으로 승인한다.
+P0에서는 기존 schema와 SQL을 자동 merge하지 않는다. 새 project preview는 stateless하며 Apply 전에는
+project나 artifact를 만들지 않는다. Replace는 이미 저장된 current revision을 rollback 기준으로 유지하고
+사용자가 명시적으로 승인한 뒤 새 checkpoint revision을 만든다.
 
 ### 9.4 Export
 
@@ -272,9 +275,13 @@ P0에서는 기존 schema와 SQL을 자동 merge하지 않는다. replace 전 �
 4. 원본 SQL parser model과 candidate DBML graph를 같은 canonical semantics로 비교한다.
 5. statement와 nested clause를 `EXACT`, `NORMALIZED`, `PARTIAL`, `UNSUPPORTED`, `ERROR`로
    분류한다.
-6. 사용자가 report와 generated DBML을 확인한다.
-7. 확인한 경우에만 new project를 만들거나 current draft를 교체한다.
-8. 교체 전 기존 draft와 layout을 revision으로 보존한다.
+6. 사용자는 SQL source, generated DBML, semantic inventory와 conversion report를 확인한다.
+7. `PARTIAL`·`UNSUPPORTED` 손실과 DML/COPY 제외가 있으면 각각 독립적으로 확인한다.
+8. 확인한 경우에만 new project를 원자적으로 만들거나 current draft를 교체한다.
+9. 새 project의 최초 revision은 `VALID + SQL_IMPORT` revision 1이며 project, revision, last-valid pointer와
+   direct `APPLIED` artifact를 하나의 transaction으로 만든다.
+10. Replace 진입 전 source와 layout pending write를 flush하고 모두 `SAVED`인 경우에만 import 화면으로
+    이동한다. 기존 current revision과 layout은 rollback 기준으로 보존한다.
 
 ### 10.3 Source 직접 편집
 
@@ -412,6 +419,8 @@ UI는 각 construct의 지원 수준을 capability badge와 도움말로 공개�
 | `SQLI-009` | P0 | P0는 기존 DBML과 import SQL의 자동 merge를 제공하지 않는다. | UI는 new project 또는 replace만 제공한다. |
 | `SQLI-010` | P0 | `INSERT`, `UPDATE`, `DELETE`, `COPY`와 data payload를 schema로 가져오지 않는다. | DML은 별도 `UNSUPPORTED_DATA_STATEMENT`로 보고하고, 사용자가 확인한 경우에만 DDL 부분을 적용한다. |
 | `SQLI-011` | P0 | DML이 포함된 입력의 original SQL 보존은 기본적으로 끈다. | 사용자가 명시적으로 선택하지 않으면 preview 종료 후 row data가 durable store에 남지 않는다. |
+| `SQLI-012` | P0 | 새 project import preview는 stateless다. | 실패·취소·미적용 preview는 project, revision 또는 artifact를 만들지 않고, Apply가 성공할 때만 revision 1의 project와 direct `APPLIED` artifact를 원자적으로 저장한다. |
+| `SQLI-013` | P0 | Preview UI는 손실 가능성과 data 제외를 독립적으로 확인한다. | `PARTIAL`·`UNSUPPORTED`가 있으면 loss acknowledgement, DML/COPY가 있으면 DDL-only acknowledgement가 각각 필요하다. |
 
 `ConversionReport` version 1은 statement와 clause의 UTF-16 half-open source range를 함께
 제공한다. Dependency-free source analyzer는 이 범위와 capability evidence만 계산하며 PostgreSQL·MySQL
@@ -458,6 +467,23 @@ parse하여 report, record-free candidate와 preview hash를 재생성한다. St
 Candidate가 current draft와 byte-identical해도 import 이력을 보존하기 위해 revision을 생략하지 않는다.
 Revision insert, project draft·last-valid pointer update, artifact `APPLIED` 전이와 retention pruning은 하나의
 transaction으로 commit하거나 rollback하며 layout row와 `layoutRevisionNo`는 변경하지 않는다.
+
+새 project flow의 `POST /api/v1/sql-import/preview`는 project ID와 schema revision 없이 conversion evidence를
+계산하는 stateless endpoint다. 성공·실패 모두 report를 포함한 HTTP `200`을 반환하지만 SQLite에는
+artifact를 저장하지 않는다. `SQL_IMPORT_CREATE_PREVIEW_VERSION=1` hash는 dialect, source/candidate hash,
+versioned report, initial `REJECT` policy와 retention 선택을 보호하고 project name과 Apply 시점의 DML 승인은
+포함하지 않는다.
+
+`CREATE_FROM_SQL_IMPORT` Apply는 SQL을 다시 parse해 stateless preview evidence를 재검증한 뒤 normalized
+project name, schema element와 data policy가 모두 유효한 경우에만 transaction을 시작한다. Project,
+`VALID + SQL_IMPORT` revision 1, last-valid pointer와 `CREATE_PROJECT` variant의 direct `APPLIED` artifact는
+함께 commit하거나 모두 rollback한다. `RETAIN` original SQL도 이 성공 transaction부터 durable하며 실패하거나
+취소한 stateless preview의 원문은 저장하지 않는다.
+
+Web import draft의 SQL source와 generated candidate는 component local state에만 두고 Query cache, URL과
+log에 저장하지 않는다. Replace route는 source와 layout이 모두 `SAVED`일 때만 진입하며 `ERROR` 또는
+`CONFLICT`에서는 우회 이탈을 제공하지 않는다. Browser semantic diff가 실패해도 server verification이
+성공한 candidate Apply는 차단하지 않지만 inventory를 사용할 수 없다고 명시한다.
 
 ### 11.4 SQL export
 
@@ -751,6 +777,8 @@ Layout row가 아직 없는 view의 조회는 오류가 아니라 current projec
 Preview conversion 실패도 `FAILED` row로 보존한다. 성공 Apply에서만 `appliedPolicy`와 `appliedAt`을
 채우며, row dialect·source/candidate hash·report envelope가 불일치하면 fail-closed storage invariant로
 처리한다. Project 삭제는 artifact를 cascade 삭제하고 project 복제는 artifact를 복사하지 않는다.
+이 lifecycle은 project-bound Replace preview에 적용한다. 새 project의 stateless preview는 row를 만들지
+않으며 성공 Apply transaction에서 `CREATE_PROJECT` envelope의 `APPLIED` row를 직접 생성한다.
 
 ### 14.5 파생 데이터
 

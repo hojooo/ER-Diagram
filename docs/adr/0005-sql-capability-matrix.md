@@ -127,6 +127,21 @@ Raw importer는 오류를 반환하지 않았으므로 관찰 사실과 다르�
 - Successful Apply는 candidate가 current draft와 같아도 `SQL_IMPORT` checkpoint를 하나 만들며 revision,
   project pointer, artifact transition과 pruning을 원자적으로 저장한다.
 
+### M2-005 stateless create preview와 UI 확인 경계
+
+- 새 project preview는 project identity와 revision이 없는 stateless conversion이다.
+  `SQL_IMPORT_CREATE_PREVIEW_VERSION=1` evidence는 dialect, source/candidate hash, versioned report, initial
+  `REJECT` policy와 retention mode를 포함한다. Project name과 Apply 시점의 `CONFIRM_DDL_ONLY`는 conversion
+  evidence가 아니므로 hash preimage에서 제외한다.
+- Apply는 SQL을 다시 parse해 stateless evidence를 재생성하고 name, schema element와 data policy를 검증한
+  뒤에만 project 생성 transaction을 시작한다. Failed/cancelled preview는 artifact를 남기지 않고 successful
+  Apply만 direct `APPLIED` create-project artifact를 만든다.
+- UI는 `PARTIAL`·`UNSUPPORTED` 손실 확인과 DML/COPY 제외 확인을 서로 다른 acknowledgement로 받는다.
+  이 확인은 runtime policy를 해제할 뿐 `ConversionReport.applyEligible`이나 preview evidence를 바꾸지 않는다.
+- SQL source와 candidate는 component local state에만 유지한다. Query cache, URL, log, error response에 raw
+  SQL이나 row literal을 넣지 않으며 browser semantic diff 실패는 server-side semantic verification을
+  무효화하지 않는다.
+
 ## Verification
 
 - `pnpm --filter @er-diagram/test-fixtures test test/sql-capability-fixtures.test.ts`

@@ -230,8 +230,9 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - 성공·실패 preview artifact, versioned evidence hash와 authoritative Apply reparse를 구현한다.
   - Apply는 `SQL_IMPORT` checkpoint, project pointer와 artifact status를 원자적으로 저장한다.
   - 검증: `pnpm --filter @er-diagram/server test:integration sql-import`
-- [ ] `M2-005` new-project/replace-only import preview UI
-  - 검증: `pnpm test:e2e sql-import`
+- [x] `M2-005` new-project/replace-only import preview UI
+  - stateless preview와 atomic new-project import, saved-workspace replace 진입과 독립 loss/data 확인을 제공한다.
+  - 검증: `pnpm --filter @er-diagram/web test test/sql-import.test.tsx`
 - [ ] `M2-006` same-dialect export, reparse와 semantic equality
   - 검증: `pnpm --filter @er-diagram/core test sql-export`
 - [ ] `M2-007` invalid/last-valid export UX와 report download

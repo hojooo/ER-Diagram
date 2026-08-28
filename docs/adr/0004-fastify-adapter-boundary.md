@@ -31,6 +31,12 @@ Fastify를 P0 HTTP/CLI adapter와 composition root로 사용하고 import를 `ap
   mapping한다.
 - SQL import route는 strict request parse, `x-command-id` echo, application 호출과 response validation만
   수행한다. Preview hash 생성, authoritative Apply reparse와 SQLite transaction은 handler 밖에 둔다.
+- `POST /api/v1/sql-import/preview`는 project persistence가 없는 stateless conversion을 HTTP `200`으로
+  mapping한다. 기존 `POST /api/v1/projects` union의 `CREATE_FROM_SQL_IMPORT`는 Core의 authoritative
+  reparse와 atomic create use case만 호출하며 성공 시 `201`을 반환한다.
+- Stateless preview hash mismatch는 `409`, invalid name·conversion failure·schema element 부재·DML 확인
+  누락은 `422`로 mapping한다. Response와 error에는 original SQL, row literal과 내부 persistence 원인을
+  포함하지 않는다.
 
 NestJS 전환이 필요하면 `apps/server` adapter와 composition을 교체하고 contracts, use cases, ports, SQLite adapter를 재사용한다. Authentication, multi-user authorization, queue, WebSocket 또는 복잡한 integration 요구가 실제로 확정될 때 별도 ADR을 작성한다. Spring Boot는 JVM 조직 표준이나 enterprise integration이 제품 핵심이 되는 경우에만 다시 검토한다.
 
