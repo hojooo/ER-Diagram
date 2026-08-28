@@ -23,3 +23,14 @@ export {
   sqlCapabilityFixtures,
   sqlParserErrorFixtures,
 } from "./sql-capability-fixtures.js";
+export type {
+  SqlImportFixtureClause,
+  SqlImportFixtureStatement,
+  SqlImportFixtureStatementKind,
+  SqlImportReportFixture,
+} from "./sql-import-report-fixtures.js";
+export {
+  SQL_IMPORT_REPORT_FIXTURE_SET_HASH,
+  SQL_IMPORT_REPORT_FIXTURE_VERSION,
+  sqlImportReportFixtures,
+} from "./sql-import-report-fixtures.js";
