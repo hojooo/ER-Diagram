@@ -1,4 +1,4 @@
-import type { ColumnNode } from "@er-diagram/core";
+import type { ColumnNode, SchemaElementKey } from "@er-diagram/core";
 import type { Edge, Node } from "@xyflow/react";
 
 export type DiagramLod = "NAME_ONLY" | "KEYS_ONLY" | "FULL";
@@ -69,6 +69,61 @@ export interface DiagramProjection {
 export interface DiagramViewOption {
   key: DiagramViewKey;
   label: string;
+}
+
+export interface DiagramVisibility {
+  viewKey: DiagramViewKey;
+  tableKeys: ReadonlySet<SchemaElementKey>;
+  groupKeys: ReadonlySet<SchemaElementKey>;
+  referenceKeys: ReadonlySet<SchemaElementKey>;
+  schemaNames: ReadonlySet<string>;
+}
+
+export type DiagramSearchElementKind = "table" | "column" | "group";
+
+interface DiagramElementSearchResult {
+  resultId: string;
+  kind: DiagramSearchElementKind;
+  elementKey: SchemaElementKey;
+  shortLabel: string;
+  qualifiedLabel: string;
+  tableKeys: SchemaElementKey[];
+  groupKeys: SchemaElementKey[];
+}
+
+export interface TableSearchResult extends DiagramElementSearchResult {
+  kind: "table";
+}
+
+export interface ColumnSearchResult extends DiagramElementSearchResult {
+  kind: "column";
+  ownerLabel: string;
+}
+
+export interface GroupSearchResult extends DiagramElementSearchResult {
+  kind: "group";
+}
+
+export interface SchemaSearchResult {
+  resultId: string;
+  kind: "schema";
+  schemaName: string;
+  shortLabel: string;
+  qualifiedLabel: string;
+  tableKeys: SchemaElementKey[];
+  groupKeys: SchemaElementKey[];
+}
+
+export type DiagramSearchResult =
+  | TableSearchResult
+  | ColumnSearchResult
+  | GroupSearchResult
+  | SchemaSearchResult;
+
+export interface DiagramFocusRequest {
+  requestId: number;
+  tableKeys: SchemaElementKey[];
+  groupKeys: SchemaElementKey[];
 }
 
 export interface DiagramViewportRect {
