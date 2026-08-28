@@ -110,6 +110,65 @@ export const schemaRevisionNoSchema = z.number().int().positive().max(Number.MAX
 export const layoutRevisionNoSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export const utcIsoTimestampSchema = z.iso.datetime({ precision: 3 });
 
+export const diagramDetailLevelSchema = z.enum(["NAME_ONLY", "KEYS_ONLY", "FULL"]);
+export type DiagramDetailLevel = z.infer<typeof diagramDetailLevelSchema>;
+
+export const diagramPositionSchema = z
+  .object({ x: z.number().finite(), y: z.number().finite() })
+  .strict();
+export type DiagramPosition = z.infer<typeof diagramPositionSchema>;
+
+export const diagramViewportSchema = z
+  .object({
+    x: z.number().finite(),
+    y: z.number().finite(),
+    zoom: z.number().finite().positive(),
+  })
+  .strict();
+export type DiagramViewport = z.infer<typeof diagramViewportSchema>;
+
+export const diagramViewKeySchema = z
+  .string()
+  .min(1)
+  .refine((value) => value.trim().length > 0);
+export const layoutElementKeySchema = z
+  .string()
+  .min(1)
+  .refine((value) => value.trim().length > 0);
+
+const uniqueLayoutElementKeysSchema = z
+  .array(layoutElementKeySchema)
+  .superRefine((keys, context) => {
+    const seen = new Set<string>();
+    for (const [index, key] of keys.entries()) {
+      if (seen.has(key)) {
+        context.addIssue({ code: "custom", message: "Layout keys must be unique.", path: [index] });
+      }
+      seen.add(key);
+    }
+  });
+
+export const diagramLayoutValueSchema = z
+  .object({
+    positions: z.record(layoutElementKeySchema, diagramPositionSchema),
+    collapsedGroupKeys: uniqueLayoutElementKeysSchema,
+    hiddenElementKeys: uniqueLayoutElementKeysSchema,
+    viewport: diagramViewportSchema,
+    detailLevel: diagramDetailLevelSchema,
+    baseSchemaHash: sha256HexSchema,
+  })
+  .strict();
+export type DiagramLayoutValue = z.infer<typeof diagramLayoutValueSchema>;
+
+export const diagramLayoutSchema = diagramLayoutValueSchema
+  .extend({
+    projectId: projectIdSchema,
+    viewKey: diagramViewKeySchema,
+    revisionNo: layoutRevisionNoSchema,
+  })
+  .strict();
+export type DiagramLayout = z.infer<typeof diagramLayoutSchema>;
+
 export const draftValiditySchema = z.enum(["VALID", "INVALID"]);
 export type DraftValidity = z.infer<typeof draftValiditySchema>;
 
@@ -230,6 +289,11 @@ export const revisionParamsSchema = z
   .strict();
 export type RevisionParams = z.infer<typeof revisionParamsSchema>;
 
+export const layoutParamsSchema = z
+  .object({ projectId: projectIdSchema, viewKey: diagramViewKeySchema })
+  .strict();
+export type LayoutParams = z.infer<typeof layoutParamsSchema>;
+
 export const renameProjectRequestSchema = z
   .object({
     commandId: commandIdSchema,
@@ -264,6 +328,15 @@ export const restoreRevisionRequestSchema = z
   .strict();
 export type RestoreRevisionRequest = z.infer<typeof restoreRevisionRequestSchema>;
 
+export const saveLayoutRequestSchema = z
+  .object({
+    commandId: commandIdSchema,
+    expectedLayoutRevisionNo: layoutRevisionNoSchema,
+    layout: diagramLayoutValueSchema,
+  })
+  .strict();
+export type SaveLayoutRequest = z.infer<typeof saveLayoutRequestSchema>;
+
 export const projectsResponseSchema = z
   .object({ projects: z.array(projectSummarySchema) })
   .strict();
@@ -286,12 +359,28 @@ export const projectRevisionsResponseSchema = z
   .strict();
 export type ProjectRevisionsResponse = z.infer<typeof projectRevisionsResponseSchema>;
 
+export const layoutResponseSchema = z
+  .object({
+    layout: diagramLayoutSchema.nullable(),
+    currentLayoutRevisionNo: layoutRevisionNoSchema,
+  })
+  .strict();
+export type LayoutResponse = z.infer<typeof layoutResponseSchema>;
+
+export const layoutMutationResponseSchema = z
+  .object({
+    state: layoutResponseSchema,
+    layoutUpdated: z.boolean(),
+  })
+  .strict();
+export type LayoutMutationResponse = z.infer<typeof layoutMutationResponseSchema>;
+
 export const errorResponseSchema = z
   .object({
     code: z.string().min(1),
     message: z.string().min(1),
     correlationId: correlationIdSchema,
-    currentRevisionNo: schemaRevisionNoSchema.optional(),
+    currentRevisionNo: layoutRevisionNoSchema.optional(),
     diagnostics: z.array(diagnosticSchema).optional(),
   })
   .strict();
