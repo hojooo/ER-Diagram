@@ -1,4 +1,8 @@
-import type { Diagnostic, PrimaryDialect } from "@er-diagram/contracts";
+import {
+  type Diagnostic,
+  type PrimaryDialect,
+  sqlImportArtifactEnvelopeSchema,
+} from "@er-diagram/contracts";
 import type {
   OriginalSqlRetentionMode,
   SqlDataStatementHandling,
@@ -192,4 +196,18 @@ export class SqlImportPersistenceInvariantError extends Error {
     super(message);
     this.name = "SqlImportPersistenceInvariantError";
   }
+}
+
+export function parseSqlImportArtifactEnvelope(
+  projectId: string,
+  value: unknown,
+): SqlImportArtifactEnvelope {
+  const parsed = sqlImportArtifactEnvelopeSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new SqlImportPersistenceInvariantError(
+      projectId,
+      "Stored SQL import artifact has an invalid report envelope.",
+    );
+  }
+  return parsed.data;
 }

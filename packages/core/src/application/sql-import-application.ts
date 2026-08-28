@@ -54,14 +54,20 @@ export async function computeSqlImportPreviewHash(input: {
   readonly previewPolicy: SqlImportDataPolicyDecision;
   readonly originalSqlRetention: OriginalSqlRetentionMode;
 }): Promise<string> {
-  return sha256Utf8(
-    canonicalStringify({
-      previewVersion: SQL_IMPORT_PREVIEW_VERSION,
-      evidence: input.evidence,
-      previewPolicy: input.previewPolicy,
-      originalSqlRetention: input.originalSqlRetention,
-    }),
-  );
+  return sha256Utf8(sqlImportPreviewHashPreimage(input));
+}
+
+export function sqlImportPreviewHashPreimage(input: {
+  readonly evidence: SqlImportPreviewEvidence;
+  readonly previewPolicy: SqlImportDataPolicyDecision;
+  readonly originalSqlRetention: OriginalSqlRetentionMode;
+}): string {
+  return canonicalStringify({
+    previewVersion: SQL_IMPORT_PREVIEW_VERSION,
+    evidence: input.evidence,
+    previewPolicy: input.previewPolicy,
+    originalSqlRetention: input.originalSqlRetention,
+  });
 }
 
 async function previewSqlImport(
