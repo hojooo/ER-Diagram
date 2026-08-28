@@ -56,6 +56,17 @@ Invalid draft에서 표시하는 last-valid graph의 source range는 현재 Mona
 현재 draft가 다시 valid해질 때까지 차단한다. Current graph로 복구되면 새 source map으로 navigation을
 재개하며 이전 graph에 없는 selection key는 폐기한다.
 
+`TableGroup` collapse는 canonical DBML이나 semantic hash가 아니라 layout sidecar에 속한다. M1-010의
+Workspace에서는 project session의 ephemeral state로 관리하고, group stable key가 graph에 남아 있는
+동안만 유지한다. Compound parent, hidden member table과 relationship summary edge는 매 graph와 collapse
+상태에서 다시 계산하는 파생 데이터이며 source revision이나 autosave를 발생시키지 않는다.
+
+접힌 group의 외부 relationship은 방향이 정해진 representative endpoint와 active/inactive 상태별로
+집계한다. 같은 접힌 group 안의 relationship은 canvas에서 숨겨도 accessible outline의 exact relationship
+목록에는 보존한다. 여러 relationship을 대표하는 aggregate edge는 특정 reference identity를 임의로
+선택하지 않으며 source 이동을 제공하지 않는다. Exact source 탐색은 outline을 사용하고, 선택된 hidden
+reference는 aggregate edge와 representative group을 강조하는 데만 사용한다.
+
 Visual mutation은 source position을 기준으로 가장 작은 `TextEdit[]`를 만든다. Edit는 offset 내림차순으로 적용하고 수정된 전체 source를 DBML v2로 다시 parse한다. Reparse 결과의 semantic diff가 command가 기대한 변경과 정확히 일치할 때만 source를 commit한다. 실패하면 원본을 유지하고 diagnostic을 반환한다.
 
 M0에서는 `CreateColumn` 한 종류로 이 경계를 증명한다. 대상 block 밖의 comment, partial, view와 formatting은 byte-identical이어야 하며 full-model DBML regeneration은 canonical source 갱신 경로로 사용하지 않는다.
