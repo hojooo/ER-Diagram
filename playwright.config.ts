@@ -3,9 +3,9 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./apps/web/e2e",
   fullyParallel: true,
-  // The layout spike and source workspace each load an independent heavyweight worker graph.
-  // Serial CI execution keeps their route-level timing checks isolated from runner contention.
-  workers: process.env.CI ? 1 : undefined,
+  // Each workspace test loads an independent Monaco, DBML parser, and/or ELK worker graph.
+  // Serial execution keeps product timeouts meaningful instead of measuring runner contention.
+  workers: 1,
   use: {
     baseURL: "http://127.0.0.1:4173",
     headless: true,

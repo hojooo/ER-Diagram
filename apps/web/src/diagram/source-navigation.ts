@@ -1,6 +1,6 @@
 import type { SchemaElementKey, SchemaGraph, SourceRange } from "@er-diagram/core";
 
-export type DiagramNavigableKind = "table" | "column" | "reference";
+export type DiagramNavigableKind = "table" | "column" | "reference" | "group";
 
 export interface DiagramSelection {
   elementKey: SchemaElementKey;
@@ -27,6 +27,7 @@ const kindPriority: Record<DiagramNavigableKind, number> = {
   reference: 0,
   column: 1,
   table: 2,
+  group: 3,
 };
 
 export function createDiagramNavigationIndex(graph: SchemaGraph): DiagramNavigationIndex {
@@ -52,6 +53,14 @@ export function createDiagramNavigationIndex(graph: SchemaGraph): DiagramNavigat
       elementKey: reference.key,
       kind: "reference",
       tableKeys: unique(reference.endpoints.map((endpoint) => endpoint.tableKey)),
+    });
+  }
+
+  for (const group of graph.groups) {
+    addEntry(entries, graph, {
+      elementKey: group.key,
+      kind: "group",
+      tableKeys: [...group.tableKeys],
     });
   }
 

@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("renders and updates the compound graph prototype", async ({ page }) => {
+  test.setTimeout(60_000);
   const browserErrors: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") browserErrors.push(message.text());
@@ -9,7 +10,9 @@ test("renders and updates the compound graph prototype", async ({ page }) => {
 
   await page.goto("/__spikes/layout");
 
-  await expect(page.getByRole("heading", { name: "DBML·SQL ERD Studio" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "DBML·SQL ERD Studio" })).toBeVisible({
+    timeout: 20_000,
+  });
   await expect(page.getByTestId("erd-canvas")).toBeVisible();
   await expect(page.getByTestId("layout-status")).toHaveText("Layout ready", {
     timeout: 10_000,

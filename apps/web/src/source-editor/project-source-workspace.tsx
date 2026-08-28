@@ -5,12 +5,13 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useBlocker } from "react-router-dom";
 
 import type { BaseSchemaDiagramComponent } from "../diagram/base-schema-diagram-contract.js";
+import { retainAvailableCollapsedGroups, toggleCollapsedGroup } from "../diagram/collapse-state.js";
 import { SchemaOutline } from "../diagram/schema-outline.js";
 import { createDiagramSelectionStore } from "../diagram/selection-store.js";
 import {
   createDiagramNavigationIndex,
-  findDiagramSelectionAtCursor,
   type DiagramSelection,
+  findDiagramSelectionAtCursor,
   type SourceCursorPosition,
 } from "../diagram/source-navigation.js";
 import type { ProjectApi } from "../projects/project-api.js";
@@ -60,6 +61,7 @@ export function ProjectSourceWorkspace({
   const editorRef = useRef<SourceEditorHandle>(null);
   const flushedBlockedNavigationRef = useRef(false);
   const [selectionStore] = useState(createDiagramSelectionStore);
+  const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<ReadonlySet<string>>(new Set());
   const projectId = initialState.project.id;
   const initialStateRef = useRef(initialState);
   const EditorComponent = adapters?.SourceEditor ?? LazyMonacoDbmlEditor;
@@ -93,12 +95,26 @@ export function ProjectSourceWorkspace({
     [activeGraph, sourceNavigationEnabled],
   );
 
+  const handleToggleGroup = useCallback((groupKey: string) => {
+    setCollapsedGroupKeys((current) => toggleCollapsedGroup(current, groupKey));
+  }, []);
+
   useEffect(() => {
     const currentSelection = selectionStore.getState().selection;
     if (!activeGraph || (currentSelection && !activeGraph.sourceMap[currentSelection.elementKey])) {
       selectionStore.getState().setSelection(null);
     }
   }, [activeGraph, selectionStore]);
+
+  useEffect(() => {
+    const availableGroupKeys = new Set(activeGraph?.groups.map((group) => group.key) ?? []);
+    setCollapsedGroupKeys((current) => retainAvailableCollapsedGroups(current, availableGroupKeys));
+  }, [activeGraph]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    setCollapsedGroupKeys(new Set());
+  }, [projectId]);
 
   useEffect(() => {
     const parserClient = (adapters?.createParserClient ?? createDbmlParserWorkerClient)();
@@ -218,9 +234,11 @@ export function ProjectSourceWorkspace({
 
           <DiagramPanel
             snapshot={sessionSnapshot}
+            collapsedGroupKeys={collapsedGroupKeys}
             selectionStore={selectionStore}
             DiagramComponent={DiagramComponent}
             sourceNavigationEnabled={sourceNavigationEnabled}
+            onToggleGroup={handleToggleGroup}
             onNavigateSource={handleNavigateSource}
             onFocusSource={() => editorRef.current?.focus()}
           />
@@ -274,8 +292,10 @@ export function ProjectSourceWorkspace({
         {activeGraph ? (
           <SchemaOutline
             graph={activeGraph}
+            collapsedGroupKeys={collapsedGroupKeys}
             selectionStore={selectionStore}
             sourceNavigationEnabled={sourceNavigationEnabled}
+            onToggleGroup={handleToggleGroup}
             onNavigateSource={handleNavigateSource}
           />
         ) : null}
@@ -293,16 +313,20 @@ export function ProjectSourceWorkspace({
 
 function DiagramPanel({
   snapshot,
+  collapsedGroupKeys,
   selectionStore,
   DiagramComponent,
   sourceNavigationEnabled,
+  onToggleGroup,
   onNavigateSource,
   onFocusSource,
 }: {
   readonly snapshot: SourceSessionSnapshot;
+  readonly collapsedGroupKeys: ReadonlySet<string>;
   readonly selectionStore: ReturnType<typeof createDiagramSelectionStore>;
   readonly DiagramComponent: BaseSchemaDiagramComponent;
   readonly sourceNavigationEnabled: boolean;
+  readonly onToggleGroup: (groupKey: string) => void;
   readonly onNavigateSource: (selection: DiagramSelection) => void;
   readonly onFocusSource: () => void;
 }) {
@@ -334,8 +358,10 @@ function DiagramPanel({
         >
           <DiagramComponent
             graph={graph}
+            collapsedGroupKeys={collapsedGroupKeys}
             selectionStore={selectionStore}
             sourceNavigationEnabled={sourceNavigationEnabled}
+            onToggleGroup={onToggleGroup}
             onNavigateSource={onNavigateSource}
           />
         </Suspense>

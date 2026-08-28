@@ -248,8 +248,10 @@ describe("diagram source navigation", () => {
     const rendered = render(
       <SchemaOutline
         graph={graph}
+        collapsedGroupKeys={new Set()}
         selectionStore={selectionStore}
         sourceNavigationEnabled
+        onToggleGroup={vi.fn()}
         onNavigateSource={onNavigateSource}
       />,
     );
@@ -274,8 +276,10 @@ describe("diagram source navigation", () => {
     rendered.rerender(
       <SchemaOutline
         graph={graph}
+        collapsedGroupKeys={new Set()}
         selectionStore={selectionStore}
         sourceNavigationEnabled={false}
+        onToggleGroup={vi.fn()}
         onNavigateSource={onNavigateSource}
       />,
     );
@@ -291,8 +295,10 @@ describe("diagram source navigation", () => {
     render(
       <SchemaOutline
         graph={graph}
+        collapsedGroupKeys={new Set()}
         selectionStore={createDiagramSelectionStore()}
         sourceNavigationEnabled
+        onToggleGroup={vi.fn()}
         onNavigateSource={vi.fn()}
       />,
     );
@@ -309,8 +315,10 @@ describe("base schema diagram canvas", () => {
     render(
       <BaseSchemaDiagram
         graph={graph}
+        collapsedGroupKeys={new Set()}
         selectionStore={createDiagramSelectionStore()}
         sourceNavigationEnabled
+        onToggleGroup={vi.fn()}
         onNavigateSource={vi.fn()}
         requestLayout={requestLayout}
       />,
@@ -334,8 +342,10 @@ describe("base schema diagram canvas", () => {
     const rendered = render(
       <BaseSchemaDiagram
         graph={firstGraph}
+        collapsedGroupKeys={new Set()}
         selectionStore={selectionStore}
         sourceNavigationEnabled
+        onToggleGroup={vi.fn()}
         onNavigateSource={onNavigateSource}
         requestLayout={requestLayout}
       />,
@@ -344,8 +354,10 @@ describe("base schema diagram canvas", () => {
     rendered.rerender(
       <BaseSchemaDiagram
         graph={secondGraph}
+        collapsedGroupKeys={new Set()}
         selectionStore={selectionStore}
         sourceNavigationEnabled
+        onToggleGroup={vi.fn()}
         onNavigateSource={onNavigateSource}
         requestLayout={requestLayout}
       />,
@@ -379,8 +391,10 @@ describe("base schema diagram canvas", () => {
     render(
       <BaseSchemaDiagram
         graph={graph}
+        collapsedGroupKeys={new Set()}
         selectionStore={createDiagramSelectionStore()}
         sourceNavigationEnabled={false}
+        onToggleGroup={vi.fn()}
         onNavigateSource={vi.fn()}
         requestLayout={requestLayout}
       />,

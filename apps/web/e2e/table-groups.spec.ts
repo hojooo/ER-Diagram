@@ -1,33 +1,48 @@
 import { createHash } from "node:crypto";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
-const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-0123456789ab";
-const CREATED_AT = "2026-08-27T01:02:03.004Z";
-const INITIAL_SOURCE = `Table accounts {
+const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-1123456789ab";
+const CREATED_AT = "2026-08-28T01:02:03.004Z";
+const INITIAL_SOURCE = `TableGroup Identity [color: #778899] {
+  accounts
+  profiles
+}
+
+TableGroup Content [color: #112233] {
+  posts
+}
+
+Table accounts {
   id int [pk]
+}
+
+Table profiles {
+  id int [pk]
+  account_id int
 }
 
 Table posts {
   id int [pk]
   account_id int
+  owner_account_id int
 }
 
+Ref profile_account: profiles.account_id > accounts.id
 Ref post_account: posts.account_id > accounts.id
+Ref post_owner: posts.owner_account_id > accounts.id
 `;
-const INVALID_SOURCE = INITIAL_SOURCE.slice(0, INITIAL_SOURCE.indexOf("\n}\n", 45));
-const RECOVERED_SOURCE = INITIAL_SOURCE.replace(
-  "  account_id int",
-  "  account_id int\n  title varchar",
-);
+const INVALID_SOURCE = `${INITIAL_SOURCE}\nTable broken {`;
 
-test("renders the active graph and keeps source navigation revision-safe", async ({ page }) => {
+test("collapses TableGroups without mutating source and preserves last-valid navigation safety", async ({
+  page,
+}) => {
   test.setTimeout(60_000);
   const browserErrors: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") browserErrors.push(message.text());
   });
   page.on("pageerror", (error) => browserErrors.push(error.message));
-  const api = await installDiagramApi(page);
+  const api = await installTableGroupApi(page);
 
   await page.goto(`/projects/${PROJECT_ID}`);
   const editor = page.getByRole("textbox", { name: "DBML source editor" });
@@ -40,56 +55,52 @@ test("renders the active graph and keeps source navigation revision-safe", async
     await page.getByRole("button", { name: "Retry layout" }).click();
     await expect(layoutStatus).toHaveText("Diagram layout ready", { timeout: 10_000 });
   }
-  await expect(page.locator(".react-flow__node")).toHaveCount(2);
-  await expect(page.locator(".diagram-table__column-action")).toHaveCount(3);
+
+  await expect(page.locator(".react-flow__node-group")).toHaveCount(2);
+  await expect(page.locator(".react-flow__node-table")).toHaveCount(3);
+  await expect(page.locator(".react-flow__edge")).toHaveCount(3);
+  await expect(page.getByText("Color #778899", { exact: true }).first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Collapse public.Identity", exact: true }).click();
+  await expect(page.locator(".react-flow__node-table")).toHaveCount(1);
   await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+  await expect(page.getByText("×2 relationships", { exact: true })).toBeVisible();
 
-  const postsSummary = page.getByText("public.posts", { exact: true });
-  await postsSummary.click();
-  const focusPosts = page.getByRole("button", { name: "Focus public.posts in diagram" });
-  await focusPosts.click();
-  await expect(focusPosts).toHaveAttribute("aria-current", "true");
-
-  await page.getByRole("button", { name: "Open source for table at line 5" }).click();
-  await expect(editor).toBeFocused();
-
-  const accountColumn = page.getByRole("button", { name: /account_id, int, FK/ });
-  await accountColumn.click();
-  await expect(editor).toBeFocused();
-
-  await findInEditor(page, "account_id");
+  await page.getByRole("button", { name: "Collapse public.Content", exact: true }).click();
+  await expect(page.locator(".react-flow__node-table")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Focus column account_id in diagram" }),
-  ).toHaveAttribute("aria-current", "true");
+    page.getByRole("button", { name: "Expand public.Identity", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Expand public.Content", exact: true }),
+  ).toBeVisible();
+  await page.waitForTimeout(900);
+  expect(api.writes).toHaveLength(0);
+
+  await page.getByRole("button", { name: "Focus relationship post_account in diagram" }).click();
+  await expect(page.locator(".react-flow__edge.selected")).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "Expand public.Identity", exact: true }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Open source for group at line 1" }).click();
+  await expect(editor).toBeFocused();
 
   await replaceEditorSource(editor, INVALID_SOURCE);
   await expect.poll(() => api.writes.length).toBe(1);
   await expect(page.getByText(/Showing last-valid revision 1/)).toBeVisible();
   await expect(
-    page.getByRole("button", { name: /Open source for table at line/ }).first(),
-  ).toBeDisabled();
-  await expect(page.getByLabel("Table public.posts")).toBeVisible();
-
-  await replaceEditorSource(editor, RECOVERED_SOURCE);
-  await expect.poll(() => api.writes.length).toBe(2);
-  await expect(page.getByText(/Showing the current valid draft/)).toBeVisible();
-  await expect(page.locator(".diagram-table__column-action")).toHaveCount(4, { timeout: 10_000 });
+    page.getByRole("button", { name: "Expand public.Identity in diagram", exact: true }),
+  ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: /Open source for table at line/ }).first(),
-  ).toBeEnabled();
+    page.getByRole("button", { name: "Expand public.Content in diagram", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Open source for group at line 1" }),
+  ).toBeDisabled();
 
   expect(browserErrors).toEqual([]);
 });
-
-async function findInEditor(page: Page, text: string): Promise<void> {
-  const editor = page.getByRole("textbox", { name: "DBML source editor" });
-  await editor.focus();
-  await editor.press(process.platform === "darwin" ? "Meta+f" : "Control+f");
-  const findInput = page.getByRole("textbox", { name: "Find" });
-  await findInput.fill(text);
-  await findInput.press("Enter");
-  await page.keyboard.press("Escape");
-}
 
 async function replaceEditorSource(editor: Locator, source: string): Promise<void> {
   await editor.focus();
@@ -104,7 +115,7 @@ async function replaceEditorSource(editor: Locator, source: string): Promise<voi
   await editor.page().waitForTimeout(800);
 }
 
-async function installDiagramApi(page: Page) {
+async function installTableGroupApi(page: Page) {
   let state = projectState(INITIAL_SOURCE, 1, "VALID", null);
   const writes: Array<Record<string, unknown>> = [];
 
@@ -172,7 +183,7 @@ function projectState(
   return {
     project: {
       id: PROJECT_ID,
-      name: "Diagram workspace",
+      name: "TableGroup workspace",
       primaryDialect: "POSTGRESQL" as const,
       draftSource: source,
       draftHash: sha256(source),
@@ -190,7 +201,7 @@ function projectState(
 
 function revision(source: string, revisionNo: number, validity: "VALID" | "INVALID") {
   return {
-    id: `019d3f4e-7b6c-7a${revisionNo.toString().padStart(2, "0")}-8def-0123456789ab`,
+    id: `019d3f4e-7b6c-7a${revisionNo.toString().padStart(2, "0")}-8def-1123456789ab`,
     projectId: PROJECT_ID,
     revisionNo,
     source,

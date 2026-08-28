@@ -7,7 +7,7 @@ import {
   type NodeProps,
   Position,
 } from "@xyflow/react";
-import { createContext, useContext } from "react";
+import { type CSSProperties, createContext, useContext } from "react";
 import type { DiagramSelection } from "./source-navigation.js";
 import type { GroupDiagramNode, SchemaDiagramEdge, TableDiagramNode } from "./types.js";
 
@@ -24,19 +24,31 @@ export const DiagramInteractionContext = createContext<DiagramInteractions>({
 export function GroupDiagramNodeComponent({ data }: NodeProps<GroupDiagramNode>) {
   const { toggleGroup } = useContext(DiagramInteractionContext);
   const action = data.collapsed ? "Expand" : "Collapse";
+  const qualifiedName = `${data.schemaName}.${data.name}`;
+  const safeColor = safeGroupColor(data.color);
   return (
-    <section className={`diagram-group ${data.collapsed ? "is-collapsed" : ""}`}>
+    <section
+      className={`diagram-group ${data.collapsed ? "is-collapsed" : ""} ${data.selectedElementKey ? "is-selected" : ""}`}
+      aria-label={`Table group ${qualifiedName}, ${data.tableCount} tables, ${data.collapsed ? "collapsed" : "expanded"}, Color ${data.color ?? "default"}`}
+      style={safeColor ? ({ "--diagram-group-color": safeColor } as CSSProperties) : undefined}
+    >
       <Handle type="target" position={Position.Left} />
       <header className="diagram-group__header">
         <div>
           <p className="diagram-kicker">TableGroup</p>
+          <p className="diagram-group__schema">{data.schemaName}</p>
           <h2>{data.name}</h2>
+          <p className="diagram-group__color">Color {data.color ?? "default"}</p>
         </div>
         <button
           className="nodrag nopan diagram-group__toggle"
           type="button"
-          aria-label={`${action} ${data.name}`}
-          onClick={() => toggleGroup(data.groupKey)}
+          aria-expanded={!data.collapsed}
+          aria-label={`${action} ${qualifiedName}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            toggleGroup(data.groupKey);
+          }}
         >
           {data.collapsed ? "+" : "−"}
         </button>
@@ -125,7 +137,7 @@ export function ReferenceDiagramEdgeComponent(props: EdgeProps<SchemaDiagramEdge
   const count = props.data?.count ?? 1;
   const label =
     count > 1
-      ? `×${count}`
+      ? `×${count} relationships`
       : [
           props.data?.referenceName ?? "Ref",
           props.data?.sourceMultiplicity && props.data?.targetMultiplicity
@@ -155,4 +167,8 @@ export function ReferenceDiagramEdgeComponent(props: EdgeProps<SchemaDiagramEdge
       ) : null}
     </>
   );
+}
+
+function safeGroupColor(color: string | null): string | null {
+  return color && /^#[\da-f]{6}$/i.test(color) ? color : null;
 }

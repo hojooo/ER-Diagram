@@ -1,8 +1,104 @@
+// @vitest-environment jsdom
+
+import "@testing-library/jest-dom/vitest";
+
 import { parseDbmlV2, type SchemaGraph } from "@er-diagram/core";
 import { fixtureInventory, generateFidelityFixture } from "@er-diagram/test-fixtures";
-import { beforeAll, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
+const flowSpies = vi.hoisted(() => ({
+  fitView: vi.fn(),
+}));
+
+vi.mock("@xyflow/react", async () => {
+  const React = await import("react");
+  type MockNode = {
+    id: string;
+    type: string;
+    data: Record<string, unknown>;
+  };
+  type MockEdge = {
+    id: string;
+    label?: string;
+    selectable?: boolean;
+    selected?: boolean;
+  };
+  return {
+    Background: () => null,
+    BackgroundVariant: { Dots: "dots" },
+    BaseEdge: () => null,
+    Controls: () => null,
+    EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => children,
+    Handle: () => null,
+    Position: { Left: "left", Right: "right" },
+    getSmoothStepPath: () => ["", 0, 0],
+    ReactFlow: (props: Record<string, unknown>) => {
+      const nodes = (props.nodes ?? []) as MockNode[];
+      const edges = (props.edges ?? []) as MockEdge[];
+      const nodeTypes = props.nodeTypes as Record<
+        string,
+        React.ComponentType<Record<string, unknown>>
+      >;
+      const onInit = props.onInit as
+        | ((instance: { fitView: typeof flowSpies.fitView }) => void)
+        | undefined;
+      const onNodeClick = props.onNodeClick as
+        | ((event: React.MouseEvent, node: MockNode) => void)
+        | undefined;
+      const onEdgeClick = props.onEdgeClick as
+        | ((event: React.MouseEvent, edge: MockEdge) => void)
+        | undefined;
+      React.useEffect(() => onInit?.({ fitView: flowSpies.fitView }), [onInit]);
+      return (
+        <div role="application" aria-label={String(props["aria-label"])}>
+          {nodes.map((node) => {
+            const Component = nodeTypes[node.type];
+            return (
+              <React.Fragment key={node.id}>
+                <div data-testid={`canvas-node-${node.id}`}>
+                  {Component ? <Component {...node} /> : node.id}
+                </div>
+                <button
+                  type="button"
+                  aria-label={`Select canvas node ${node.id}`}
+                  onClick={(event) => onNodeClick?.(event, node)}
+                >
+                  Select
+                </button>
+              </React.Fragment>
+            );
+          })}
+          {edges.map((edge) => (
+            <button
+              type="button"
+              key={edge.id}
+              data-testid={`canvas-edge-${edge.id}`}
+              data-selected={edge.selected ? "true" : "false"}
+              disabled={edge.selectable === false}
+              onClick={(event) => onEdgeClick?.(event, edge)}
+            >
+              {edge.label ?? edge.id}
+            </button>
+          ))}
+        </div>
+      );
+    },
+  };
+});
+
+import { BaseSchemaDiagram } from "../src/diagram/base-schema-diagram.js";
+import {
+  retainAvailableCollapsedGroups,
+  toggleCollapsedGroup,
+} from "../src/diagram/collapse-state.js";
 import { createGroupedDiagramProjection } from "../src/diagram/projection.js";
+import { SchemaOutline } from "../src/diagram/schema-outline.js";
+import { createDiagramSelectionStore } from "../src/diagram/selection-store.js";
+import {
+  createDiagramNavigationIndex,
+  findDiagramSelectionAtCursor,
+} from "../src/diagram/source-navigation.js";
 import type {
   DiagramProjection,
   GroupDiagramNode,
@@ -49,6 +145,19 @@ Ref gamma_beta: gamma.beta_id > beta.id
 Ref inactive_alpha_gamma: alpha.inactive_gamma_id > gamma.id [inactive]
 Ref ungrouped_alpha: ungrouped.alpha_id > alpha.id
 `;
+
+beforeAll(() => {
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    callback(0);
+    return 1;
+  });
+  vi.stubGlobal("cancelAnimationFrame", () => undefined);
+});
+
+afterEach(() => {
+  cleanup();
+  flowSpies.fitView.mockReset();
+});
 
 describe("TableGroup diagram projection", () => {
   let graph: SchemaGraph;
@@ -168,6 +277,23 @@ describe("TableGroup diagram projection", () => {
     expect(summaryEdgeIds(reordered)).toEqual(summaryEdgeIds(projection));
   });
 
+  it("keeps collapse state outside schema semantics and prunes deleted stable group keys", () => {
+    const sourceHash = graph.schemaHash;
+    const firstGroup = graph.groups[0];
+    const secondGroup = graph.groups[1];
+    if (!firstGroup || !secondGroup) throw new Error("Expected both groups.");
+
+    const collapsed = toggleCollapsedGroup(new Set(), firstGroup.key);
+    createGroupedDiagramProjection(graph, collapsed);
+    expect(graph.schemaHash).toBe(sourceHash);
+
+    const retained = retainAvailableCollapsedGroups(
+      new Set([firstGroup.key, secondGroup.key]),
+      new Set([secondGroup.key]),
+    );
+    expect([...retained]).toEqual([secondGroup.key]);
+  });
+
   it("preserves the fidelity fixture group and expanded relationship inventory", async () => {
     const fidelityGraph = await parseGraph(generateFidelityFixture());
     const projection = createGroupedDiagramProjection(fidelityGraph, new Set());
@@ -175,6 +301,241 @@ describe("TableGroup diagram projection", () => {
     expect(groupNodes(projection)).toHaveLength(fixtureInventory.fidelity.tableGroups);
     expect(tableNodes(projection)).toHaveLength(fixtureInventory.fidelity.tables);
     expect(projection.edges).toHaveLength(fixtureInventory.fidelity.references);
+  });
+});
+
+describe("TableGroup navigation and collapse interactions", () => {
+  let graph: SchemaGraph;
+
+  beforeAll(async () => {
+    graph = await parseGraph(GROUP_SOURCE);
+  });
+
+  it("indexes the TableGroup source range as a navigable group", () => {
+    const group = graph.groups[0];
+    if (!group) throw new Error("Expected a group.");
+    const index = createDiagramNavigationIndex(graph);
+
+    expect(
+      findDiagramSelectionAtCursor(index, {
+        filepath: group.range.filepath,
+        offset: group.range.startOffset + 1,
+      }),
+    ).toEqual({
+      elementKey: group.key,
+      kind: "group",
+      tableKeys: group.tableKeys,
+    });
+  });
+
+  it("toggles a compound group without also navigating to source", async () => {
+    const group = graph.groups[0];
+    if (!group) throw new Error("Expected a group.");
+    const onToggleGroup = vi.fn();
+    const onNavigateSource = vi.fn();
+
+    render(
+      <BaseSchemaDiagram
+        graph={graph}
+        collapsedGroupKeys={new Set()}
+        selectionStore={createDiagramSelectionStore()}
+        sourceNavigationEnabled
+        onToggleGroup={onToggleGroup}
+        onNavigateSource={onNavigateSource}
+        requestLayout={async (projection) => projection}
+      />,
+    );
+
+    const toggle = await screen.findByRole("button", {
+      name: "Collapse public.도메인<script>😀",
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(toggle);
+    expect(onToggleGroup).toHaveBeenCalledWith(group.key);
+    expect(onNavigateSource).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: `Select canvas node ${group.key}` }));
+    expect(onNavigateSource).toHaveBeenCalledWith({
+      elementKey: group.key,
+      kind: "group",
+      tableKeys: group.tableKeys,
+    });
+  });
+
+  it("shows an invalid source color as text without applying it to CSS", async () => {
+    const group = graph.groups[0];
+    if (!group) throw new Error("Expected a group.");
+    const unsafeColorGraph: SchemaGraph = {
+      ...graph,
+      groups: graph.groups.map((candidate) =>
+        candidate.key === group.key
+          ? { ...candidate, color: "url(javascript:alert(1))" }
+          : candidate,
+      ),
+    };
+
+    render(
+      <BaseSchemaDiagram
+        graph={unsafeColorGraph}
+        collapsedGroupKeys={new Set()}
+        selectionStore={createDiagramSelectionStore()}
+        sourceNavigationEnabled
+        onToggleGroup={vi.fn()}
+        onNavigateSource={vi.fn()}
+        requestLayout={async (projection) => projection}
+      />,
+    );
+
+    const renderedGroup = await screen.findByLabelText(
+      /Table group public\.도메인<script>😀, 2 tables, expanded, Color url/,
+    );
+    expect(renderedGroup).toHaveTextContent("Color url(javascript:alert(1))");
+    expect(renderedGroup).not.toHaveAttribute("style");
+  });
+
+  it("keeps exact hidden selections while highlighting representative groups and summary edges", async () => {
+    const collapsedGroupKeys = new Set(graph.groups.map((group) => group.key));
+    const reference = graph.references.find((candidate) => candidate.name === "alpha_gamma");
+    if (!reference) throw new Error("Expected alpha_gamma.");
+    const selectionStore = createDiagramSelectionStore();
+    selectionStore.getState().setSelection({
+      elementKey: reference.key,
+      kind: "reference",
+      tableKeys: reference.endpoints.map((endpoint) => endpoint.tableKey),
+    });
+    const onNavigateSource = vi.fn();
+
+    render(
+      <BaseSchemaDiagram
+        graph={graph}
+        collapsedGroupKeys={collapsedGroupKeys}
+        selectionStore={selectionStore}
+        sourceNavigationEnabled
+        onToggleGroup={vi.fn()}
+        onNavigateSource={onNavigateSource}
+        requestLayout={async (projection) => projection}
+      />,
+    );
+
+    const projection = createGroupedDiagramProjection(graph, collapsedGroupKeys);
+    const summary = projection.edges.find((edge) =>
+      edge.data.referenceKeys.includes(reference.key),
+    );
+    if (!summary) throw new Error("Expected a representative edge.");
+    await waitFor(() =>
+      expect(screen.getByTestId(`canvas-edge-${summary.id}`)).toHaveAttribute(
+        "data-selected",
+        "true",
+      ),
+    );
+    expect(screen.getByTestId(`canvas-edge-${summary.id}`)).toBeDisabled();
+    expect(selectionStore.getState().selection?.elementKey).toBe(reference.key);
+    expect(onNavigateSource).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(flowSpies.fitView).toHaveBeenCalledWith(
+        expect.objectContaining({
+          nodes: expect.arrayContaining([expect.objectContaining({ type: "group" })]),
+        }),
+      ),
+    );
+  });
+
+  it("provides group membership, collapse and revision-safe source actions in the outline", () => {
+    const group = graph.groups[0];
+    if (!group) throw new Error("Expected a group.");
+    const onToggleGroup = vi.fn();
+    const onNavigateSource = vi.fn();
+    const selectionStore = createDiagramSelectionStore();
+    const rendered = render(
+      <SchemaOutline
+        graph={graph}
+        collapsedGroupKeys={new Set()}
+        selectionStore={selectionStore}
+        sourceNavigationEnabled
+        onToggleGroup={onToggleGroup}
+        onNavigateSource={onNavigateSource}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Table groups" })).toBeVisible();
+    expect(screen.getByText("public.도메인<script>😀", { exact: true })).toBeVisible();
+    expect(screen.getByText(/Color #778899/)).toBeVisible();
+    expect(screen.getByText("alpha, beta", { exact: true })).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Collapse public.도메인<script>😀 in diagram" }),
+    );
+    expect(onToggleGroup).toHaveBeenCalledWith(group.key);
+
+    const sourceAction = screen.getByRole("button", {
+      name: `Open source for group at line ${group.range.startLine}`,
+    });
+    fireEvent.click(sourceAction);
+    expect(onNavigateSource).toHaveBeenCalledWith({
+      elementKey: group.key,
+      kind: "group",
+      tableKeys: group.tableKeys,
+    });
+
+    rendered.rerender(
+      <SchemaOutline
+        graph={graph}
+        collapsedGroupKeys={new Set()}
+        selectionStore={selectionStore}
+        sourceNavigationEnabled={false}
+        onToggleGroup={onToggleGroup}
+        onNavigateSource={onNavigateSource}
+      />,
+    );
+    expect(
+      screen.getByRole("button", {
+        name: `Open source for group at line ${group.range.startLine}`,
+      }),
+    ).toBeDisabled();
+  });
+
+  it("discards an expanded layout result that settles after a collapse layout", async () => {
+    const group = graph.groups[0];
+    if (!group) throw new Error("Expected a group.");
+    const expandedLayout = deferred<DiagramProjection>();
+    const collapsedLayout = deferred<DiagramProjection>();
+    const requestLayout = vi
+      .fn()
+      .mockImplementationOnce(() => expandedLayout.promise)
+      .mockImplementationOnce(() => collapsedLayout.promise);
+    const rendered = render(
+      <BaseSchemaDiagram
+        graph={graph}
+        collapsedGroupKeys={new Set()}
+        selectionStore={createDiagramSelectionStore()}
+        sourceNavigationEnabled
+        onToggleGroup={vi.fn()}
+        onNavigateSource={vi.fn()}
+        requestLayout={requestLayout}
+      />,
+    );
+
+    rendered.rerender(
+      <BaseSchemaDiagram
+        graph={graph}
+        collapsedGroupKeys={new Set([group.key])}
+        selectionStore={createDiagramSelectionStore()}
+        sourceNavigationEnabled
+        onToggleGroup={vi.fn()}
+        onNavigateSource={vi.fn()}
+        requestLayout={requestLayout}
+      />,
+    );
+    await act(() => {
+      collapsedLayout.resolve(createGroupedDiagramProjection(graph, new Set([group.key])));
+      return collapsedLayout.promise;
+    });
+    await act(() => {
+      expandedLayout.resolve(createGroupedDiagramProjection(graph, new Set()));
+      return expandedLayout.promise;
+    });
+
+    expect(screen.getByRole("button", { name: "Expand public.도메인<script>😀" })).toBeVisible();
+    expect(screen.queryByLabelText("Table public.alpha")).not.toBeInTheDocument();
   });
 });
 
@@ -209,4 +570,14 @@ function summaryEdgeIds(projection: DiagramProjection): string[] {
     .filter((edge) => edge.data.aggregate)
     .map((edge) => edge.id)
     .sort();
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }
