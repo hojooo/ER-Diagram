@@ -8,4 +8,5 @@ export * from "./dbml-parser.js";
 export * from "./hash.js";
 export * from "./schema-graph.js";
 export * from "./schema-semantics.js";
+export * from "./sql-capabilities.js";
 export * from "./sql-smoke.js";
