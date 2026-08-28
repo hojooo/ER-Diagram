@@ -12,6 +12,7 @@ const requiredFiles = [
   "docs/adr/0002-dbml-canonical-source-fidelity.md",
   "docs/adr/0003-sqlite-persistence.md",
   "docs/adr/0004-fastify-adapter-boundary.md",
+  "docs/adr/0005-sql-capability-matrix.md",
 ];
 const forbiddenMarkers = /PROPOSED|OPEN-|IMPLEMENTATION_BLOCKER/u;
 const ineffectivePnpmTestFilter =
