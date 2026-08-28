@@ -18,5 +18,6 @@ export type {
   SchemaRenameCandidate,
 } from "./schema-semantics.js";
 export * from "./sql-capabilities.js";
+export * from "./sql-data-exclusion.js";
 export * from "./sql-import.js";
 export * from "./sql-smoke.js";
