@@ -8,3 +8,18 @@ export {
   generateScaleFixture,
   sha256FixtureSource,
 } from "./synthetic-fixtures.js";
+export type {
+  SqlCapabilityFixture,
+  SqlFixtureCapabilityId,
+  SqlFixtureCapabilityStatus,
+  SqlFixtureDialect,
+  SqlFixtureInventory,
+  SqlFixtureObservedOutcome,
+  SqlParserErrorFixture,
+} from "./sql-capability-fixtures.js";
+export {
+  SQL_CAPABILITY_FIXTURE_SET_HASH,
+  SQL_CAPABILITY_FIXTURE_VERSION,
+  sqlCapabilityFixtures,
+  sqlParserErrorFixtures,
+} from "./sql-capability-fixtures.js";
