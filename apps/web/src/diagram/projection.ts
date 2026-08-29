@@ -55,6 +55,17 @@ export function createBaseDiagramProjection(graph: SchemaGraph): DiagramProjecti
   };
 }
 
+export function createGroupedDiagramProjection(
+  graph: SchemaGraph,
+  collapsedGroupKeys: ReadonlySet<string>,
+): DiagramProjection {
+  return createDiagramProjection(graph, {
+    viewKey: GLOBAL_VIEW_KEY,
+    collapsedGroupKeys,
+    lod: "FULL",
+  });
+}
+
 export function createDiagramProjection(
   graph: SchemaGraph,
   options: DiagramProjectionOptions,
@@ -79,7 +90,7 @@ export function createDiagramProjection(
     options.lod,
   );
   const edges = createReferenceEdges(
-    graph.references,
+    graph,
     visibleTableKeys,
     groupByTable,
     options.collapsedGroupKeys,
@@ -187,9 +198,7 @@ function createGroupNodes(
   return graph.groups
     .filter((group) => visibleGroupKeys.has(group.key))
     .map((group, index) => {
-      const visibleMemberCount = group.tableKeys.filter((tableKey) =>
-        visibleTableKeys.has(tableKey),
-      ).length;
+      const tableKeys = group.tableKeys.filter((tableKey) => visibleTableKeys.has(tableKey));
       const collapsed = collapsedGroupKeys.has(group.key);
       return {
         id: group.key,
@@ -197,15 +206,16 @@ function createGroupNodes(
         position: { x: index * (GROUP_WIDTH + 80), y: 0 },
         style: {
           width: GROUP_WIDTH,
-          height: collapsed
-            ? GROUP_HEADER_HEIGHT
-            : Math.max(180, GROUP_HEADER_HEIGHT + GROUP_PADDING * 2),
+          height: collapsed ? 88 : Math.max(180, GROUP_HEADER_HEIGHT + GROUP_PADDING * 2),
         },
         data: {
           kind: "group",
           groupKey: group.key,
+          schemaName: group.schemaName,
           name: group.name,
-          tableCount: visibleMemberCount,
+          tableKeys,
+          tableCount: tableKeys.length,
+          color: group.color,
           collapsed,
           lod,
         },
@@ -290,45 +300,18 @@ function collectPrimaryColumnKeys(table: TableNode): ReadonlySet<string> {
 }
 
 function createBaseReferenceEdges(graph: SchemaGraph): SchemaDiagramEdge[] {
-  const tableByKey = new Map(graph.tables.map((table) => [table.key, table]));
-  const columnNameByKey = new Map(
-    graph.tables.flatMap((table) =>
-      table.columns.map((column) => [column.key, column.name] as const),
-    ),
-  );
+  const context = createReferenceRenderingContext(graph);
 
   return graph.references.map((reference) => {
-    const role = resolveReferenceRole(reference);
-    const sourceEndpoint = role.foreignEndpoint ?? reference.endpoints[0];
-    const targetEndpoint = role.referencedEndpoint ?? reference.endpoints[1];
-    const sourceMultiplicity = formatMultiplicity(sourceEndpoint);
-    const targetMultiplicity = formatMultiplicity(targetEndpoint);
-    const sourceLabel = formatEndpointLabel(sourceEndpoint, tableByKey, columnNameByKey);
-    const targetLabel = formatEndpointLabel(targetEndpoint, tableByKey, columnNameByKey);
-    const referenceLabel = reference.name ?? "Anonymous reference";
-    const data: ReferenceDiagramEdgeData = {
-      kind: "reference",
-      count: 1,
-      referenceKeys: [reference.key],
-      referenceName: reference.name,
-      inactive: reference.inactive,
-      sourceMultiplicity,
-      targetMultiplicity,
-    };
-    return {
-      id: reference.key,
-      type: "reference",
-      source: sourceEndpoint.tableKey,
-      target: targetEndpoint.tableKey,
-      data,
-      label: `${reference.name ?? "Ref"} · ${sourceMultiplicity} → ${targetMultiplicity}`,
-      ariaLabel: `${referenceLabel}: ${sourceLabel} ${sourceMultiplicity} to ${targetLabel} ${targetMultiplicity}${reference.inactive ? ", inactive" : ""}`,
-      focusable: false,
-      selectable: true,
-      interactionWidth: 20,
-      markerEnd: { type: "arrowclosed" },
-      ...(reference.inactive ? { style: { strokeDasharray: "6 4" } } : {}),
-    } satisfies SchemaDiagramEdge;
+    const { sourceEndpoint, targetEndpoint } = orderedReferenceEndpoints(reference);
+    return createExactReferenceEdge(
+      reference,
+      sourceEndpoint,
+      targetEndpoint,
+      sourceEndpoint.tableKey,
+      targetEndpoint.tableKey,
+      context,
+    );
   });
 }
 
@@ -372,16 +355,17 @@ function formatEndpointLabel(
 }
 
 function createReferenceEdges(
-  references: readonly ReferenceEdge[],
+  graph: SchemaGraph,
   visibleTableKeys: ReadonlySet<string>,
   groupByTable: ReadonlyMap<string, string>,
   collapsedGroupKeys: ReadonlySet<string>,
 ): SchemaDiagramEdge[] {
   const result: SchemaDiagramEdge[] = [];
-  const aggregateByEndpoints = new Map<string, SchemaDiagramEdge>();
+  const buckets = new Map<string, CollapsedReferenceBucket>();
+  const context = createReferenceRenderingContext(graph);
 
-  for (const reference of references) {
-    const [sourceEndpoint, targetEndpoint] = reference.endpoints;
+  for (const reference of graph.references) {
+    const { sourceEndpoint, targetEndpoint } = orderedReferenceEndpoints(reference);
     if (
       !visibleTableKeys.has(sourceEndpoint.tableKey) ||
       !visibleTableKeys.has(targetEndpoint.tableKey)
@@ -395,27 +379,58 @@ function createReferenceEdges(
       source !== sourceEndpoint.tableKey || target !== targetEndpoint.tableKey;
 
     if (!collapsedEndpoint) {
-      result.push(createEdge(reference.key, source, target, [reference.key]));
+      result.push(
+        createExactReferenceEdge(
+          reference,
+          sourceEndpoint,
+          targetEndpoint,
+          source,
+          target,
+          context,
+        ),
+      );
       continue;
     }
 
-    const endpointKey = JSON.stringify([source, target]);
-    const existing = aggregateByEndpoints.get(endpointKey);
+    // Relationships hidden entirely inside the same collapsed group remain available in the
+    // accessible outline but do not create a misleading group self-edge.
+    if (source === target) {
+      continue;
+    }
+
+    const bucketKey = collapsedReferenceBucketKey(source, target, reference.inactive);
+    const existing = buckets.get(bucketKey);
     if (existing) {
-      existing.data.referenceKeys.push(reference.key);
-      existing.data.count += 1;
-      existing.label = `×${existing.data.count}`;
-      continue;
+      existing.references.push({ reference, sourceEndpoint, targetEndpoint });
+    } else {
+      buckets.set(bucketKey, {
+        source,
+        target,
+        inactive: reference.inactive,
+        references: [{ reference, sourceEndpoint, targetEndpoint }],
+      });
     }
-
-    const edge = createEdge(`aggregate:${aggregateByEndpoints.size}`, source, target, [
-      reference.key,
-    ]);
-    aggregateByEndpoints.set(endpointKey, edge);
-    result.push(edge);
   }
 
-  return result;
+  for (const bucket of buckets.values()) {
+    const onlyReference = bucket.references[0];
+    if (bucket.references.length === 1 && onlyReference) {
+      result.push(
+        createExactReferenceEdge(
+          onlyReference.reference,
+          onlyReference.sourceEndpoint,
+          onlyReference.targetEndpoint,
+          bucket.source,
+          bucket.target,
+          context,
+        ),
+      );
+      continue;
+    }
+    result.push(createAggregateReferenceEdge(bucket, graph));
+  }
+
+  return result.sort((left, right) => compareCodeUnits(left.id, right.id));
 }
 
 function representativeNodeId(
@@ -427,23 +442,136 @@ function representativeNodeId(
   return groupKey && collapsedGroupKeys.has(groupKey) ? groupKey : tableKey;
 }
 
-function createEdge(
-  id: string,
+interface ReferenceRenderingContext {
+  tableByKey: ReadonlyMap<string, TableNode>;
+  columnNameByKey: ReadonlyMap<string, string>;
+}
+
+interface CollapsedReferenceBucketEntry {
+  reference: ReferenceEdge;
+  sourceEndpoint: ReferenceEndpoint;
+  targetEndpoint: ReferenceEndpoint;
+}
+
+interface CollapsedReferenceBucket {
+  source: string;
+  target: string;
+  inactive: boolean;
+  references: CollapsedReferenceBucketEntry[];
+}
+
+function createReferenceRenderingContext(graph: SchemaGraph): ReferenceRenderingContext {
+  return {
+    tableByKey: new Map(graph.tables.map((table) => [table.key, table])),
+    columnNameByKey: new Map(
+      graph.tables.flatMap((table) =>
+        table.columns.map((column) => [column.key, column.name] as const),
+      ),
+    ),
+  };
+}
+
+function orderedReferenceEndpoints(reference: ReferenceEdge): {
+  sourceEndpoint: ReferenceEndpoint;
+  targetEndpoint: ReferenceEndpoint;
+} {
+  const role = resolveReferenceRole(reference);
+  return {
+    sourceEndpoint: role.foreignEndpoint ?? reference.endpoints[0],
+    targetEndpoint: role.referencedEndpoint ?? reference.endpoints[1],
+  };
+}
+
+function createExactReferenceEdge(
+  reference: ReferenceEdge,
+  sourceEndpoint: ReferenceEndpoint,
+  targetEndpoint: ReferenceEndpoint,
   source: string,
   target: string,
-  referenceKeys: string[],
+  context: ReferenceRenderingContext,
 ): SchemaDiagramEdge {
+  const sourceMultiplicity = formatMultiplicity(sourceEndpoint);
+  const targetMultiplicity = formatMultiplicity(targetEndpoint);
+  const sourceLabel = formatEndpointLabel(
+    sourceEndpoint,
+    context.tableByKey,
+    context.columnNameByKey,
+  );
+  const targetLabel = formatEndpointLabel(
+    targetEndpoint,
+    context.tableByKey,
+    context.columnNameByKey,
+  );
   const data: ReferenceDiagramEdgeData = {
     kind: "reference",
-    count: referenceKeys.length,
-    referenceKeys,
+    aggregate: false,
+    count: 1,
+    referenceKeys: [reference.key],
+    referenceName: reference.name,
+    inactive: reference.inactive,
+    sourceMultiplicity,
+    targetMultiplicity,
   };
   return {
-    id,
+    id: reference.key,
     type: "reference",
     source,
     target,
     data,
-    ...(data.count > 1 ? { label: `×${data.count}` } : {}),
+    label: `${reference.name ?? "Ref"} · ${sourceMultiplicity} → ${targetMultiplicity}`,
+    ariaLabel: `${reference.name ?? "Anonymous reference"}: ${sourceLabel} ${sourceMultiplicity} to ${targetLabel} ${targetMultiplicity}${reference.inactive ? ", inactive" : ""}`,
+    focusable: false,
+    selectable: true,
+    interactionWidth: 20,
+    markerEnd: { type: "arrowclosed" },
+    ...(reference.inactive ? { style: { strokeDasharray: "6 4" } } : {}),
   };
+}
+
+function createAggregateReferenceEdge(
+  bucket: CollapsedReferenceBucket,
+  graph: SchemaGraph,
+): SchemaDiagramEdge {
+  const referenceKeys = bucket.references
+    .map(({ reference }) => reference.key)
+    .sort(compareCodeUnits);
+  const data: ReferenceDiagramEdgeData = {
+    kind: "reference",
+    aggregate: true,
+    count: referenceKeys.length,
+    referenceKeys,
+    referenceName: null,
+    inactive: bucket.inactive,
+  };
+  const stateLabel = bucket.inactive ? "inactive " : "";
+  return {
+    id: `aggregate:${collapsedReferenceBucketKey(bucket.source, bucket.target, bucket.inactive)}`,
+    type: "reference",
+    source: bucket.source,
+    target: bucket.target,
+    data,
+    label: `×${data.count} relationships`,
+    ariaLabel: `${data.count} ${stateLabel}relationships from ${formatRepresentativeLabel(bucket.source, graph)} to ${formatRepresentativeLabel(bucket.target, graph)}`,
+    focusable: false,
+    selectable: false,
+    interactionWidth: 20,
+    markerEnd: { type: "arrowclosed" },
+    ...(bucket.inactive ? { style: { strokeDasharray: "6 4" } } : {}),
+  };
+}
+
+function collapsedReferenceBucketKey(source: string, target: string, inactive: boolean): string {
+  return JSON.stringify([source, target, inactive ? "INACTIVE" : "ACTIVE"]);
+}
+
+function formatRepresentativeLabel(nodeId: string, graph: SchemaGraph): string {
+  const table = graph.tables.find((candidate) => candidate.key === nodeId);
+  if (table) return `${table.schemaName}.${table.name}`;
+  const group = graph.groups.find((candidate) => candidate.key === nodeId);
+  if (group) return `${group.schemaName}.${group.name}`;
+  return nodeId;
+}
+
+function compareCodeUnits(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }

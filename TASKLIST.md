@@ -205,8 +205,8 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - 검증: `pnpm --filter @er-diagram/web test test/source-editor.test.tsx`
 - [x] `M1-009` table/column/PK/FK/ref base diagram과 source navigation
   - 검증: `pnpm --filter @er-diagram/web test test/diagram-base.test.tsx`
-- [ ] `M1-010` `TableGroup` compound node와 collapse edge aggregation
-  - 검증: `pnpm --filter @er-diagram/web test table-groups`
+- [x] `M1-010` `TableGroup` compound node와 collapse edge aggregation
+  - 검증: `pnpm --filter @er-diagram/web test test/table-groups.test.tsx`
 - [ ] `M1-011` `DiagramView`, search, `NAME_ONLY|KEYS_ONLY|FULL` LOD
   - 검증: `pnpm --filter @er-diagram/web test views-search-lod`
 - [ ] `M1-012` per-view layout persistence와 auto-layout preview/apply/cancel/reset

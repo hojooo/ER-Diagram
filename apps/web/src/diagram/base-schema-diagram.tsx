@@ -7,38 +7,48 @@ import {
   ReactFlow,
   type ReactFlowInstance,
 } from "@xyflow/react";
-import { useStore } from "zustand";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useStore } from "zustand";
 
 import type { BaseSchemaDiagramProps } from "./base-schema-diagram-contract.js";
 import {
   DiagramInteractionContext,
+  GroupDiagramNodeComponent,
   ReferenceDiagramEdgeComponent,
   TableDiagramNodeComponent,
 } from "./diagram-components.js";
 import { requestWorkerLayout } from "./layout-worker-client.js";
-import { createBaseDiagramProjection } from "./projection.js";
+import { createGroupedDiagramProjection } from "./projection.js";
 import type { DiagramSelection } from "./source-navigation.js";
 import type {
   DiagramProjection,
+  GroupDiagramNode,
   SchemaDiagramEdge,
   SchemaDiagramNode,
   TableDiagramNode,
 } from "./types.js";
 
-const nodeTypes = { table: TableDiagramNodeComponent } satisfies NodeTypes;
+const nodeTypes = {
+  group: GroupDiagramNodeComponent,
+  table: TableDiagramNodeComponent,
+} satisfies NodeTypes;
 const edgeTypes = { reference: ReferenceDiagramEdgeComponent } satisfies EdgeTypes;
 
 type LayoutStatus = "LAYING_OUT" | "READY" | "ERROR";
 
 export function BaseSchemaDiagram({
   graph,
+  collapsedGroupKeys,
   selectionStore,
   sourceNavigationEnabled,
+  onToggleGroup,
   onNavigateSource,
   requestLayout = requestWorkerLayout,
 }: BaseSchemaDiagramProps) {
-  const projection = useMemo(() => createBaseDiagramProjection(graph), [graph]);
+  const projection = useMemo(
+    () => createGroupedDiagramProjection(graph, collapsedGroupKeys),
+    [collapsedGroupKeys, graph],
+  );
   const [displayProjection, setDisplayProjection] = useState(projection);
   const [layoutStatus, setLayoutStatus] = useState<LayoutStatus>(
     projection.nodes.length === 0 ? "READY" : "LAYING_OUT",
@@ -52,6 +62,10 @@ export function BaseSchemaDiagram({
   const requestGenerationRef = useRef(0);
   const activeLayoutRequestRef = useRef("");
   const fittedLayoutRequestRef = useRef<string | null>(null);
+  const referenceByKey = useMemo(
+    () => new Map(graph.references.map((reference) => [reference.key, reference])),
+    [graph.references],
+  );
 
   useEffect(() => {
     requestGenerationRef.current += 1;
@@ -102,15 +116,14 @@ export function BaseSchemaDiagram({
 
   useEffect(() => {
     if (!flowInstance || !selection || displayProjection.nodes.length === 0) return;
-    const selectedNodes = displayProjection.nodes.filter(
-      (node) => node.type === "table" && selection.tableKeys.includes(node.data.tableKey),
-    );
+    const selectedNodeIds = representativeNodeIds(displayProjection, selection);
+    const selectedNodes = displayProjection.nodes.filter((node) => selectedNodeIds.has(node.id));
     if (selectedNodes.length === 0) return;
     const animationFrame = requestAnimationFrame(() => {
       void flowInstance.fitView({ nodes: selectedNodes, padding: 0.45, duration: 250 });
     });
     return () => cancelAnimationFrame(animationFrame);
-  }, [displayProjection.nodes, flowInstance, selection]);
+  }, [displayProjection, flowInstance, selection]);
 
   const activateElement = useCallback(
     (nextSelection: DiagramSelection) => {
@@ -120,8 +133,8 @@ export function BaseSchemaDiagram({
     [onNavigateSource, selectionStore, sourceNavigationEnabled],
   );
   const interactions = useMemo(
-    () => ({ activateElement, toggleGroup: () => undefined }),
-    [activateElement],
+    () => ({ activateElement, toggleGroup: onToggleGroup }),
+    [activateElement, onToggleGroup],
   );
 
   const selectedProjection = useMemo<DiagramProjection>(() => {
@@ -129,8 +142,22 @@ export function BaseSchemaDiagram({
     return {
       ...displayProjection,
       nodes: displayProjection.nodes.map((node) => {
-        if (node.type !== "table") return node;
-        const selected = selection?.tableKeys.includes(node.data.tableKey) ?? false;
+        if (node.type === "table") {
+          const selected = selection?.tableKeys.includes(node.data.tableKey) ?? false;
+          return {
+            ...node,
+            selected,
+            data: {
+              ...node.data,
+              selectedElementKey: selected ? selectedElementKey : null,
+            },
+          } satisfies TableDiagramNode;
+        }
+        const selected =
+          selection?.elementKey === node.data.groupKey ||
+          (node.data.collapsed &&
+            (selection?.tableKeys.some((tableKey) => node.data.tableKeys.includes(tableKey)) ??
+              false));
         return {
           ...node,
           selected,
@@ -138,11 +165,12 @@ export function BaseSchemaDiagram({
             ...node.data,
             selectedElementKey: selected ? selectedElementKey : null,
           },
-        } satisfies TableDiagramNode;
+        } satisfies GroupDiagramNode;
       }),
       edges: displayProjection.edges.map((edge) => ({
         ...edge,
-        selected: edge.id === selectedElementKey,
+        selected:
+          selectedElementKey !== null && edge.data.referenceKeys.includes(selectedElementKey),
       })),
     };
   }, [displayProjection, selection]);
@@ -193,20 +221,30 @@ export function BaseSchemaDiagram({
           edgeTypes={edgeTypes}
           onInit={setFlowInstance}
           onNodeClick={(_event, node) => {
-            if (node.type !== "table") return;
-            activateElement({
-              elementKey: node.data.tableKey,
-              kind: "table",
-              tableKeys: [node.data.tableKey],
-            });
+            if (node.type === "table") {
+              activateElement({
+                elementKey: node.data.tableKey,
+                kind: "table",
+                tableKeys: [node.data.tableKey],
+              });
+            } else {
+              activateElement({
+                elementKey: node.data.groupKey,
+                kind: "group",
+                tableKeys: node.data.tableKeys,
+              });
+            }
           }}
           onEdgeClick={(_event, edge) => {
+            if (edge.data.referenceKeys.length !== 1) return;
             const referenceKey = edge.data.referenceKeys[0];
             if (!referenceKey) return;
+            const reference = referenceByKey.get(referenceKey);
+            if (!reference) return;
             activateElement({
               elementKey: referenceKey,
               kind: "reference",
-              tableKeys: [edge.source, edge.target],
+              tableKeys: reference.endpoints.map((endpoint) => endpoint.tableKey),
             });
           }}
           onPaneClick={() => selectionStore.getState().setSelection(null)}
@@ -226,4 +264,28 @@ export function BaseSchemaDiagram({
       </DiagramInteractionContext.Provider>
     </div>
   );
+}
+
+function representativeNodeIds(
+  projection: DiagramProjection,
+  selection: DiagramSelection,
+): ReadonlySet<string> {
+  const nodeById = new Map(projection.nodes.map((node) => [node.id, node]));
+  const result = new Set<string>();
+
+  if (selection.kind === "group" && nodeById.has(selection.elementKey)) {
+    result.add(selection.elementKey);
+  }
+  for (const tableKey of selection.tableKeys) {
+    if (nodeById.get(tableKey)?.type === "table") {
+      result.add(tableKey);
+      continue;
+    }
+    const parent = projection.nodes.find(
+      (node) =>
+        node.type === "group" && node.data.collapsed && node.data.tableKeys.includes(tableKey),
+    );
+    if (parent) result.add(parent.id);
+  }
+  return result;
 }

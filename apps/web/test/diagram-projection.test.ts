@@ -205,8 +205,17 @@ describe("diagram projection", () => {
     ).toBe(true);
   });
 
-  it("hides collapsed children and aggregates equivalent reference endpoints with counts", () => {
+  it("hides collapsed children and aggregates external reference endpoints with counts", () => {
     const collapsedGroupKeys = new Set(graph.groups.map((group) => group.key));
+    const groupByTableKey = new Map(
+      graph.groups.flatMap((group) =>
+        group.tableKeys.map((tableKey) => [tableKey, group.key] as const),
+      ),
+    );
+    const externalReferenceCount = graph.references.filter((reference) => {
+      const [left, right] = reference.endpoints;
+      return groupByTableKey.get(left.tableKey) !== groupByTableKey.get(right.tableKey);
+    }).length;
 
     const projection = createDiagramProjection(graph, {
       viewKey: GLOBAL_VIEW_KEY,
@@ -220,11 +229,14 @@ describe("diagram projection", () => {
     expect(new Set(endpointPairs)).toHaveLength(endpointPairs.length);
     expect(projection.edges.some((edge) => edge.data.count > 1)).toBe(true);
     expect(projection.edges.reduce((count, edge) => count + edge.data.count, 0)).toBe(
-      fixtureInventory.fidelity.references,
+      externalReferenceCount,
     );
     expect(
       projection.edges.every(
-        (edge) => collapsedGroupKeys.has(edge.source) && collapsedGroupKeys.has(edge.target),
+        (edge) =>
+          collapsedGroupKeys.has(edge.source) &&
+          collapsedGroupKeys.has(edge.target) &&
+          edge.source !== edge.target,
       ),
     ).toBe(true);
   });

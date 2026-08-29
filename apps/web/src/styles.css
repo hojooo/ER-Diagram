@@ -111,10 +111,16 @@ select {
 .diagram-group {
   width: 100%;
   height: 100%;
-  border: 1px solid #475569;
+  border: 1px solid var(--diagram-group-color, #475569);
   border-radius: 16px;
   background: rgb(15 23 42 / 72%);
   box-shadow: inset 0 0 0 1px rgb(148 163 184 / 6%);
+}
+
+.diagram-group.is-selected {
+  box-shadow:
+    0 0 0 3px rgb(34 211 238 / 35%),
+    inset 0 0 0 1px rgb(148 163 184 / 12%);
 }
 
 .diagram-group.is-collapsed {
@@ -132,6 +138,17 @@ select {
 .diagram-group__header h2,
 .diagram-kicker {
   margin: 0;
+}
+
+.diagram-group__schema,
+.diagram-group__color {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.62rem;
+}
+
+.diagram-group__color {
+  margin-top: 2px;
 }
 
 .diagram-group__header h2 {

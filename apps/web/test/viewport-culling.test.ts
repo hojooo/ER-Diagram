@@ -16,8 +16,11 @@ describe("viewport culling", () => {
           data: {
             kind: "group",
             groupKey: "group-a",
+            schemaName: "public",
             name: "A",
+            tableKeys: ["table-a"],
             tableCount: 1,
+            color: null,
             collapsed: false,
             lod: "FULL",
           },
@@ -59,7 +62,13 @@ describe("viewport culling", () => {
           type: "reference",
           source: "table-a",
           target: "table-b",
-          data: { kind: "reference", count: 1, referenceKeys: ["ref-a-b"] },
+          data: {
+            kind: "reference",
+            aggregate: false,
+            count: 1,
+            referenceKeys: ["ref-a-b"],
+            inactive: false,
+          },
         },
       ],
     };

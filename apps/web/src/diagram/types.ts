@@ -23,18 +23,23 @@ export type TableDiagramNodeData = {
 export type GroupDiagramNodeData = {
   kind: "group";
   groupKey: string;
+  schemaName: string;
   name: string;
+  tableKeys: string[];
   tableCount: number;
+  color: string | null;
   collapsed: boolean;
   lod: DiagramLod;
+  selectedElementKey?: string | null;
 } & Record<string, unknown>;
 
 export type ReferenceDiagramEdgeData = {
   kind: "reference";
+  aggregate: boolean;
   count: number;
   referenceKeys: string[];
   referenceName?: string | null;
-  inactive?: boolean;
+  inactive: boolean;
   sourceMultiplicity?: string;
   targetMultiplicity?: string;
 } & Record<string, unknown>;

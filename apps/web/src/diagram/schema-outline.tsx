@@ -1,6 +1,6 @@
 import type { ReferenceEdge, SchemaGraph, TableNode } from "@er-diagram/core";
-import { useStore } from "zustand";
 import { useEffect, useMemo, useRef } from "react";
+import { useStore } from "zustand";
 
 import { createBaseDiagramProjection, formatMultiplicity } from "./projection.js";
 import type { DiagramSelectionStore } from "./selection-store.js";
@@ -8,13 +8,17 @@ import type { DiagramSelection } from "./source-navigation.js";
 
 export function SchemaOutline({
   graph,
+  collapsedGroupKeys,
   selectionStore,
   sourceNavigationEnabled,
+  onToggleGroup,
   onNavigateSource,
 }: {
   readonly graph: SchemaGraph;
+  readonly collapsedGroupKeys: ReadonlySet<string>;
   readonly selectionStore: DiagramSelectionStore;
   readonly sourceNavigationEnabled: boolean;
+  readonly onToggleGroup: (groupKey: string) => void;
   readonly onNavigateSource: (selection: DiagramSelection) => void;
 }) {
   const selection = useStore(selectionStore, (state) => state.selection);
@@ -54,12 +58,74 @@ export function SchemaOutline({
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-semibold text-white">Schema outline</h2>
         <span className="text-xs text-slate-400">
-          {graph.tables.length} tables · {graph.references.length} relationships
+          {graph.tables.length} tables · {graph.groups.length} groups · {graph.references.length}{" "}
+          relationships
         </span>
       </div>
       <p className="mt-2 text-xs text-slate-400">
         Focus an element in the diagram or use its line action to open the canonical source.
       </p>
+
+      {graph.groups.length > 0 ? (
+        <div className="mt-5">
+          <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+            Table groups
+          </h3>
+          <ol className="mt-3 grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+            {graph.groups.map((group) => {
+              const groupSelection: DiagramSelection = {
+                elementKey: group.key,
+                kind: "group",
+                tableKeys: [...group.tableKeys],
+              };
+              const collapsed = collapsedGroupKeys.has(group.key);
+              const qualifiedName = `${group.schemaName}.${group.name}`;
+              const memberNames = group.tableKeys.map(
+                (tableKey) => tableByKey.get(tableKey)?.name ?? tableKey,
+              );
+              return (
+                <li
+                  className="rounded-lg border border-slate-700 bg-slate-950/60 p-3 text-xs"
+                  key={group.key}
+                >
+                  <p className="font-semibold text-slate-100">{qualifiedName}</p>
+                  <p className="mt-1 text-slate-400">
+                    {group.tableKeys.length} tables · Color {group.color ?? "default"} ·{" "}
+                    {collapsed ? "Collapsed" : "Expanded"}
+                  </p>
+                  <p className="mt-2 break-words text-slate-300">
+                    {memberNames.length > 0 ? memberNames.join(", ") : "No member tables"}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <OutlineAction
+                      label={`Focus group ${qualifiedName} in diagram`}
+                      current={selection?.elementKey === group.key}
+                      onClick={() => activate(groupSelection)}
+                    >
+                      Diagram
+                    </OutlineAction>
+                    <button
+                      className="rounded border border-slate-600 px-2 py-1 font-semibold text-slate-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+                      type="button"
+                      aria-expanded={!collapsed}
+                      aria-label={`${collapsed ? "Expand" : "Collapse"} ${qualifiedName} in diagram`}
+                      onClick={() => onToggleGroup(group.key)}
+                    >
+                      {collapsed ? "Expand" : "Collapse"}
+                    </button>
+                    <SourceLineAction
+                      selection={groupSelection}
+                      graph={graph}
+                      enabled={sourceNavigationEnabled}
+                      onClick={navigate}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      ) : null}
 
       <div className="mt-4 grid gap-5 xl:grid-cols-2">
         <div>
