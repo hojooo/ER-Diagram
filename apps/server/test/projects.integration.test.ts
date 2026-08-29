@@ -13,6 +13,7 @@ import {
   createProjectApplication,
   type LayoutApplication,
   type ProjectApplication,
+  type SqlExportApplication,
   type SqlImportApplication,
 } from "@er-diagram/core";
 import {
@@ -79,6 +80,7 @@ function trackedServer(
     projectApplication: application,
     layoutApplication,
     sqlImportApplication: {} as SqlImportApplication,
+    sqlExportApplication: {} as SqlExportApplication,
     generateCorrelationId: correlationGenerator(),
   });
   openServers.add(server);

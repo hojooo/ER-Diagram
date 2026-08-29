@@ -2,6 +2,7 @@ import { type ErrorResponse, errorResponseSchema } from "@er-diagram/contracts";
 import type {
   LayoutApplicationError,
   ProjectApplicationError,
+  SqlExportApplicationError,
   SqlImportApplicationError,
 } from "@er-diagram/core";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -124,6 +125,33 @@ export function sendSqlImportApplicationError(
         500,
         error.code,
         "Stored SQL import data failed an integrity check.",
+      );
+  }
+  return assertNever(error);
+}
+
+export function sendSqlExportApplicationError(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  error: SqlExportApplicationError,
+): FastifyReply {
+  switch (error.code) {
+    case "SQL_EXPORT_PROJECT_NOT_FOUND":
+      return sendError(request, reply, 404, error.code, error.message);
+    case "SQL_EXPORT_SCHEMA_REVISION_CONFLICT":
+      return sendError(request, reply, 409, error.code, error.message, {
+        currentRevisionNo: error.currentSchemaRevisionNo,
+      });
+    case "SQL_EXPORT_CURRENT_DRAFT_INVALID":
+    case "SQL_EXPORT_LAST_VALID_NOT_FOUND":
+      return sendError(request, reply, 422, error.code, error.message);
+    case "SQL_EXPORT_STORAGE_INVARIANT_VIOLATION":
+      return sendError(
+        request,
+        reply,
+        500,
+        error.code,
+        "Stored project data failed an integrity check.",
       );
   }
   return assertNever(error);
