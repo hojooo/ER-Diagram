@@ -34,3 +34,12 @@ export {
   SQL_IMPORT_REPORT_FIXTURE_VERSION,
   sqlImportReportFixtures,
 } from "./sql-import-report-fixtures.js";
+export type {
+  SqlExportFixture,
+  SqlExportFixtureStatus,
+} from "./sql-export-fixtures.js";
+export {
+  SQL_EXPORT_FIXTURE_SET_HASH,
+  SQL_EXPORT_FIXTURE_VERSION,
+  sqlExportFixtures,
+} from "./sql-export-fixtures.js";
