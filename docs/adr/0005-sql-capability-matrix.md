@@ -170,6 +170,19 @@ Raw importer는 오류를 반환하지 않았으므로 관찰 사실과 다르�
   generated SQL body와 native parser message는 포함하지 않는다. `PARTIAL`·`UNSUPPORTED` 확인과 file
   download는 M2-007 adapter/UI가 담당한다.
 
+### M2-007 revision-bound export와 download 경계
+
+- Export application은 project state를 read-only로 조회해 expected schema revision을 확인하고 선택된 valid
+  revision만 M2-006 converter에 전달한다. Invalid draft를 last-valid로 자동 전환하지 않는다.
+- `layoutRevisionNo > 0`은 layout omission provenance로 전달하지만 export는 project, revision, layout 또는
+  artifact를 저장하지 않는다. Target은 항상 project primary dialect다.
+- Conversion fatal result도 source가 제거된 report evidence로 반환한다. SQL candidate는 차단하지만 report
+  JSON은 성공 여부와 관계없이 내려받을 수 있다.
+- `PARTIAL` 또는 `UNSUPPORTED` 확인은 browser session-local download gate다. Conversion report나 generated
+  SQL hash를 변경하지 않으며 재실행·revision conflict에서 초기화한다.
+- Report occurrence navigation은 선택된 revision의 read-only source에 적용한다. Last-valid range를 current
+  invalid Monaco model에 적용하지 않는다.
+
 ## Verification
 
 - `pnpm --filter @er-diagram/test-fixtures test test/sql-capability-fixtures.test.ts`
@@ -186,3 +199,5 @@ Raw importer는 오류를 반환하지 않았으므로 관찰 사실과 다르�
 - `pnpm --filter @er-diagram/server test:integration sql-import`
 - `pnpm --filter @er-diagram/test-fixtures test test/sql-export-fixtures.test.ts`
 - `pnpm --filter @er-diagram/core test test/sql-export.test.ts`
+- `pnpm --filter @er-diagram/server test:integration sql-export`
+- `pnpm test:e2e sql-export`

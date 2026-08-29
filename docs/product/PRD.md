@@ -321,12 +321,14 @@ project나 artifact를 만들지 않는다. Replace는 이미 저장된 current 
 
 ### 10.6 SQL DDL 내보내기
 
-1. current draft가 valid인지 확인한다.
-2. project의 primary dialect를 기본 target으로 선택한다.
-3. DBML-only structure와 변환 제약을 분석한다.
-4. DDL과 conversion report를 함께 생성한다.
-5. fatal error가 있으면 export를 차단한다.
-6. warning만 있으면 사용자가 확인한 뒤 download할 수 있다.
+1. source와 layout을 먼저 저장하고 current draft가 valid인지 확인한다.
+2. invalid draft는 자동 fallback하지 않으며 사용자가 last-valid revision을 명시적으로 선택할 수 있다.
+3. project의 primary dialect만 target으로 사용한다.
+4. DBML-only structure와 변환 제약을 분석한다.
+5. DDL과 conversion report를 함께 생성한다.
+6. fatal error가 있으면 SQL download를 차단하되 report JSON은 제공한다.
+7. `PARTIAL` 또는 `UNSUPPORTED`가 있으면 사용자가 확인한 뒤 SQL을 download할 수 있다.
+8. SQL과 report JSON은 별도 파일로 제공한다.
 
 ## 11. 기능 요구사항
 
@@ -526,9 +528,21 @@ table과 junction 기본 이름이 충돌하거나 action이 소실되면 fail-c
 
 Custom·extension type은 같은 dialect parser가 generated SQL을 재파싱하면 `UNSUPPORTED` candidate를
 제공하고, 재파싱하지 못하면 source column range를 가진 fatal result로 차단한다. `PARTIAL` 또는
-`UNSUPPORTED`가 있는 성공 candidate는 `acknowledgementRequired=true`지만 실제 확인·download 정책은
-M2-007이 담당한다. Report와 diagnostic에는 DBML 원문, `Records` 값, generated SQL 본문과 native parser
+`UNSUPPORTED`가 있는 성공 candidate는 `acknowledgementRequired=true`이며 Web adapter가 확인·download
+정책을 담당한다. Report와 diagnostic에는 DBML 원문, `Records` 값, generated SQL 본문과 native parser
 message를 넣지 않는다.
+
+Project export endpoint는 state를 변경하지 않는 `POST`이며 `commandId`를 받지 않는다. Request는 expected
+schema revision과 `CURRENT_DRAFT | LAST_VALID` 선택만 전달하고 target dialect는 project primary dialect로
+고정한다. Invalid current draft는 `LAST_VALID`로 자동 전환하지 않으며 사용자가 revision을 명시적으로 선택해야
+한다. Conversion 자체의 fatal 결과는 검토 가능한 report와 `candidate: null`을 포함한 HTTP `200`으로
+반환하고, project 부재·stale revision·선택 불가 상태는 공통 HTTP 오류로 구분한다.
+
+Export UI 진입 전 source와 layout을 flush하며 둘 중 하나가 error 또는 conflict이면 진입을 차단한다. 성공
+candidate의 SQL과 versioned ConversionReport JSON은 별도 파일로 제공하고, fatal conversion도 report JSON은
+내려받을 수 있다. `PARTIAL` 또는 `UNSUPPORTED`가 있으면 session-local 확인을 완료하기 전까지 SQL download를
+비활성화한다. Report occurrence는 선택한 revision의 read-only DBML source에만 적용하므로 last-valid range를
+현재 invalid Monaco buffer에 사용하지 않는다.
 
 ### 11.5 Diagram 탐색
 
