@@ -212,7 +212,9 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
 - [x] `M1-012` per-view layout persistence와 auto-layout preview/apply/cancel/reset
   - project-global layout revision, explicit conflict recovery, full current-view reset
   - 검증: `pnpm --filter @er-diagram/web test test/layout-persistence.test.tsx`
-- [ ] `M1-GATE` fidelity 탐색과 invalid-draft restart recovery 통과
+- [x] `M1-GATE` fidelity 탐색과 invalid-draft restart recovery 통과
+  - 실제 Monaco/parser/ELK browser 탐색과 file-backed SQLite reopen을 분리해 검증한다.
+  - 검증: `pnpm test:m1-gate`
 
 ### Milestone 2 — PostgreSQL·MySQL SQL Interchange
 

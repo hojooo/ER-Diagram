@@ -57,6 +57,9 @@ importers:
         specifier: 5.12.1
         version: 5.12.1
     devDependencies:
+      '@er-diagram/test-fixtures':
+        specifier: workspace:*
+        version: link:../../packages/test-fixtures
       typescript:
         specifier: 7.0.2
         version: 7.0.2
