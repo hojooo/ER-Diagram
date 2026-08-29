@@ -592,6 +592,33 @@ expanded, hidden empty, fresh ELK 위치와 fit viewport로 저장하고 다른 
 | `EDIT-011` | P0 | column type 입력은 project dialect에 맞는 suggestion과 validation을 제공하되 표준 DBML raw type을 강제로 삭제하지 않는다. | custom/domain type은 source-only 또는 warning 상태로 보존된다. |
 | `EDIT-012` | P0 | `TablePartial`에서 주입된 field의 provenance와 변경 영향을 표시한다. | 개별 table의 local field처럼 삭제하지 않으며 partial 편집이 필요한 경우 영향 table 목록과 source 이동을 제공한다. |
 
+Visual schema write의 wire contract는 `commandId`, 양의 `expectedSchemaRevisionNo`와 `kind`를 공통
+envelope로 갖는 strict `VisualCommand` discriminated union이다. Project ID는 HTTP path에서 전달하고
+`expectedSchemaHash`는 authoritative server parse에서 계산하므로 command payload에 중복하지 않는다.
+P0 command catalog는 다음 20종으로 고정한다.
+
+| 영역 | Command |
+| --- | --- |
+| Table | `CREATE_TABLE`, `UPDATE_TABLE`, `RENAME_TABLE`, `DELETE_TABLE` |
+| Column | `CREATE_COLUMN`, `UPDATE_COLUMN`, `RENAME_COLUMN`, `REORDER_COLUMN`, `DELETE_COLUMN` |
+| Reference | `CREATE_REFERENCE`, `UPDATE_REFERENCE`, `DELETE_REFERENCE` |
+| Index | `CREATE_INDEX`, `UPDATE_INDEX`, `DELETE_INDEX` |
+| Check | `CREATE_CHECK`, `UPDATE_CHECK`, `DELETE_CHECK` |
+| Group | `UPDATE_GROUP_MEMBERSHIP` |
+| View | `UPDATE_DIAGRAM_VIEW` |
+
+Create command는 시각적으로 편집 가능한 값을 모두 명시하고 update command는 non-empty `changes`
+patch만 받는다. Table·column rename은 stable key가 바뀌는 효과를 숨기지 않도록 별도 command로
+분리한다. Group membership은 add/remove delta이며 `DiagramView` filter는 `[]`(전체 표시), non-empty
+array(지정 항목만 표시), `null`(전체 숨김)의 tri-state를 유지한다. Table schema 이동, alias, custom
+metadata와 partial membership은 P0 visual command 범위 밖이며 source에서만 편집한다.
+
+Zod validation은 UUID·revision·variant shape, stable-key kind prefix, 명백히 위험한 identifier/type
+fragment와 command-local 구조만 검증한다. Target 존재 여부, owner 관계, 이름 충돌, partial provenance,
+dialect type capability와 최종 semantic validity는 current graph resolve, DBML v2 full reparse와 expected
+semantic diff가 authoritative하게 검증한다. Contract parse 성공만으로 source mutation 성공을 주장하지
+않는다.
+
 ### 11.7 History와 복구
 
 | ID | 우선순위 | 요구사항 | 수용 기준 |
