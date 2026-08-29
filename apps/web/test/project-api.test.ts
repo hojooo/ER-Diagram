@@ -88,6 +88,40 @@ function sqlImportApplyResponse() {
   };
 }
 
+function sqlExportResponse() {
+  const hash = "d".repeat(64);
+  return {
+    sourceSelection: "CURRENT_DRAFT" as const,
+    revisionNo: 1,
+    sourceHash: hash,
+    report: {
+      reportVersion: 1 as const,
+      exportSemanticsVersion: 1 as const,
+      sourceFilepath: "/main.dbml",
+      sourceHash: hash,
+      parserInputHash: hash,
+      primaryDialect: "POSTGRESQL" as const,
+      targetDialect: "POSTGRESQL" as const,
+      parserVersions: { dbmlCore: "9.1.1" as const, dbmlParse: "9.1.1" as const },
+      schemaSemanticsVersion: 1 as const,
+      ddlKind: "EMPTY_SCHEMA_CREATE" as const,
+      overallStatus: "EXACT" as const,
+      acknowledgementRequired: false,
+      generatedSqlHash: hash,
+      containsDataStatements: false,
+      entries: [],
+      diagnostics: [],
+      semanticVerification: {
+        status: "VERIFIED" as const,
+        sourceExportableHash: hash,
+        generatedExportableHash: hash,
+        changes: [] as const,
+      },
+    },
+    candidate: { sql: "CREATE TABLE users (id int);", sqlHash: hash },
+  };
+}
+
 function jsonResponse(value: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(value), {
     ...init,
@@ -96,6 +130,31 @@ function jsonResponse(value: unknown, init: ResponseInit = {}): Response {
 }
 
 describe("HTTP project API", () => {
+  it("posts a read-only SQL export request without generating a command ID", async () => {
+    const generateCommandId = vi.fn(() => COMMAND_ID);
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse(sqlExportResponse()));
+    const api = createHttpProjectApi({ fetch: fetcher, generateCommandId });
+
+    await expect(
+      api.exportProjectSql({
+        projectId: PROJECT_ID,
+        expectedSchemaRevisionNo: 1,
+        sourceSelection: "CURRENT_DRAFT",
+      }),
+    ).resolves.toEqual(sqlExportResponse());
+    expect(generateCommandId).not.toHaveBeenCalled();
+    expect(fetcher).toHaveBeenCalledWith(
+      `/api/v1/projects/${PROJECT_ID}/sql-export`,
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          expectedSchemaRevisionNo: 1,
+          sourceSelection: "CURRENT_DRAFT",
+        }),
+      }),
+    );
+  });
+
   it("validates list and detail responses with the shared contracts", async () => {
     const fetcher = vi
       .fn<typeof fetch>()

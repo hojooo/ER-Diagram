@@ -30,6 +30,10 @@ import {
   type SqlImportStandalonePreviewResponse,
   sqlImportStandalonePreviewRequestSchema,
   sqlImportStandalonePreviewResponseSchema,
+  type SqlExportResponse,
+  sqlExportRequestSchema,
+  sqlExportResponseSchema,
+  type SqlExportSourceSelection,
   type OriginalSqlRetentionMode,
 } from "@er-diagram/contracts";
 
@@ -101,6 +105,12 @@ export interface ApplyProjectSqlImportInput {
   readonly dataStatementHandling?: SqlDataStatementHandling;
 }
 
+export interface ExportProjectSqlInput {
+  readonly projectId: string;
+  readonly expectedSchemaRevisionNo: number;
+  readonly sourceSelection: SqlExportSourceSelection;
+}
+
 export interface ProjectApi {
   listProjects(): Promise<ProjectsResponse>;
   getProject(projectId: string): Promise<ProjectResponse>;
@@ -119,6 +129,7 @@ export interface ProjectApi {
   ): Promise<SqlImportApplyResponse>;
   previewProjectSqlImport(input: PreviewProjectSqlImportInput): Promise<SqlImportPreviewResponse>;
   applyProjectSqlImport(input: ApplyProjectSqlImportInput): Promise<SqlImportApplyResponse>;
+  exportProjectSql(input: ExportProjectSqlInput): Promise<SqlExportResponse>;
 }
 
 export class ProjectApiError extends Error {
@@ -388,6 +399,20 @@ export function createHttpProjectApi(options: HttpProjectApiOptions = {}): Proje
         responseSchema: sqlImportApplyResponseSchema,
         body,
         commandId,
+      });
+    },
+    exportProjectSql: (input) => {
+      const projectId = parseClientInput(projectIdSchema, input.projectId);
+      const body = parseClientInput(sqlExportRequestSchema, {
+        expectedSchemaRevisionNo: input.expectedSchemaRevisionNo,
+        sourceSelection: input.sourceSelection,
+      });
+      return request(fetcher, basePath, {
+        method: "POST",
+        path: `/projects/${encodeURIComponent(projectId)}/sql-export`,
+        expectedStatus: 200,
+        responseSchema: sqlExportResponseSchema,
+        body,
       });
     },
   };

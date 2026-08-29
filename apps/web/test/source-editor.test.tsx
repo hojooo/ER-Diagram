@@ -225,6 +225,28 @@ describe("DBML source workspace", () => {
     );
   });
 
+  it("enters SQL export only after source and layout are saved and offers no discard bypass", async () => {
+    const pendingSave = deferred<ProjectMutationResponse>();
+    const api = new SourceProjectApi(projectState(VALID_SOURCE, 1, "VALID"));
+    api.nextSave = pendingSave.promise;
+    const { router } = renderWorkspace(api);
+    const editor = await screen.findByLabelText("DBML source editor");
+    await findWorkspaceStatus("Draft valid");
+
+    fireEvent.change(editor, { target: { value: SECOND_VALID_SOURCE } });
+    fireEvent.click(screen.getByRole("link", { name: "Export SQL" }));
+    const dialog = await screen.findByRole("dialog", { name: "Leave schema workspace?" });
+    expect(
+      within(dialog).queryByRole("button", { name: "Leave workspace" }),
+    ).not.toBeInTheDocument();
+    expect(router.state.location.pathname).toBe(`/projects/${PROJECT_ID}`);
+
+    pendingSave.resolve(mutation(SECOND_VALID_SOURCE, 2, "VALID"));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/projects/${PROJECT_ID}/sql-export`),
+    );
+  });
+
   it("registers beforeunload protection while a local buffer is unsaved", async () => {
     const api = new SourceProjectApi(projectState(VALID_SOURCE, 1, "VALID"));
     renderWorkspace(api);
@@ -679,6 +701,10 @@ class SourceProjectApi implements ProjectApi {
 
   async applyProjectSqlImport(): Promise<never> {
     throw new Error("SQL import is not used by this fixture.");
+  }
+
+  async exportProjectSql(): Promise<never> {
+    throw new Error("SQL export is not used by this fixture.");
   }
 }
 

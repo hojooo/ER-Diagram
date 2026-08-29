@@ -606,7 +606,8 @@ export function ProjectSourceWorkspace({
   const navigationBlocker = useBlocker(hasUnsavedWorkspace);
   const requiresSavedWorkspace =
     navigationBlocker.state === "blocked" &&
-    navigationBlocker.location.pathname === `/projects/${projectId}/sql-import`;
+    (navigationBlocker.location.pathname === `/projects/${projectId}/sql-import` ||
+      navigationBlocker.location.pathname === `/projects/${projectId}/sql-export`);
 
   useEffect(() => {
     if (navigationBlocker.state !== "blocked") {
@@ -1508,7 +1509,7 @@ function UnsavedNavigationDialog({
           <Dialog.Description className="mt-3 text-sm leading-6 text-slate-300">
             {requiresSavedWorkspace &&
             (snapshot.persistence === "ERROR" || snapshot.persistence === "CONFLICT")
-              ? "SQL import requires a fully saved source and layout. Resolve the current save error or conflict, then try Import SQL again."
+              ? "SQL import and export require a fully saved source and layout. Resolve the current save error or conflict, then try again."
               : snapshot.persistence === "SAVING" ||
                   snapshot.persistence === "DIRTY" ||
                   hasUnsavedLayout
