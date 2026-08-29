@@ -201,6 +201,10 @@ class FakeProjectApi implements ProjectApi {
   async applyProjectSqlImport(): Promise<never> {
     throw new Error("SQL import is not used by this fixture.");
   }
+
+  async exportProjectSql(): Promise<never> {
+    throw new Error("SQL export is not used by this fixture.");
+  }
 }
 
 function renderApp(api: ProjectApi, initialEntry = "/") {

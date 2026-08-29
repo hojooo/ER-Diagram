@@ -92,9 +92,11 @@ test("collapses TableGroups without mutating source and preserves last-valid nav
   await replaceEditorSource(editor, INVALID_SOURCE);
   await expect.poll(() => api.writes.length).toBe(1);
   await expect(page.getByText(/Showing last-valid revision 1/)).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Expand public.Identity in diagram", exact: true }),
-  ).toBeVisible();
+  const identityOutlineToggle = page.getByRole("button", {
+    name: "Expand public.Identity in diagram",
+    exact: true,
+  });
+  await expect(identityOutlineToggle).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Expand public.Content in diagram", exact: true }),
   ).toBeVisible();
@@ -102,7 +104,10 @@ test("collapses TableGroups without mutating source and preserves last-valid nav
     page.getByRole("button", { name: "Open source for group at line 1" }),
   ).toBeDisabled();
 
-  await page.getByRole("button", { name: "Expand public.Identity", exact: true }).click();
+  await identityOutlineToggle.click();
+  await expect(
+    page.getByRole("button", { name: "Collapse public.Identity in diagram", exact: true }),
+  ).toBeVisible();
   await expect.poll(() => api.layouts.writes.length).toBe(layoutWritesBeforeInvalid + 1);
   expect(api.writes).toHaveLength(1);
 

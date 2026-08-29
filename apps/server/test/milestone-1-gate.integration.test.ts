@@ -10,6 +10,7 @@ import {
   createLayoutApplication,
   createProjectApplication,
   parseDbmlV2,
+  type SqlExportApplication,
   type SqlImportApplication,
 } from "@er-diagram/core";
 import {
@@ -57,6 +58,7 @@ function createFixture(filename = temporaryDatabasePath()) {
       persistence: createSqliteLayoutRepository(storage),
     }),
     sqlImportApplication: {} as SqlImportApplication,
+    sqlExportApplication: {} as SqlExportApplication,
   });
   openServers.add(server);
   return { filename, server, storage };

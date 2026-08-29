@@ -541,6 +541,125 @@ export const conversionReportSchema = z
   .strict();
 export type ConversionReport = z.infer<typeof conversionReportSchema>;
 
+export const sqlExportSourceSelectionSchema = z.enum(["CURRENT_DRAFT", "LAST_VALID"]);
+export type SqlExportSourceSelection = z.infer<typeof sqlExportSourceSelectionSchema>;
+
+export const sqlExportOccurrenceKindSchema = z.union([
+  schemaElementKindSchema,
+  z.enum(["record", "layout"]),
+]);
+export type SqlExportOccurrenceKind = z.infer<typeof sqlExportOccurrenceKindSchema>;
+
+export const sqlExportOccurrenceSchema = z
+  .object({
+    elementKind: sqlExportOccurrenceKindSchema,
+    elementKey: z.string().min(1).nullable(),
+    range: sourceRangeSchema.nullable(),
+  })
+  .strict();
+export type SqlExportOccurrence = z.infer<typeof sqlExportOccurrenceSchema>;
+
+export const sqlExportReportEntrySchema = z
+  .object({
+    code: z.string().min(1),
+    status: z.enum(["NORMALIZED", "PARTIAL", "UNSUPPORTED", "ERROR"]),
+    message: z.string().min(1),
+    occurrences: z.array(sqlExportOccurrenceSchema),
+  })
+  .strict();
+export type SqlExportReportEntry = z.infer<typeof sqlExportReportEntrySchema>;
+
+const sqlExportSemanticVerificationNotRunSchema = z
+  .object({
+    status: z.literal("NOT_RUN"),
+    sourceExportableHash: z.null(),
+    generatedExportableHash: z.null(),
+    changes: z.tuple([]),
+  })
+  .strict();
+
+const sqlExportSemanticVerificationVerifiedSchema = z
+  .object({
+    status: z.literal("VERIFIED"),
+    sourceExportableHash: sha256HexSchema,
+    generatedExportableHash: sha256HexSchema,
+    changes: z.tuple([]),
+  })
+  .strict();
+
+const sqlExportSemanticVerificationFailedSchema = z
+  .object({
+    status: z.literal("FAILED"),
+    sourceExportableHash: sha256HexSchema,
+    generatedExportableHash: sha256HexSchema,
+    changes: z.array(schemaElementChangeSchema),
+  })
+  .strict();
+
+export const sqlExportSemanticVerificationSchema = z.discriminatedUnion("status", [
+  sqlExportSemanticVerificationNotRunSchema,
+  sqlExportSemanticVerificationVerifiedSchema,
+  sqlExportSemanticVerificationFailedSchema,
+]);
+export type SqlExportSemanticVerification = z.infer<typeof sqlExportSemanticVerificationSchema>;
+
+export const sqlExportReportSchema = z
+  .object({
+    reportVersion: z.literal(1),
+    exportSemanticsVersion: z.literal(1),
+    sourceFilepath: z.string().min(1),
+    sourceHash: sha256HexSchema,
+    parserInputHash: sha256HexSchema,
+    primaryDialect: primaryDialectSchema,
+    targetDialect: primaryDialectSchema,
+    parserVersions: z
+      .object({ dbmlCore: z.literal("9.1.1"), dbmlParse: z.literal("9.1.1") })
+      .strict(),
+    schemaSemanticsVersion: z.literal(1),
+    ddlKind: z.literal("EMPTY_SCHEMA_CREATE"),
+    overallStatus: conversionStatusSchema,
+    acknowledgementRequired: z.boolean(),
+    generatedSqlHash: sha256HexSchema.nullable(),
+    containsDataStatements: z.boolean(),
+    entries: z.array(sqlExportReportEntrySchema),
+    diagnostics: z.array(diagnosticSchema),
+    semanticVerification: sqlExportSemanticVerificationSchema,
+  })
+  .strict();
+export type SqlExportReport = z.infer<typeof sqlExportReportSchema>;
+
+export const sqlExportRequestSchema = z
+  .object({
+    expectedSchemaRevisionNo: schemaRevisionNoSchema,
+    sourceSelection: sqlExportSourceSelectionSchema,
+  })
+  .strict();
+export type SqlExportRequest = z.infer<typeof sqlExportRequestSchema>;
+
+const sqlExportResponseBase = {
+  sourceSelection: sqlExportSourceSelectionSchema,
+  revisionNo: schemaRevisionNoSchema,
+  sourceHash: sha256HexSchema,
+  report: sqlExportReportSchema,
+};
+
+const sqlExportSuccessfulResponseSchema = z
+  .object({
+    ...sqlExportResponseBase,
+    candidate: z.object({ sql: z.string(), sqlHash: sha256HexSchema }).strict(),
+  })
+  .strict();
+
+const sqlExportFailedResponseSchema = z
+  .object({ ...sqlExportResponseBase, candidate: z.null() })
+  .strict();
+
+export const sqlExportResponseSchema = z.union([
+  sqlExportSuccessfulResponseSchema,
+  sqlExportFailedResponseSchema,
+]);
+export type SqlExportResponse = z.infer<typeof sqlExportResponseSchema>;
+
 export const sqlImportApplyReadinessSchema = z.enum([
   "READY",
   "CONVERSION_FAILED",

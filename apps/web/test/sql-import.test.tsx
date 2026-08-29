@@ -156,6 +156,7 @@ function fakeApi() {
     })),
     previewProjectSqlImport: vi.fn(),
     applyProjectSqlImport: vi.fn(),
+    exportProjectSql: vi.fn(),
   } satisfies ProjectApi;
   return api;
 }

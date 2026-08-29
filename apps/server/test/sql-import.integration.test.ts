@@ -12,6 +12,7 @@ import {
   createLayoutApplication,
   createProjectApplication,
   createSqlImportApplication,
+  type SqlExportApplication,
 } from "@er-diagram/core";
 import {
   createSqliteLayoutRepository,
@@ -57,6 +58,7 @@ function createFixture() {
       generateId: generateUuidV7,
       now,
     }),
+    sqlExportApplication: {} as SqlExportApplication,
     generateCorrelationId: () => "123e4567-e89b-42d3-a456-426614174001",
   });
   resources.push({ server, storage });
