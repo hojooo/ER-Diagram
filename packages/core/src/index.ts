@@ -6,6 +6,8 @@ export * from "./application/project.js";
 export * from "./application/project-application.js";
 export * from "./application/sql-import.js";
 export * from "./application/sql-import-application.js";
+export * from "./application/sql-export.js";
+export * from "./application/sql-export-application.js";
 export {
   DBML_PARSE_MODE,
   parseDbmlProjectV2,
