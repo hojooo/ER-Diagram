@@ -43,37 +43,55 @@ export interface SchemaGraphDiff {
   renameCandidates: SchemaRenameCandidate[];
 }
 
-type CanonicalScalar = null | boolean | number | string;
-type CanonicalValue = CanonicalScalar | CanonicalValue[] | { [key: string]: CanonicalValue };
-type CanonicalObject = { [key: string]: CanonicalValue };
+export type CanonicalScalar = null | boolean | number | string;
+export type CanonicalValue = CanonicalScalar | CanonicalValue[] | { [key: string]: CanonicalValue };
+export type CanonicalObject = { [key: string]: CanonicalValue };
 
-interface SemanticElementRecord {
+export interface SemanticElementRecord {
   elementKind: SchemaElementKind;
   key: SchemaElementKey;
   parentKey: SchemaElementKey | null;
   value: CanonicalObject;
 }
 
-interface SemanticOrderRecord {
+export interface SemanticOrderRecord {
   ownerKind: "table" | "partial" | "enum";
   ownerKey: SchemaElementKey;
   field: "columnOrder" | "valueOrder";
   elementKeys: SchemaElementKey[];
 }
 
-interface SemanticDocument {
+export interface SemanticDocument {
   version: typeof SCHEMA_SEMANTICS_VERSION;
   elements: SemanticElementRecord[];
   orders: SemanticOrderRecord[];
 }
 
 export async function computeSchemaHash(graph: SchemaGraph): Promise<string> {
-  return sha256Utf8(canonicalStringify(projectSchemaSemantics(graph)));
+  return hashSemanticDocument(schemaGraphSemanticDocument(graph));
 }
 
 export function diffSchemaGraphs(before: SchemaGraph, after: SchemaGraph): SchemaGraphDiff {
-  const beforeDocument = projectSchemaSemantics(before);
-  const afterDocument = projectSchemaSemantics(after);
+  const beforeDocument = schemaGraphSemanticDocument(before);
+  const afterDocument = schemaGraphSemanticDocument(after);
+  const changes = diffSemanticDocuments(beforeDocument, afterDocument);
+
+  return {
+    changes,
+    renameCandidates: findRenameCandidates(before, after, changes),
+  };
+}
+
+/** Package-internal semantic-document hash used by non-DBML adapters. */
+export async function hashSemanticDocument(document: SemanticDocument): Promise<string> {
+  return sha256Utf8(canonicalStringify(document));
+}
+
+/** Package-internal stable-key diff used by non-DBML adapters. */
+export function diffSemanticDocuments(
+  beforeDocument: SemanticDocument,
+  afterDocument: SemanticDocument,
+): SchemaElementChange[] {
   const beforeElements = new Map(beforeDocument.elements.map((element) => [element.key, element]));
   const afterElements = new Map(afterDocument.elements.map((element) => [element.key, element]));
   const changes: SchemaElementChange[] = [];
@@ -128,19 +146,17 @@ export function diffSchemaGraphs(before: SchemaGraph, after: SchemaGraph): Schem
 
   changes.sort(compareChanges);
 
-  return {
-    changes,
-    renameCandidates: findRenameCandidates(before, after, changes),
-  };
+  return changes;
 }
 
-function projectSchemaSemantics(graph: SchemaGraph): SemanticDocument {
+/** Package-internal projection used to verify adapter models against SchemaGraph. */
+export function schemaGraphSemanticDocument(graph: SchemaGraph): SemanticDocument {
   const elements: SemanticElementRecord[] = [];
   const orders: SemanticOrderRecord[] = [];
 
   if (graph.project) {
     elements.push(
-      element("project", graph.project.key, null, {
+      semanticElement("project", graph.project.key, null, {
         name: graph.project.name,
         databaseType: graph.project.databaseType,
         note: semanticNote(graph.project.note),
@@ -150,7 +166,7 @@ function projectSchemaSemantics(graph: SchemaGraph): SemanticDocument {
 
   for (const note of graph.notes) {
     elements.push(
-      element("note", note.key, null, {
+      semanticElement("note", note.key, null, {
         name: note.name,
         content: note.content,
         color: note.color,
@@ -161,7 +177,7 @@ function projectSchemaSemantics(graph: SchemaGraph): SemanticDocument {
 
   for (const table of graph.tables) {
     elements.push(
-      element("table", table.key, null, {
+      semanticElement("table", table.key, null, {
         schemaName: table.schemaName,
         name: table.name,
         alias: table.alias,
@@ -171,7 +187,7 @@ function projectSchemaSemantics(graph: SchemaGraph): SemanticDocument {
         partialKeys: sortedStrings(table.partialKeys),
       }),
     );
-    orders.push(order("table", table.key, "columnOrder", table.columns.map(keyOf)));
+    orders.push(semanticOrder("table", table.key, "columnOrder", table.columns.map(keyOf)));
     addColumns(elements, table.columns, "column", "check", table.key);
     addIndexes(elements, table.indexes, "index", table.key);
     addChecks(elements, table.checks, "check", table.key);
@@ -179,16 +195,16 @@ function projectSchemaSemantics(graph: SchemaGraph): SemanticDocument {
 
   for (const dbEnum of graph.enums) {
     elements.push(
-      element("enum", dbEnum.key, null, {
+      semanticElement("enum", dbEnum.key, null, {
         schemaName: dbEnum.schemaName,
         name: dbEnum.name,
         note: semanticNote(dbEnum.note),
       }),
     );
-    orders.push(order("enum", dbEnum.key, "valueOrder", dbEnum.values.map(keyOf)));
+    orders.push(semanticOrder("enum", dbEnum.key, "valueOrder", dbEnum.values.map(keyOf)));
     for (const value of dbEnum.values) {
       elements.push(
-        element("enumValue", value.key, dbEnum.key, {
+        semanticElement("enumValue", value.key, dbEnum.key, {
           name: value.name,
           note: semanticNote(value.note),
         }),
@@ -198,7 +214,7 @@ function projectSchemaSemantics(graph: SchemaGraph): SemanticDocument {
 
   for (const reference of graph.references) {
     elements.push(
-      element("reference", reference.key, null, {
+      semanticElement("reference", reference.key, null, {
         schemaName: reference.schemaName,
         name: reference.name,
         endpoints: reference.endpoints.map((endpoint) => ({
@@ -220,7 +236,7 @@ function projectSchemaSemantics(graph: SchemaGraph): SemanticDocument {
 
   for (const group of graph.groups) {
     elements.push(
-      element("group", group.key, null, {
+      semanticElement("group", group.key, null, {
         schemaName: group.schemaName,
         name: group.name,
         tableKeys: sortedStrings(group.tableKeys),
@@ -233,13 +249,13 @@ function projectSchemaSemantics(graph: SchemaGraph): SemanticDocument {
 
   for (const partial of graph.partials) {
     elements.push(
-      element("partial", partial.key, null, {
+      semanticElement("partial", partial.key, null, {
         name: partial.name,
         note: semanticNote(partial.note),
         color: partial.color,
       }),
     );
-    orders.push(order("partial", partial.key, "columnOrder", partial.columns.map(keyOf)));
+    orders.push(semanticOrder("partial", partial.key, "columnOrder", partial.columns.map(keyOf)));
     addColumns(elements, partial.columns, "partialColumn", "partialCheck", partial.key);
     addIndexes(elements, partial.indexes, "partialIndex", partial.key);
     addChecks(elements, partial.checks, "partialCheck", partial.key);
@@ -247,7 +263,7 @@ function projectSchemaSemantics(graph: SchemaGraph): SemanticDocument {
 
   for (const view of graph.views) {
     elements.push(
-      element("view", view.key, null, {
+      semanticElement("view", view.key, null, {
         schemaName: view.schemaName,
         name: view.name,
         visibleTableKeys: sortedNullableStrings(view.visibleTableKeys),
@@ -272,7 +288,7 @@ function addColumns(
 ): void {
   for (const column of columns) {
     elements.push(
-      element(columnKind, column.key, parentKey, {
+      semanticElement(columnKind, column.key, parentKey, {
         name: column.name,
         type: semanticColumnType(column),
         primaryKey: column.primaryKey,
@@ -297,7 +313,7 @@ function addIndexes(
 ): void {
   for (const index of indexes) {
     elements.push(
-      element(kind, index.key, parentKey, {
+      semanticElement(kind, index.key, parentKey, {
         name: index.name,
         terms: semanticIndexTerms(index),
         type: index.type,
@@ -318,7 +334,7 @@ function addChecks(
 ): void {
   for (const check of checks) {
     elements.push(
-      element(kind, check.key, parentKey, {
+      semanticElement(kind, check.key, parentKey, {
         name: check.name,
         expression: check.expression,
         tableKey: check.tableKey,
@@ -358,7 +374,7 @@ function semanticProvenance(provenance: PartialInjectionProvenance | null): Cano
     : null;
 }
 
-function element(
+export function semanticElement(
   elementKind: SchemaElementKind,
   key: SchemaElementKey,
   parentKey: SchemaElementKey | null,
@@ -372,7 +388,7 @@ function element(
   };
 }
 
-function order(
+export function semanticOrder(
   ownerKind: SemanticOrderRecord["ownerKind"],
   ownerKey: SchemaElementKey,
   field: SemanticOrderRecord["field"],
@@ -459,7 +475,7 @@ function compareRenameCandidates(
   );
 }
 
-function compareCodeUnits(left: string, right: string): number {
+export function compareCodeUnits(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
@@ -467,11 +483,11 @@ function sameCanonicalValue(left: unknown, right: unknown): boolean {
   return canonicalStringify(left) === canonicalStringify(right);
 }
 
-function canonicalStringify(value: unknown): string {
+export function canonicalStringify(value: unknown): string {
   return JSON.stringify(canonicalize(value));
 }
 
-function canonicalize(value: unknown): CanonicalValue {
+export function canonicalize(value: unknown): CanonicalValue {
   if (value === null || typeof value === "string" || typeof value === "boolean") return value;
   if (typeof value === "number") {
     if (!Number.isFinite(value)) throw new TypeError("Schema semantics require finite numbers.");

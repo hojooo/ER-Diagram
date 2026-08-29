@@ -75,6 +75,27 @@ Raw importer는 오류를 반환하지 않았으므로 관찰 사실과 다르�
 - Matrix는 DB version을 자동 감지하지 않는다. PostgreSQL 14와 MySQL 8.0은 검증 baseline이며
   version-specific 판단이 없는 경우 이를 명시한다.
 
+### M2-002 ConversionReport 경계
+
+- Dependency-free SQL source analyzer는 comment, quote, PostgreSQL dollar quote, MySQL routine block과
+  괄호 depth를 추적해 statement·clause range와 capability evidence를 만든다. SQL 문법 acceptance는
+  계속 pinned dialect parser가 담당하며 analyzer success가 parser success를 대신하지 않는다.
+- Parser에는 원본 source를 수정 없이 한 번 전달하고 그 model을 `includeRecords: false`로 DBML export한다.
+  Raw importer의 두 번째 SQL parse 경로는 사용하지 않는다.
+- Analyzer가 catalog에 없는 construct를 발견하면 parser acceptance 여부와 무관하게 `UNSUPPORTED`로
+  fail-closed 분류한다. 반대 dialect가 parser에서 거부되면 runtime `ERROR`다.
+- SQL model A는 source token이 없으므로 가짜 range를 가진 `SchemaGraph`로 만들지 않는다. 대신 기존
+  schema semantics의 internal canonical document로 직접 투영하고, candidate DBML graph B와 stable-key
+  diff를 수행한다.
+- Generated expression, partial-index predicate, table option과 identity option처럼 parser model 이전에
+  소실된 정보는 capability report가 설명한다. PostgreSQL schema-qualified enum array처럼 exporter의
+  known projection loss는 versioned adapter normalization으로 모델링한다. 그 밖의 A/B 차이는 candidate를
+  차단하는 internal semantic mismatch다.
+- Conversion report에는 SQL source, literal과 native parser message를 넣지 않는다. Source hash, static
+  code·message, UTF-16 range와 semantic mismatch의 stable element change만 보존한다.
+- DML/COPY가 있어도 row data를 제외한 candidate는 preview 증거로 반환할 수 있지만 자동 적용할 수 없다.
+  명시적 DDL-only 승인과 original SQL retention은 후속 workflow 경계가 소유한다.
+
 ## Verification
 
 - `pnpm --filter @er-diagram/test-fixtures test test/sql-capability-fixtures.test.ts`
@@ -83,3 +104,5 @@ Raw importer는 오류를 반환하지 않았으므로 관찰 사실과 다르�
 - Generated DBML hash, normalized graph hash, semantic inventory와 preserved/dropped construct를 함께
   검증해야 한다.
 - Wrong-dialect fixture는 static status가 아니라 parser error 위치를 검증해야 한다.
+- `pnpm --filter @er-diagram/test-fixtures test test/sql-import-report-fixtures.test.ts`
+- `pnpm --filter @er-diagram/core test test/sql-import.test.ts`
