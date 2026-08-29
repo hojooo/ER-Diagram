@@ -247,9 +247,7 @@ function assertExportLossEvidence(
   }[],
   fixtureId: string,
 ): void {
-  for (const entry of entries.filter(
-    ({ status }) => STATUS_RANK[status] >= STATUS_RANK.PARTIAL,
-  )) {
+  for (const entry of entries.filter(({ status }) => STATUS_RANK[status] >= STATUS_RANK.PARTIAL)) {
     expect(entry.code, fixtureId).toMatch(/^SQL_EXPORT_(?:PARTIAL|OMITS|UNSUPPORTED)_/u);
     expect(entry.occurrences.length, `${fixtureId}:${entry.code}`).toBeGreaterThan(0);
     for (const occurrence of entry.occurrences) {

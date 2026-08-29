@@ -15,17 +15,11 @@ export interface SqlInterchangeGateFixture {
   readonly sourceHash: string;
   readonly rowSentinel: string;
   readonly dataStatementHandling: "CONFIRM_DDL_ONLY";
-  readonly expectedImportOverallStatus: Exclude<
-    SqlFixtureCapabilityStatus,
-    "NOT_APPLICABLE"
-  >;
+  readonly expectedImportOverallStatus: Exclude<SqlFixtureCapabilityStatus, "NOT_APPLICABLE">;
   readonly expectedImportNonExactCodes: readonly string[];
   readonly expectedCandidateDbmlHash: string;
   readonly expectedCandidateSchemaHash: string;
-  readonly expectedExportOverallStatus: Exclude<
-    SqlFixtureCapabilityStatus,
-    "NOT_APPLICABLE"
-  >;
+  readonly expectedExportOverallStatus: Exclude<SqlFixtureCapabilityStatus, "NOT_APPLICABLE">;
   readonly expectedExportEntryCodes: readonly string[];
   readonly expectedGeneratedSqlHash: string;
   readonly expectedExportableSchemaHash: string;
@@ -103,18 +97,15 @@ export const sqlInterchangeGateFixtures: readonly SqlInterchangeGateFixture[] = 
       "SQL_PARTIAL_MYSQL_TABLE_OPTIONS",
       "SQL_UNSUPPORTED_DATA_STATEMENT",
     ],
-    expectedCandidateDbmlHash:
-      "56d16c5a047b81b0c70ce136dfd4d7ee27888852cd65f60c6f26d50d5a6e204c",
-    expectedCandidateSchemaHash:
-      "ee108f883986383eaee89e8ae0c8e1e9da395e13c02aa97057ead2baad7d7257",
+    expectedCandidateDbmlHash: "56d16c5a047b81b0c70ce136dfd4d7ee27888852cd65f60c6f26d50d5a6e204c",
+    expectedCandidateSchemaHash: "ee108f883986383eaee89e8ae0c8e1e9da395e13c02aa97057ead2baad7d7257",
     expectedExportOverallStatus: "PARTIAL",
     expectedExportEntryCodes: [
       "SQL_EXPORT_NORMALIZES_MYSQL_ENUM",
       "SQL_EXPORT_PARTIAL_CARDINALITY",
       "SQL_EXPORT_PARTIAL_MYSQL_TABLE_COMMENT",
     ],
-    expectedGeneratedSqlHash:
-      "9f394facd7bdb98b7a20f91cf638361cc9546c9c6988e7427543f33c04d1619e",
+    expectedGeneratedSqlHash: "9f394facd7bdb98b7a20f91cf638361cc9546c9c6988e7427543f33c04d1619e",
     expectedExportableSchemaHash:
       "16559536ae5c92b2e0b857fc4a5cb4fe33a6f9dbf6ba1d47042e629ba852fab6",
     expectedInventory: { tables: 2, enums: 1, references: 1 },
@@ -130,17 +121,14 @@ export const sqlInterchangeGateFixtures: readonly SqlInterchangeGateFixture[] = 
       "SQL_PARTIAL_IDENTITY",
       "SQL_UNSUPPORTED_DATA_STATEMENT",
     ],
-    expectedCandidateDbmlHash:
-      "22bfa910377466cc23ce1c181be9f9b1e0d9769786d88b8c6dd3b20f188bb75e",
-    expectedCandidateSchemaHash:
-      "09a5811138a3c3d894ded02c058dfd56a75e2c8781a8f55b41840df1688f7560",
+    expectedCandidateDbmlHash: "22bfa910377466cc23ce1c181be9f9b1e0d9769786d88b8c6dd3b20f188bb75e",
+    expectedCandidateSchemaHash: "09a5811138a3c3d894ded02c058dfd56a75e2c8781a8f55b41840df1688f7560",
     expectedExportOverallStatus: "PARTIAL",
     expectedExportEntryCodes: [
       "SQL_EXPORT_NORMALIZES_SQL_SYNTAX",
       "SQL_EXPORT_PARTIAL_CARDINALITY",
     ],
-    expectedGeneratedSqlHash:
-      "3b9abbd82dabecc7b32b3fc67f4bd4ba09e08d8bee92fb7a230adbb0469b1070",
+    expectedGeneratedSqlHash: "3b9abbd82dabecc7b32b3fc67f4bd4ba09e08d8bee92fb7a230adbb0469b1070",
     expectedExportableSchemaHash:
       "faa91c96960cfbbfada4364446a45f01a509b35d9bf80c5ebdf25f2e98fc9b84",
     expectedInventory: { tables: 2, enums: 1, references: 1 },
