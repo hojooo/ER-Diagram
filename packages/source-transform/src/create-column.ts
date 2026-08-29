@@ -1,11 +1,11 @@
 import {
-  type ColumnNode,
   diffSchemaGraphs,
   parseDbmlV2,
   qualifiedElementKey,
   type SchemaGraph,
   type TableNode,
 } from "@er-diagram/core";
+import { parseColumnTypeFragment, sameColumnType } from "./dbml-fragment.js";
 import { applyTextEdits } from "./text-edits.js";
 import type { SourceTransformDiagnostic, TextEdit } from "./types.js";
 
@@ -191,7 +191,7 @@ export function verifyCreateColumnSemanticDiff(
   const addedColumn = afterTarget.columns.at(-1);
   if (!addedColumn) return semanticMismatch();
 
-  const expectedType = parseCommandColumnType(command.column.type);
+  const expectedType = parseColumnTypeFragment(command.column.type);
   if (
     !expectedType ||
     !sameColumnType(addedColumn.type, expectedType) ||
@@ -342,145 +342,6 @@ function invalidCommand(): SourceTransformDiagnostic {
   return error(
     "CREATE_COLUMN_COMMAND_INVALID",
     "CreateColumn requires a kind, expected schema hash, target table key, column name, and single-line type.",
-  );
-}
-
-function renderColumnType(type: ColumnNode["type"]): string {
-  const qualifiedName = type.schemaName ? `${type.schemaName}.${type.name}` : type.name;
-  return type.arguments === null ? qualifiedName : `${qualifiedName}(${type.arguments})`;
-}
-
-function parseCommandColumnType(value: string): ColumnNode["type"] | null {
-  const fragment = value.trim();
-  const argumentStart = trailingArgumentStart(fragment);
-  const nameFragment = argumentStart === null ? fragment : fragment.slice(0, argumentStart).trim();
-  const segments = splitQualifiedTypeName(nameFragment);
-  if (!segments || segments.length < 1 || segments.length > 2) return null;
-
-  const decoded = segments.map(decodeTypeIdentifier);
-  if (decoded.some((segment) => segment === null)) return null;
-  const names = decoded as string[];
-  const schemaName = names.length === 2 ? names[0] : null;
-  const name = names.at(-1);
-  if (!name) return null;
-  const argumentsValue =
-    argumentStart === null ? null : normalizeTypeArguments(fragment.slice(argumentStart + 1, -1));
-  if (argumentsValue === undefined) return null;
-
-  const type = {
-    schemaName: schemaName ?? null,
-    name,
-    arguments: argumentsValue,
-    display: "",
-  } satisfies ColumnNode["type"];
-  return { ...type, display: renderColumnType(type) };
-}
-
-function trailingArgumentStart(value: string): number | null {
-  if (!value.endsWith(")")) return null;
-  let quoted = false;
-  let escaped = false;
-  let depth = 0;
-  let start: number | null = null;
-
-  for (let index = 0; index < value.length; index += 1) {
-    const character = value[index];
-    if (quoted) {
-      if (escaped) escaped = false;
-      else if (character === "\\") escaped = true;
-      else if (character === '"') quoted = false;
-      continue;
-    }
-    if (character === '"') {
-      quoted = true;
-      continue;
-    }
-    if (character === "(") {
-      if (depth === 0) start = index;
-      depth += 1;
-      continue;
-    }
-    if (character === ")") {
-      depth -= 1;
-      if (depth < 0 || (depth === 0 && index !== value.length - 1)) return null;
-    }
-  }
-
-  return !quoted && depth === 0 ? start : null;
-}
-
-function splitQualifiedTypeName(value: string): string[] | null {
-  const segments: string[] = [];
-  let start = 0;
-  let quoted = false;
-  let escaped = false;
-
-  for (let index = 0; index < value.length; index += 1) {
-    const character = value[index];
-    if (quoted) {
-      if (escaped) escaped = false;
-      else if (character === "\\") escaped = true;
-      else if (character === '"') quoted = false;
-      continue;
-    }
-    if (character === '"') {
-      quoted = true;
-      continue;
-    }
-    if (character !== ".") continue;
-    segments.push(value.slice(start, index).trim());
-    start = index + 1;
-  }
-  if (quoted || escaped) return null;
-  segments.push(value.slice(start).trim());
-  return segments;
-}
-
-function decodeTypeIdentifier(value: string): string | null {
-  if (value.length === 0) return null;
-  if (!value.startsWith('"')) {
-    return /["\s]/u.test(value) ? null : value;
-  }
-  if (!value.endsWith('"')) return null;
-  try {
-    const decoded = JSON.parse(value) as unknown;
-    return typeof decoded === "string" && decoded.length > 0 ? decoded : null;
-  } catch {
-    return null;
-  }
-}
-
-function normalizeTypeArguments(value: string): string | undefined {
-  let result = "";
-  for (let index = 0; index < value.length; index += 1) {
-    const character = value[index];
-    if (character === '"') {
-      let end = index + 1;
-      let escaped = false;
-      for (; end < value.length; end += 1) {
-        const candidate = value[end];
-        if (escaped) escaped = false;
-        else if (candidate === "\\") escaped = true;
-        else if (candidate === '"') break;
-      }
-      if (end >= value.length) return undefined;
-      const decoded = decodeTypeIdentifier(value.slice(index, end + 1));
-      if (decoded === null) return undefined;
-      result += decoded;
-      index = end;
-      continue;
-    }
-    if (!/\s/u.test(character ?? "")) result += character;
-  }
-  return result;
-}
-
-function sameColumnType(left: ColumnNode["type"], right: ColumnNode["type"]): boolean {
-  return (
-    left.schemaName === right.schemaName &&
-    left.name === right.name &&
-    left.arguments === right.arguments &&
-    left.display === right.display
   );
 }
 
