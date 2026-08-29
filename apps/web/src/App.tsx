@@ -15,6 +15,7 @@ import { ProjectHomePage } from "./projects/project-home-page.js";
 import { RootErrorBoundary } from "./root-error-boundary.js";
 import type { ProjectWorkspaceAdapters } from "./source-editor/project-source-workspace.js";
 import type { SqlImportPageAdapters } from "./sql-import/sql-import-page.js";
+import type { SqlExportPageAdapters } from "./sql-export/sql-export-page.js";
 
 type DataRouter = ComponentProps<typeof RouterProvider>["router"];
 
@@ -41,6 +42,7 @@ export function createAppRoutes(
     readonly includeLayoutSpike?: boolean;
     readonly workspaceAdapters?: ProjectWorkspaceAdapters;
     readonly sqlImportAdapters?: SqlImportPageAdapters;
+    readonly sqlExportAdapters?: SqlExportPageAdapters;
   } = {},
 ): RouteObject[] {
   const routes: RouteObject[] = [
@@ -71,6 +73,19 @@ export function createAppRoutes(
               Component: () => (
                 <module.ReplaceSqlImportPage
                   {...(options.sqlImportAdapters ? { adapters: options.sqlImportAdapters } : {})}
+                />
+              ),
+            };
+          },
+        },
+        {
+          path: "projects/:projectId/sql-export",
+          lazy: async () => {
+            const module = await import("./sql-export/sql-export-page.js");
+            return {
+              Component: () => (
+                <module.ProjectSqlExportPage
+                  {...(options.sqlExportAdapters ? { adapters: options.sqlExportAdapters } : {})}
                 />
               ),
             };
