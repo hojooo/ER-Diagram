@@ -507,29 +507,53 @@ expanded, hidden empty, fresh ELK 위치와 fit viewport로 저장하고 다른 
 
 ### 12.2 P0 최소 보장 범위
 
-| Feature | PostgreSQL import | MySQL import | 비고 |
-| --- | --- | --- | --- |
-| Basic `CREATE TABLE` | 지원 | 지원 | schema/name/type 포함 |
-| PK, FK, UNIQUE, CHECK, NOT NULL, DEFAULT | 지원 | 지원 | dialect parser 범위 안에서 보장 |
-| Composite PK/FK/index | 지원 | 지원 | semantic fixture 필요 |
-| PostgreSQL enum / MySQL enum | 지원 | 지원 | DBML enum mapping을 검증 |
-| PostgreSQL array | 지원 | 해당 없음 | dialect-specific type 유지 |
-| `SERIAL`/identity | 지원 또는 정규화 | 해당 없음 | exact type과 increment 의미를 보고 |
-| `AUTO_INCREMENT` | 해당 없음 | 지원 | DBML increment로 정규화 |
-| table·column comment | 지원 | 지원 | quote·Unicode fixture 필요 |
-| function-based index | 지원 | 지원 | exporter 왕복 여부 별도 진단 |
-| PostgreSQL GIN/GIST/BRIN | 지원 | 해당 없음 | DBML index type 표현 확인 |
-| partial index predicate | 부분 지원 | 미지원 | predicate 손실 warning 필수 |
-| generated/computed column | 부분 지원 | 부분 지원 | 표현 손실 warning 필수 |
-| table option·tablespace·engine | 부분 지원 | 부분 지원 | silent drop 금지 |
-| `ALTER TABLE ADD` constraint | 일부 지원 | 일부 지원 | constraint 종류별 matrix 공개 |
-| `ALTER TABLE` column add/drop/rename/modify | 미지원 | 미지원 | P0 import report에 명시 |
-| `CREATE VIEW` | 미지원 | 미지원 | P0 DBML `DiagramView`와 SQL VIEW를 혼동하지 않음 |
-| `DROP TABLE/INDEX` | 미지원 | 미지원 | snapshot DDL만 입력 대상으로 정의 |
-| `INSERT`, `UPDATE`, `DELETE`, `COPY` | schema import 제외 | schema import 제외 | DDL-only 적용 전 명시적 warning |
-| trigger, procedure, function body | 미지원 | 미지원 | query나 script를 실행하지 않음 |
+Capability matrix는 제품 목표인 `targetStatus`와 pinned parser fixture가 현재 증명한
+`observedStatus`를 분리한다. 목표를 바꾸려면 이 PRD를 변경해야 하며, 현재 사용자에게 보장하는
+수준과 M2-002 conversion report의 초기 분류는 `observedStatus`를 따른다. 목표보다 관찰 수준이
+낮은 항목은 capability gap으로 유지한다.
 
-실제 지원 범위는 pinned parser version의 fixture test 결과가 이 표보다 우선한다. dependency를 올릴 때 matrix와 golden fixture를 같은 변경에서 갱신한다.
+`NOT_APPLICABLE`은 dialect 간 정적 matrix 전용 상태다. 반대 dialect 문법을 실제 parser에 입력한
+결과는 `ERROR`일 수 있으며 runtime `ConversionStatus`에는 `NOT_APPLICABLE`을 추가하지 않는다.
+
+| Capability | PostgreSQL target | PostgreSQL observed | MySQL target | MySQL observed |
+| --- | --- | --- | --- | --- |
+| Basic `CREATE TABLE` | `EXACT` | `EXACT` | `EXACT` | `EXACT` |
+| schema-qualified table | `EXACT` | `EXACT` | `EXACT` | `EXACT` |
+| PK, FK, UNIQUE, CHECK, NOT NULL, DEFAULT | `EXACT` | `EXACT` | `EXACT` | `EXACT` |
+| Composite PK/FK/index | `EXACT` | `EXACT` | `EXACT` | `EXACT` |
+| FK `ON DELETE`·`ON UPDATE` | `EXACT` | `EXACT` | `EXACT` | `EXACT` |
+| PostgreSQL enum / MySQL inline enum | `EXACT` | `EXACT` | `NORMALIZED` | `NORMALIZED` |
+| PostgreSQL built-in array | `EXACT` | `EXACT` | `NOT_APPLICABLE` | `NOT_APPLICABLE` |
+| PostgreSQL schema-qualified enum array | `EXACT` | `PARTIAL` | `NOT_APPLICABLE` | `NOT_APPLICABLE` |
+| PostgreSQL `SERIAL`·`BIGSERIAL` | `NORMALIZED` | `NORMALIZED` | `NOT_APPLICABLE` | `NOT_APPLICABLE` |
+| PostgreSQL identity | `NORMALIZED` | `PARTIAL` | `NOT_APPLICABLE` | `NOT_APPLICABLE` |
+| MySQL `AUTO_INCREMENT` | `NOT_APPLICABLE` | `NOT_APPLICABLE` | `NORMALIZED` | `NORMALIZED` |
+| table·column comment | `EXACT` | `EXACT` | `EXACT` | `EXACT` |
+| function-based index | `EXACT` | `EXACT` | `EXACT` | `EXACT` |
+| PostgreSQL GIN/GIST/BRIN | `EXACT` | `EXACT` | `NOT_APPLICABLE` | `NOT_APPLICABLE` |
+| MySQL inline·composite index | `NOT_APPLICABLE` | `NOT_APPLICABLE` | `EXACT` | `EXACT` |
+| partial index predicate | `PARTIAL` | `PARTIAL` | `NOT_APPLICABLE` | `NOT_APPLICABLE` |
+| generated/computed column | `PARTIAL` | `PARTIAL` | `PARTIAL` | `PARTIAL` |
+| PostgreSQL tablespace | `PARTIAL` | `PARTIAL` | `NOT_APPLICABLE` | `NOT_APPLICABLE` |
+| MySQL engine·charset·collation | `NOT_APPLICABLE` | `NOT_APPLICABLE` | `PARTIAL` | `PARTIAL` |
+| `ALTER TABLE ADD` foreign key | `EXACT` | `EXACT` | `EXACT` | `EXACT` |
+| `ALTER TABLE ADD UNIQUE` | `EXACT` | `EXACT` | `UNSUPPORTED` | `UNSUPPORTED` |
+| `ALTER TABLE` column add/drop/rename/modify | `UNSUPPORTED` | `UNSUPPORTED` | `UNSUPPORTED` | `UNSUPPORTED` |
+| `CREATE VIEW` | `UNSUPPORTED` | `UNSUPPORTED` | `UNSUPPORTED` | `UNSUPPORTED` |
+| `DROP TABLE/INDEX` | `UNSUPPORTED` | `UNSUPPORTED` | `UNSUPPORTED` | `UNSUPPORTED` |
+| `INSERT`, `UPDATE`, `DELETE` | `UNSUPPORTED` | `UNSUPPORTED` | `UNSUPPORTED` | `UNSUPPORTED` |
+| PostgreSQL `COPY` | `UNSUPPORTED` | `UNSUPPORTED` | `NOT_APPLICABLE` | `NOT_APPLICABLE` |
+| trigger | `UNSUPPORTED` | `UNSUPPORTED` | `UNSUPPORTED` | `UNSUPPORTED` |
+| procedure·function body | `UNSUPPORTED` | `UNSUPPORTED` | `UNSUPPORTED` | `UNSUPPORTED` |
+
+Version 1의 명시적인 gap은 PostgreSQL identity option 손실과 schema-qualified enum array의 잘못된
+type projection이다. Parser 9.1.1이 `GENERATED`, partial-index predicate, table option, SQL view,
+trigger, procedure 또는 column mutation을 오류 없이 제거하는 경우도 fixture evidence로 고정하며
+silent success를 제품 지원으로 취급하지 않는다. DML이 raw DBML `Records`를 만들 수 있어도
+schema import 대상에서는 `UNSUPPORTED`다.
+
+Dependency 또는 관찰 결과를 변경할 때 capability matrix version, fixture version, generated DBML
+golden hash와 normalized semantic hash를 같은 변경에서 갱신한다.
 
 ### 12.3 Round-trip 원칙
 
@@ -861,10 +885,14 @@ P0는 public growth metric보다 정확성과 개인 workflow 완성을 우선�
 
 ### 21.2 SQL dialect fixture
 
+- Versioned atomic fixture는 capability 하나와 dialect 하나를 목표로 하고 setup declaration을 별도로 구분한다.
 - PostgreSQL: schema, enum, array, serial/identity, composite key, FK action, GIN/GIST/BRIN, comments
 - MySQL: enum, auto increment, engine option, composite key, FK action, inline index, comments
-- partial/unsupported: generated column, partial index, `ALTER TABLE` column mutation, `CREATE VIEW`, `DROP`
-- SQL → DBML → same-dialect SQL semantic comparison
+- Partial/unsupported: generated column, partial index, table option, `ALTER TABLE` column mutation,
+  `CREATE VIEW`, `DROP`, trigger, procedure와 DML
+- M2-001은 `SQL → dialect importer → generated DBML → DBML v2 SchemaGraph`의 DBML hash,
+  semantic hash와 preserved/dropped construct를 검증한다.
+- SQL → DBML → same-dialect SQL semantic comparison과 clause range report는 M2-002 이후에 검증한다.
 
 ### 21.3 Visual command contract test
 

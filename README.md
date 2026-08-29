@@ -2,7 +2,7 @@
 
 DBML·SQL ERD Studio는 큰 DBML schema를 탐색하고 편집하며 PostgreSQL·MySQL DDL을 실행 없이 가져오고 내보내는 Apache-2.0 self-hosted ERD workspace다.
 
-현재는 Milestone 0 기술 검증 단계다. 제품 범위와 구현 순서는 각각 [PRD](docs/product/PRD.md)와 [TASKLIST](TASKLIST.md)를 기준으로 한다.
+현재는 Milestone 2 SQL interchange 구현 단계다. 제품 범위와 구현 순서는 각각 [PRD](docs/product/PRD.md)와 [TASKLIST](TASKLIST.md)를 기준으로 한다. 현재 PostgreSQL·MySQL 보장 수준은 목표와 pinned parser fixture의 관찰 결과를 분리한 [SQL capability matrix ADR](docs/adr/0005-sql-capability-matrix.md)을 따른다.
 
 ## P0 범위
 
@@ -64,6 +64,7 @@ docs/
 - [ADR 0002: DBML canonical source와 source fidelity](docs/adr/0002-dbml-canonical-source-fidelity.md)
 - [ADR 0003: SQLite persistence](docs/adr/0003-sqlite-persistence.md)
 - [ADR 0004: Fastify adapter 교체 경계](docs/adr/0004-fastify-adapter-boundary.md)
+- [ADR 0005: SQL capability target과 observed evidence](docs/adr/0005-sql-capability-matrix.md)
 
 ## License
 
