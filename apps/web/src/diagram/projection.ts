@@ -10,6 +10,7 @@ import type {
   DiagramProjection,
   DiagramViewKey,
   DiagramViewOption,
+  DiagramVisibility,
   GroupDiagramNode,
   ReferenceDiagramEdgeData,
   SchemaDiagramEdge,
@@ -34,8 +35,63 @@ export interface DiagramProjectionOptions {
 export function listDiagramViews(graph: SchemaGraph): DiagramViewOption[] {
   return [
     { key: GLOBAL_VIEW_KEY, label: "Global" },
-    ...graph.views.map((view) => ({ key: view.key, label: view.name })),
+    ...graph.views.map((view) => ({
+      key: view.key,
+      label: view.schemaName ? `${view.schemaName}.${view.name}` : view.name,
+    })),
   ];
+}
+
+export function createDiagramVisibility(
+  graph: SchemaGraph,
+  viewKey: DiagramViewKey,
+): DiagramVisibility {
+  const view = resolveView(graph, viewKey);
+  const existingTableKeys = new Set(graph.tables.map((table) => table.key));
+  const existingGroupKeys = new Set(graph.groups.map((group) => group.key));
+  const allSchemaNames = new Set([
+    ...graph.tables.map((table) => table.schemaName),
+    ...graph.groups.map((group) => group.schemaName),
+  ]);
+  const tableKeys = view
+    ? selectFilterKeys(view.visibleTableKeys, existingTableKeys)
+    : new Set(existingTableKeys);
+  const groupKeys = view
+    ? selectFilterKeys(view.visibleGroupKeys, existingGroupKeys)
+    : new Set(existingGroupKeys);
+  const selectedSchemaNames = view
+    ? selectFilterKeys(view.visibleSchemaNames, allSchemaNames)
+    : new Set(allSchemaNames);
+
+  for (const table of graph.tables) {
+    if (selectedSchemaNames.has(table.schemaName)) tableKeys.add(table.key);
+  }
+  for (const group of graph.groups) {
+    if (selectedSchemaNames.has(group.schemaName)) groupKeys.add(group.key);
+  }
+  for (const group of graph.groups) {
+    if (!groupKeys.has(group.key)) continue;
+    for (const tableKey of group.tableKeys) {
+      if (existingTableKeys.has(tableKey)) tableKeys.add(tableKey);
+    }
+  }
+
+  const referenceKeys = new Set(
+    graph.references
+      .filter((reference) =>
+        reference.endpoints.every((endpoint) => tableKeys.has(endpoint.tableKey)),
+      )
+      .map((reference) => reference.key),
+  );
+  const schemaNames = new Set<string>();
+  for (const table of graph.tables) {
+    if (tableKeys.has(table.key)) schemaNames.add(table.schemaName);
+  }
+  for (const group of graph.groups) {
+    if (groupKeys.has(group.key)) schemaNames.add(group.schemaName);
+  }
+
+  return { viewKey, tableKeys, groupKeys, referenceKeys, schemaNames };
 }
 
 export function createBaseDiagramProjection(graph: SchemaGraph): DiagramProjection {
@@ -70,20 +126,19 @@ export function createDiagramProjection(
   graph: SchemaGraph,
   options: DiagramProjectionOptions,
 ): DiagramProjection {
-  const view = resolveView(graph, options.viewKey);
-  const { visibleTableKeys, visibleGroupKeys } = selectViewVisibility(graph, view);
-  const groupByTable = selectDisplayParentByTable(graph, visibleGroupKeys);
+  const visibility = createDiagramVisibility(graph, options.viewKey);
+  const groupByTable = selectDisplayParentByTable(graph, visibility.groupKeys);
   const foreignColumnKeys = collectForeignColumnKeys(graph.references);
   const groupNodes = createGroupNodes(
     graph,
-    visibleTableKeys,
-    visibleGroupKeys,
+    visibility.tableKeys,
+    visibility.groupKeys,
     options.collapsedGroupKeys,
     options.lod,
   );
   const tableNodes = createTableNodes(
     graph,
-    visibleTableKeys,
+    visibility.tableKeys,
     groupByTable,
     options.collapsedGroupKeys,
     foreignColumnKeys,
@@ -91,7 +146,7 @@ export function createDiagramProjection(
   );
   const edges = createReferenceEdges(
     graph,
-    visibleTableKeys,
+    visibility.tableKeys,
     groupByTable,
     options.collapsedGroupKeys,
   );
@@ -112,45 +167,6 @@ function resolveView(graph: SchemaGraph, viewKey: DiagramViewKey): DiagramViewNo
     throw new Error(`Unknown diagram view: ${viewKey}`);
   }
   return view;
-}
-
-function selectViewVisibility(
-  graph: SchemaGraph,
-  view: DiagramViewNode | null,
-): { visibleTableKeys: Set<string>; visibleGroupKeys: Set<string> } {
-  if (!view) {
-    return {
-      visibleTableKeys: new Set(graph.tables.map((table) => table.key)),
-      visibleGroupKeys: new Set(graph.groups.map((group) => group.key)),
-    };
-  }
-
-  const existingTableKeys = new Set(graph.tables.map((table) => table.key));
-  const existingGroupKeys = new Set(graph.groups.map((group) => group.key));
-  const visibleTableKeys = selectFilterKeys(view.visibleTableKeys, existingTableKeys);
-  const visibleGroupKeys = selectFilterKeys(view.visibleGroupKeys, existingGroupKeys);
-  const visibleSchemaNames = selectFilterKeys(
-    view.visibleSchemaNames,
-    new Set([
-      ...graph.tables.map((table) => table.schemaName),
-      ...graph.groups.map((group) => group.schemaName),
-    ]),
-  );
-
-  for (const table of graph.tables) {
-    if (visibleSchemaNames.has(table.schemaName)) visibleTableKeys.add(table.key);
-  }
-  for (const group of graph.groups) {
-    if (visibleSchemaNames.has(group.schemaName)) visibleGroupKeys.add(group.key);
-  }
-  for (const group of graph.groups) {
-    if (!visibleGroupKeys.has(group.key)) continue;
-    for (const tableKey of group.tableKeys) {
-      if (existingTableKeys.has(tableKey)) visibleTableKeys.add(tableKey);
-    }
-  }
-
-  return { visibleTableKeys, visibleGroupKeys };
 }
 
 function selectFilterKeys(

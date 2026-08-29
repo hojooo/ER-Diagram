@@ -440,6 +440,14 @@ UI는 각 construct의 지원 수준을 capability badge와 도움말로 공개�
 | `DGM-009` | P0 | viewport culling과 필요한 level-of-detail을 사용한다. | 화면 밖 column DOM을 전부 렌더링하지 않는다. |
 | `DGM-010` | P0 | source와 diagram 간 양방향 navigation을 제공한다. | node/column 선택에서 source range로 이동하고 source symbol에서 node를 focus한다. |
 
+검색은 현재 선택한 global/view projection 안의 table·column·group·schema만 대상으로 한다. Source
+cursor가 현재 view에서 숨겨진 symbol을 가리키더라도 view를 자동으로 변경하지 않으며, 사용자가
+`Show in Global`을 명시적으로 선택한 경우에만 Global view로 전환해 해당 symbol을 선택·focus한다.
+
+각 view의 collapse와 detail level은 M1-011에서 project workspace session 상태로 분리한다. DBML source,
+semantic hash 또는 schema revision에는 영향을 주지 않으며, M1-012에서 같은 view key의 layout sidecar와
+연결해 재시작 후에도 복구되는 durable 상태로 승격한다.
+
 ### 11.6 Visual schema editing
 
 | ID | 우선순위 | 요구사항 | 수용 기준 |
