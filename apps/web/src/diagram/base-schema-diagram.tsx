@@ -1,4 +1,5 @@
 import {
+  applyNodeChanges,
   Background,
   BackgroundVariant,
   Controls,
@@ -6,6 +7,7 @@ import {
   type NodeTypes,
   ReactFlow,
   type ReactFlowInstance,
+  type Viewport,
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
@@ -41,6 +43,7 @@ const nodeTypes = {
 const edgeTypes = { reference: ReferenceDiagramEdgeComponent } satisfies EdgeTypes;
 
 type LayoutStatus = "LAYING_OUT" | "READY" | "ERROR";
+const EMPTY_LAYOUT_POSITIONS = {} as const;
 
 export function BaseSchemaDiagram({
   graph,
@@ -53,6 +56,14 @@ export function BaseSchemaDiagram({
   onToggleGroup,
   onNavigateSource,
   requestLayout = requestWorkerLayout,
+  layoutPositions = EMPTY_LAYOUT_POSITIONS,
+  layoutViewport = null,
+  layoutRequest = null,
+  interactionDisabled = false,
+  onPositionsCommit,
+  onViewportCommit,
+  onLayoutRequestReady,
+  onRenderedLayoutReady,
 }: BaseSchemaDiagramProps) {
   const projection = useMemo(
     () =>
@@ -79,6 +90,7 @@ export function BaseSchemaDiagram({
   >();
   const selection = useStore(selectionStore, (state) => state.selection);
   const requestGenerationRef = useRef(0);
+  const layoutPositionsRef = useRef(layoutPositions);
   const activeLayoutRequestRef = useRef("");
   const fittedLayoutRequestRef = useRef<string | null>(null);
   const focusedRequestRef = useRef<number | null>(null);
@@ -88,10 +100,18 @@ export function BaseSchemaDiagram({
   );
 
   useEffect(() => {
+    layoutPositionsRef.current = layoutPositions;
+    if (layoutRequest) return;
+    setDisplayProjection((current) => applySavedPositions(current, layoutPositions));
+  }, [layoutPositions, layoutRequest]);
+
+  useEffect(() => {
     requestGenerationRef.current += 1;
     const requestId = `${graph.schemaHash}:${layoutGeneration}:${requestGenerationRef.current}`;
     activeLayoutRequestRef.current = requestId;
-    setDisplayProjection(projection);
+    setDisplayProjection(
+      layoutRequest ? projection : applySavedPositions(projection, layoutPositionsRef.current),
+    );
     setSettledLayoutRequestId(null);
 
     if (projection.nodes.length === 0) {
@@ -104,18 +124,22 @@ export function BaseSchemaDiagram({
     void requestLayout(projection).then(
       (laidOut) => {
         if (activeLayoutRequestRef.current !== requestId) return;
-        setDisplayProjection(laidOut);
+        setDisplayProjection(
+          layoutRequest ? laidOut : applySavedPositions(laidOut, layoutPositionsRef.current),
+        );
         setLayoutStatus("READY");
         setSettledLayoutRequestId(requestId);
       },
       () => {
         if (activeLayoutRequestRef.current !== requestId) return;
-        setDisplayProjection(projection);
+        setDisplayProjection(
+          layoutRequest ? projection : applySavedPositions(projection, layoutPositionsRef.current),
+        );
         setLayoutStatus("ERROR");
         setSettledLayoutRequestId(requestId);
       },
     );
-  }, [graph.schemaHash, layoutGeneration, projection, requestLayout]);
+  }, [graph.schemaHash, layoutGeneration, layoutRequest, projection, requestLayout]);
 
   useEffect(() => {
     if (
@@ -129,10 +153,44 @@ export function BaseSchemaDiagram({
     if (fittedLayoutRequestRef.current === settledLayoutRequestId) return;
     fittedLayoutRequestRef.current = settledLayoutRequestId;
     const animationFrame = requestAnimationFrame(() => {
-      void flowInstance.fitView({ padding: 0.15 });
+      if (!layoutRequest && layoutViewport) {
+        void Promise.resolve(flowInstance.setViewport(layoutViewport)).then(() => {
+          onRenderedLayoutReady?.(
+            projectionPositions(displayProjection),
+            flowInstance.getViewport(),
+          );
+        });
+        return;
+      }
+      void Promise.resolve(flowInstance.fitView({ padding: 0.15 })).then(() => {
+        if (layoutRequest) {
+          onLayoutRequestReady?.({
+            requestId: layoutRequest.requestId,
+            mode: layoutRequest.mode,
+            succeeded: layoutStatus === "READY",
+            positions: projectionPositions(displayProjection),
+            viewport: flowInstance.getViewport(),
+          });
+        } else {
+          onRenderedLayoutReady?.(
+            projectionPositions(displayProjection),
+            flowInstance.getViewport(),
+          );
+        }
+      });
     });
     return () => cancelAnimationFrame(animationFrame);
-  }, [flowInstance, layoutStatus, projection.nodes.length, settledLayoutRequestId]);
+  }, [
+    displayProjection,
+    flowInstance,
+    layoutRequest,
+    layoutStatus,
+    layoutViewport,
+    onLayoutRequestReady,
+    onRenderedLayoutReady,
+    projection.nodes.length,
+    settledLayoutRequestId,
+  ]);
 
   useEffect(() => {
     if (!flowInstance || !selection || displayProjection.nodes.length === 0) return;
@@ -295,7 +353,27 @@ export function BaseSchemaDiagram({
             });
           }}
           onPaneClick={() => selectionStore.getState().setSelection(null)}
-          nodesDraggable={false}
+          onNodesChange={(changes) => {
+            const controlledChanges = changes.filter(
+              (change) => change.type !== "add" && change.type !== "remove",
+            );
+            if (controlledChanges.length === 0) return;
+            setDisplayProjection((current) => ({
+              ...current,
+              nodes: applyNodeChanges(controlledChanges, current.nodes),
+            }));
+          }}
+          onNodeDragStop={(_event, node) => {
+            if (interactionDisabled || layoutRequest) return;
+            const positions = projectionPositions(displayProjection);
+            positions[node.id] = { ...node.position };
+            onPositionsCommit?.(positions);
+          }}
+          onMoveEnd={(event, viewport) => {
+            if (!event || interactionDisabled || layoutRequest) return;
+            onViewportCommit?.(toDiagramViewport(viewport));
+          }}
+          nodesDraggable={!interactionDisabled && layoutStatus === "READY"}
           nodesConnectable={false}
           edgesReconnectable={false}
           elementsSelectable
@@ -311,6 +389,31 @@ export function BaseSchemaDiagram({
       </DiagramInteractionContext.Provider>
     </div>
   );
+}
+
+function applySavedPositions(
+  projection: DiagramProjection,
+  positions: Readonly<Record<string, { readonly x: number; readonly y: number }>>,
+): DiagramProjection {
+  return {
+    ...projection,
+    nodes: projection.nodes.map((node) => {
+      const position = positions[node.id];
+      return position ? { ...node, position: { ...position } } : node;
+    }),
+  };
+}
+
+function projectionPositions(
+  projection: DiagramProjection,
+): Record<string, { x: number; y: number }> {
+  return Object.fromEntries(
+    projection.nodes.map((node) => [node.id, { x: node.position.x, y: node.position.y }]),
+  );
+}
+
+function toDiagramViewport(viewport: Viewport): { x: number; y: number; zoom: number } {
+  return { x: viewport.x, y: viewport.y, zoom: viewport.zoom };
 }
 
 function representativeNodeIdsForFocus(

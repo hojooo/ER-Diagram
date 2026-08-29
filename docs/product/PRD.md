@@ -433,10 +433,10 @@ UI는 각 construct의 지원 수준을 capability badge와 도움말로 공개�
 | `DGM-002` | P0 | `TableGroup`을 compound group으로 표현한다. | group color·name·membership이 source와 일치한다. |
 | `DGM-003` | P0 | group collapse 시 외부 relationship를 group summary edge로 집계한다. | 숨겨진 child edge 때문에 관계가 사라진 것으로 오인되지 않는다. |
 | `DGM-004` | P0 | `DiagramView` selector를 제공한다. | 7개 view fixture를 재파싱 없이 전환하고 visible entity가 source 정의와 일치한다. |
-| `DGM-005` | P0 | global view와 view별 layout을 분리한다. | 한 view의 node 이동이 다른 view 위치를 덮어쓰지 않는다. |
+| `DGM-005` | P0 | global view와 view별 layout을 분리한다. | 한 view의 node 이동이 다른 view 위치를 덮어쓰지 않으며 모든 view write는 project-global layout revision으로 직렬화된다. |
 | `DGM-006` | P0 | table·column·group·schema 검색과 focus를 제공한다. | 검색 결과 선택 시 해당 node가 viewport 중앙에 표시된다. |
 | `DGM-007` | P0 | `NAME_ONLY`, `KEYS_ONLY`, `FULL` detail level을 제공한다. | 큰 graph에서 detail을 낮춰도 node identity와 edge가 유지된다. |
-| `DGM-008` | P0 | auto layout preview·apply·cancel·reset을 제공한다. | cancel은 기존 layout을 변경하지 않는다. |
+| `DGM-008` | P0 | auto layout preview·apply·cancel·reset을 제공한다. | cancel은 기존 layout을 변경하지 않고 reset은 현재 view의 위치·viewport·collapse·LOD를 함께 초기화한다. |
 | `DGM-009` | P0 | viewport culling과 필요한 level-of-detail을 사용한다. | 화면 밖 column DOM을 전부 렌더링하지 않는다. |
 | `DGM-010` | P0 | source와 diagram 간 양방향 navigation을 제공한다. | node/column 선택에서 source range로 이동하고 source symbol에서 node를 focus한다. |
 
@@ -444,9 +444,17 @@ UI는 각 construct의 지원 수준을 capability badge와 도움말로 공개�
 cursor가 현재 view에서 숨겨진 symbol을 가리키더라도 view를 자동으로 변경하지 않으며, 사용자가
 `Show in Global`을 명시적으로 선택한 경우에만 Global view로 전환해 해당 symbol을 선택·focus한다.
 
-각 view의 collapse와 detail level은 M1-011에서 project workspace session 상태로 분리한다. DBML source,
-semantic hash 또는 schema revision에는 영향을 주지 않으며, M1-012에서 같은 view key의 layout sidecar와
-연결해 재시작 후에도 복구되는 durable 상태로 승격한다.
+각 view의 위치, viewport, collapse와 detail level은 같은 view key의 layout sidecar에 저장한다. Layout
+write는 project 전체의 `layoutRevisionNo` 하나로 optimistic locking하며 다른 view에서 먼저 발생한 write도
+stale request를 `409`로 차단한다. 동일 payload는 revision을 만들지 않는 no-op이고 layout write는 DBML
+source, schema revision, project `updatedAt`과 Project Home 정렬을 변경하지 않는다.
+
+저장된 `baseSchemaHash`가 current graph와 다르면 matching stable key만 overlay하고 새 node는 ELK 위치를
+사용한다. Exact HIGH rename 후보는 새 key로 위치와 hidden state를 복사하되 old key는 recovery를 위해
+보존한다. Layout conflict에서는 자동 overwrite하지 않고 사용자가 최신 global revision으로 local layout을
+재시도하거나 확인 후 충돌 view의 server layout을 불러온다. Auto-layout preview는 durable baseline과
+격리하며 Cancel은 추가 write 없이 이전 상태를 복구한다. Reset은 current view만 `FULL`, 모든 group
+expanded, hidden empty, fresh ELK 위치와 fit viewport로 저장하고 다른 view를 변경하지 않는다.
 
 ### 11.6 Visual schema editing
 
@@ -611,7 +619,7 @@ INVALID_DRAFT
 | `lastValidRevisionId` | diagram·export 기본 source pointer |
 | `parserVersion` | 마지막 validation에 사용된 version |
 | `schemaRevisionNo` | schema write optimistic version |
-| `layoutRevisionNo` | layout write optimistic version |
+| `layoutRevisionNo` | 모든 view가 공유하는 project-global layout write optimistic version |
 | `createdAt`, `updatedAt` | local timestamp |
 
 ### 14.2 `SchemaRevision`
@@ -644,7 +652,12 @@ checkpoint는 자동 pruning 대상에서 제외한다. 현재 `lastValidRevisio
 | `viewport` | x/y/zoom |
 | `detailLevel` | `NAME_ONLY`, `KEYS_ONLY`, `FULL` |
 | `baseSchemaHash` | 저장 당시 schema provenance |
-| `revisionNo` | layout optimistic version |
+| `revisionNo` | 이 view row가 마지막으로 변경된 project-global layout revision |
+
+Layout row가 아직 없는 view의 조회는 오류가 아니라 current project layout revision과 `layout: null`을
+반환한다. 각 실제 write는 row upsert와 project-global revision 증가를 하나의 transaction으로 처리하고,
+순서만 다른 key collection과 동일 payload는 no-op으로 취급한다. Layout write는 project `updatedAt`을
+갱신하지 않는다.
 
 ### 14.4 `ImportArtifact`
 

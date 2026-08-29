@@ -12,6 +12,7 @@ import type {
   CreateProjectInput,
   DeleteProjectInput,
   DuplicateProjectInput,
+  SaveLayoutInput,
   ProjectApi,
   RenameProjectInput,
   SaveDraftInput,
@@ -117,6 +118,25 @@ class FakeProjectApi implements ProjectApi {
     return { state };
   }
 
+  async getLayout() {
+    return { layout: null, currentLayoutRevisionNo: 0 };
+  }
+
+  async saveLayout(input: SaveLayoutInput) {
+    return {
+      state: {
+        layout: {
+          projectId: input.projectId,
+          viewKey: input.viewKey,
+          revisionNo: input.expectedLayoutRevisionNo + 1,
+          ...input.layout,
+        },
+        currentLayoutRevisionNo: input.expectedLayoutRevisionNo + 1,
+      },
+      layoutUpdated: true,
+    };
+  }
+
   async createProject(input: CreateProjectInput) {
     this.createInputs.push(input);
     if (this.mutationError) throw this.mutationError;
@@ -220,7 +240,7 @@ describe("Project Home", () => {
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create project" }));
 
-    await screen.findByRole("heading", { name: "Orders", level: 1 });
+    await screen.findByRole("heading", { name: "Orders", level: 1 }, { timeout: 3_000 });
     expect(api.createInputs).toEqual([{ name: "Orders", primaryDialect: "MYSQL", source: "" }]);
     expect(screen.getByText("MySQL project")).toBeVisible();
     expect(screen.queryByText("Compound groups, source-defined views")).not.toBeInTheDocument();

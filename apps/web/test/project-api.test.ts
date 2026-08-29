@@ -165,6 +165,56 @@ describe("HTTP project API", () => {
     });
   });
 
+  it("loads and saves encoded per-view layouts through the shared contract", async () => {
+    const viewKey = 'view:["public","focus"]';
+    const layout = {
+      positions: { 'table:["public","users"]': { x: 10, y: 20 } },
+      collapsedGroupKeys: [],
+      hiddenElementKeys: [],
+      viewport: { x: 1, y: 2, zoom: 0.8 },
+      detailLevel: "FULL" as const,
+      baseSchemaHash: "a".repeat(64),
+    };
+    const savedLayout = { projectId: PROJECT_ID, viewKey, revisionNo: 1, ...layout };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ layout: null, currentLayoutRevisionNo: 0 }))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            state: { layout: savedLayout, currentLayoutRevisionNo: 1 },
+            layoutUpdated: true,
+          },
+          { status: 200, headers: { "x-command-id": COMMAND_ID } },
+        ),
+      );
+    const api = createHttpProjectApi({ fetch: fetcher, generateCommandId: () => COMMAND_ID });
+
+    await expect(api.getLayout({ projectId: PROJECT_ID, viewKey })).resolves.toEqual({
+      layout: null,
+      currentLayoutRevisionNo: 0,
+    });
+    await expect(
+      api.saveLayout({
+        projectId: PROJECT_ID,
+        viewKey,
+        expectedLayoutRevisionNo: 0,
+        layout,
+      }),
+    ).resolves.toMatchObject({ layoutUpdated: true, state: { layout: savedLayout } });
+
+    const encodedPath = `/api/v1/projects/${PROJECT_ID}/layouts/${encodeURIComponent(viewKey)}`;
+    expect(fetcher.mock.calls.map(([input, init]) => [input, init?.method])).toEqual([
+      [encodedPath, "GET"],
+      [encodedPath, "PUT"],
+    ]);
+    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).toEqual({
+      commandId: COMMAND_ID,
+      expectedLayoutRevisionNo: 0,
+      layout,
+    });
+  });
+
   it.each([400, 404, 409, 413, 422, 500])(
     "preserves the safe public error boundary for HTTP %s",
     async (status) => {

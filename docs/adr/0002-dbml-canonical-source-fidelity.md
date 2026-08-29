@@ -72,9 +72,22 @@ graph와 현재 view filter에서 매번 재생성하는 파생 데이터다. Vi
 호출하거나 canonical source와 schema revision을 변경하지 않는다. 현재 view에서 숨겨진 source symbol은
 자동으로 다른 view에 노출하지 않고 사용자가 명시적으로 Global view로 전환한 경우에만 선택·focus한다.
 
-M1-011의 view별 detail level과 collapsed group key는 workspace session 상태로 관리한다. Stable view/group
-key가 유지되는 동안만 상태를 보존하고 삭제된 key는 폐기한다. 이 상태의 durable ownership은 M1-012에서
-같은 view key의 layout sidecar로 옮기며 schema semantics의 정본으로 승격하지 않는다.
+View별 position, viewport, detail level, collapsed group key와 hidden element key는 같은 view key의 durable
+layout sidecar가 소유한다. Hydration은 collapse와 LOD를 먼저 적용한 뒤 matching stable key의 저장 위치를
+ELK 결과에 overlay하고 저장 viewport를 복구한다. Current graph에 새로 생긴 node는 ELK 위치를 사용하고,
+사라진 key의 위치는 recovery를 위해 저장 row에서 즉시 제거하지 않는다. View key가 source에서 삭제되면
+browser session 상태는 폐기하되 stale SQLite row 정리는 별도 lifecycle 작업으로 남긴다.
+
+`baseSchemaHash`는 layout provenance이며 mismatch 자체로 저장이나 복구를 거부하지 않는다. Exact HIGH
+table/column rename candidate만 새 key에 position과 hidden state를 복사하고 old key는 유지한다. Ambiguous
+candidate와 key 충돌은 자동 적용하지 않는다. M3 visual rename에서 모든 view row를 atomic migration하는
+정책과 구분한다.
+
+Auto-layout preview는 current durable layout을 먼저 baseline으로 flush한 뒤 별도 generation에서 실행한다.
+Preview 중 graph, view, collapse, LOD와 drag 변경을 잠그고 graph가 바뀌면 결과를 폐기한다. Apply만 preview
+position과 viewport를 저장하며 Cancel은 추가 write 없이 exact baseline을 다시 표시한다. Reset은 current
+view의 position, viewport, collapse, hidden state와 LOD 전체를 fresh ELK 결과로 교체하고 worker 또는 save가
+실패하면 기존 durable row를 보존한다.
 
 Visual mutation은 source position을 기준으로 가장 작은 `TextEdit[]`를 만든다. Edit는 offset 내림차순으로 적용하고 수정된 전체 source를 DBML v2로 다시 parse한다. Reparse 결과의 semantic diff가 command가 기대한 변경과 정확히 일치할 때만 source를 commit한다. 실패하면 원본을 유지하고 diagnostic을 반환한다.
 

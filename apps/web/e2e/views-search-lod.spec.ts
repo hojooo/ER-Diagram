@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
+import { createControlledLayoutApi } from "./controlled-layout-api.js";
+
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-2123456789ab";
 const CREATED_AT = "2026-08-28T01:02:03.004Z";
 const SCHEMA_SOURCE = `TableGroup Identity [color: #778899] {
@@ -191,6 +193,7 @@ async function replaceEditorSource(editor: Locator, source: string): Promise<voi
 async function installViewsApi(page: Page) {
   let state = projectState(INITIAL_SOURCE, 1, "VALID", null);
   const writes: Array<Record<string, unknown>> = [];
+  const layouts = createControlledLayoutApi(PROJECT_ID);
 
   await page.route("**/api/v1/projects**", async (route) => {
     const request = route.request();
@@ -203,6 +206,8 @@ async function installViewsApi(page: Page) {
       "x-correlation-id": "123e4567-e89b-42d3-a456-426614174000",
       ...(commandId ? { "x-command-id": commandId } : {}),
     };
+
+    if (await layouts.fulfillIfMatched({ route, pathname, method, command, headers })) return;
 
     if (method === "GET" && pathname === `/api/v1/projects/${PROJECT_ID}`) {
       await route.fulfill({ status: 200, headers, body: JSON.stringify({ state }) });

@@ -20,6 +20,7 @@ export function DiagramWorkspaceControls({
   onActivateSearchResult,
   onViewChange,
   onDetailLevelChange,
+  disabled = false,
 }: {
   readonly graph: SchemaGraph;
   readonly visibility: DiagramVisibility;
@@ -30,6 +31,7 @@ export function DiagramWorkspaceControls({
   readonly onActivateSearchResult: (result: DiagramSearchResult) => void;
   readonly onViewChange: (viewKey: DiagramViewKey) => void;
   readonly onDetailLevelChange: (detailLevel: DiagramLod) => void;
+  readonly disabled?: boolean;
 }) {
   const listboxId = useId();
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -57,6 +59,7 @@ export function DiagramWorkspaceControls({
         <select
           className="min-h-10 rounded-lg border border-slate-600 bg-slate-950 px-3 text-sm text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
           value={viewKey}
+          disabled={disabled}
           onChange={(event) => {
             setActiveIndex(-1);
             onViewChange(event.target.value);
@@ -80,6 +83,7 @@ export function DiagramWorkspaceControls({
           autoComplete="off"
           placeholder="Table, column, group, or schema"
           value={searchQuery}
+          disabled={disabled}
           aria-autocomplete="list"
           aria-expanded={showResults}
           aria-controls={listboxId}
@@ -171,6 +175,7 @@ export function DiagramWorkspaceControls({
         <select
           className="min-h-10 rounded-lg border border-slate-600 bg-slate-950 px-3 text-sm text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
           value={detailLevel}
+          disabled={disabled}
           onChange={(event) => onDetailLevelChange(event.target.value as DiagramLod)}
         >
           <option value="NAME_ONLY">Names</option>

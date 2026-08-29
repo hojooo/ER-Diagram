@@ -217,6 +217,22 @@ select {
   cursor: pointer;
 }
 
+.diagram-table__drag-handle {
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  color: #64748b;
+  cursor: grab;
+  font-size: 0.78rem;
+  line-height: 1;
+  touch-action: none;
+  user-select: none;
+}
+
+.diagram-table__drag-handle:active {
+  cursor: grabbing;
+}
+
 .diagram-table__table-action:focus-visible,
 .diagram-table__column-action:focus-visible {
   outline: 2px solid #67e8f9;

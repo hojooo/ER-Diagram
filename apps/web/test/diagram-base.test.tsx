@@ -7,18 +7,31 @@ import { fixtureInventory, generateFidelityFixture } from "@er-diagram/test-fixt
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-const flowSpies = vi.hoisted(() => ({ fitView: vi.fn() }));
+const flowSpies = vi.hoisted(() => ({
+  fitView: vi.fn(async () => true),
+  setViewport: vi.fn(async () => true),
+  getViewport: vi.fn(() => ({ x: 10, y: 20, zoom: 0.75 })),
+}));
 
 vi.mock("@xyflow/react", async () => {
   const React = await import("react");
   interface MockNode {
     id: string;
+    position: { x: number; y: number };
     data: { name?: string };
   }
   interface MockEdge {
     id: string;
   }
   return {
+    applyNodeChanges: (
+      changes: Array<{ id: string; position?: { x: number; y: number } }>,
+      nodes: MockNode[],
+    ) =>
+      nodes.map((node) => {
+        const change = changes.find((candidate) => candidate.id === node.id);
+        return change?.position ? { ...node, position: change.position } : node;
+      }),
     Background: () => null,
     BackgroundVariant: { Dots: "dots" },
     BaseEdge: () => null,
@@ -31,7 +44,11 @@ vi.mock("@xyflow/react", async () => {
       const nodes = (props.nodes ?? []) as MockNode[];
       const edges = (props.edges ?? []) as MockEdge[];
       const onInit = props.onInit as
-        | ((instance: { fitView: typeof flowSpies.fitView }) => void)
+        | ((instance: {
+            fitView: typeof flowSpies.fitView;
+            setViewport: typeof flowSpies.setViewport;
+            getViewport: typeof flowSpies.getViewport;
+          }) => void)
         | undefined;
       const onNodeClick = props.onNodeClick as
         | ((event: unknown, node: MockNode) => void)
@@ -39,7 +56,27 @@ vi.mock("@xyflow/react", async () => {
       const onEdgeClick = props.onEdgeClick as
         | ((event: unknown, edge: MockEdge) => void)
         | undefined;
-      React.useEffect(() => onInit?.({ fitView: flowSpies.fitView }), [onInit]);
+      const onNodesChange = props.onNodesChange as
+        | ((
+            changes: Array<{ type: "position"; id: string; position: { x: number; y: number } }>,
+          ) => void)
+        | undefined;
+      const onNodeDragStop = props.onNodeDragStop as
+        | ((event: unknown, node: MockNode) => void)
+        | undefined;
+      const onMoveEnd = props.onMoveEnd as
+        | ((event: unknown, viewport: { x: number; y: number; zoom: number }) => void)
+        | undefined;
+      React.useEffect(
+        () =>
+          onInit?.({
+            fitView: flowSpies.fitView,
+            setViewport: flowSpies.setViewport,
+            getViewport: flowSpies.getViewport,
+          }),
+        [onInit],
+      );
+      const firstNode = nodes[0];
       return (
         <div role="application" aria-label={String(props["aria-label"])}>
           {nodes.map((node) => (
@@ -47,6 +84,7 @@ vi.mock("@xyflow/react", async () => {
               type="button"
               key={node.id}
               aria-label={`Canvas table ${node.data.name ?? node.id}`}
+              data-position={`${node.position.x},${node.position.y}`}
               onClick={(event) => onNodeClick?.(event, node)}
             >
               {node.data.name ?? node.id}
@@ -62,6 +100,33 @@ vi.mock("@xyflow/react", async () => {
               {edge.id}
             </button>
           ))}
+          {firstNode ? (
+            <button
+              type="button"
+              aria-label="Simulate node drag"
+              onClick={() => {
+                const moved: MockNode = { ...firstNode, position: { x: 700, y: 800 } };
+                onNodesChange?.([{ type: "position", id: moved.id, position: moved.position }]);
+                onNodeDragStop?.({}, moved);
+              }}
+            >
+              Drag
+            </button>
+          ) : null}
+          <button
+            type="button"
+            aria-label="Simulate user pan"
+            onClick={() => onMoveEnd?.({}, { x: 30, y: 40, zoom: 1.2 })}
+          >
+            Pan
+          </button>
+          <button
+            type="button"
+            aria-label="Simulate programmatic pan"
+            onClick={() => onMoveEnd?.(null, { x: 50, y: 60, zoom: 1 })}
+          >
+            Programmatic pan
+          </button>
         </div>
       );
     },
@@ -131,7 +196,9 @@ beforeAll(() => {
 
 afterEach(() => {
   cleanup();
-  flowSpies.fitView.mockReset();
+  flowSpies.fitView.mockClear();
+  flowSpies.setViewport.mockClear();
+  flowSpies.getViewport.mockClear();
 });
 
 describe("base schema diagram projection", () => {
@@ -519,6 +586,80 @@ describe("base schema diagram canvas", () => {
       "Diagram layout ready",
     );
     expect(requestLayout).toHaveBeenCalledTimes(2);
+  });
+
+  it("overlays saved positions, restores viewport, and emits only user layout changes", async () => {
+    const graph = await parseGraph("Table positioned { id int [pk] }");
+    const table = graph.tables[0];
+    if (!table) throw new Error("Missing positioned table.");
+    const requestLayout = vi.fn(async (projection: DiagramProjection) => projection);
+    const onPositionsCommit = vi.fn();
+    const onViewportCommit = vi.fn();
+    const onRenderedLayoutReady = vi.fn();
+
+    render(
+      <BaseSchemaDiagram
+        graph={graph}
+        viewKey="GLOBAL"
+        detailLevel="FULL"
+        collapsedGroupKeys={new Set()}
+        selectionStore={createDiagramSelectionStore()}
+        sourceNavigationEnabled
+        onToggleGroup={vi.fn()}
+        onNavigateSource={vi.fn()}
+        requestLayout={requestLayout}
+        layoutPositions={{ [table.key]: { x: 400, y: 500 } }}
+        layoutViewport={{ x: 5, y: 6, zoom: 0.8 }}
+        onPositionsCommit={onPositionsCommit}
+        onViewportCommit={onViewportCommit}
+        onRenderedLayoutReady={onRenderedLayoutReady}
+      />,
+    );
+
+    const tableButton = await screen.findByRole("button", { name: "Canvas table positioned" });
+    await waitFor(() => expect(tableButton).toHaveAttribute("data-position", "400,500"));
+    expect(flowSpies.setViewport).toHaveBeenCalledWith({ x: 5, y: 6, zoom: 0.8 });
+    await waitFor(() =>
+      expect(onRenderedLayoutReady).toHaveBeenCalledWith(
+        expect.objectContaining({ [table.key]: { x: 400, y: 500 } }),
+        { x: 10, y: 20, zoom: 0.75 },
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Simulate node drag" }));
+    expect(onPositionsCommit).toHaveBeenCalledWith(
+      expect.objectContaining({ [table.key]: { x: 700, y: 800 } }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Simulate programmatic pan" }));
+    expect(onViewportCommit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Simulate user pan" }));
+    expect(onViewportCommit).toHaveBeenCalledWith({ x: 30, y: 40, zoom: 1.2 });
+  });
+
+  it("reports failed preview layout without treating fallback positions as applicable", async () => {
+    const graph = await parseGraph("Table preview_failure { id int [pk] }");
+    const onLayoutRequestReady = vi.fn();
+    render(
+      <BaseSchemaDiagram
+        graph={graph}
+        viewKey="GLOBAL"
+        detailLevel="FULL"
+        collapsedGroupKeys={new Set()}
+        selectionStore={createDiagramSelectionStore()}
+        sourceNavigationEnabled={false}
+        onToggleGroup={vi.fn()}
+        onNavigateSource={vi.fn()}
+        requestLayout={vi.fn().mockRejectedValue(new Error("private graph"))}
+        layoutRequest={{ requestId: 7, mode: "PREVIEW" }}
+        onLayoutRequestReady={onLayoutRequestReady}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(onLayoutRequestReady).toHaveBeenCalledWith(
+        expect.objectContaining({ requestId: 7, mode: "PREVIEW", succeeded: false }),
+      ),
+    );
   });
 });
 

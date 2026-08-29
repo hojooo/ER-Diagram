@@ -46,6 +46,19 @@ history, layout과 import artifact는 복사하지 않는다. Project rename은 
 동시 schema 변경을 차단하되 source revision과 `schemaRevisionNo`를 증가시키지 않는다. 같은 schema
 revision에서 발생한 rename끼리는 마지막 commit이 적용된다.
 
+Layout write는 모든 view가 공유하는 `projects.layout_revision_no`를 optimistic version으로 사용한다.
+Application은 `BEGIN IMMEDIATE` transaction 안에서 project 존재와 expected global revision을 다시 확인하고
+`diagram_layouts` row upsert와 project revision 증가를 함께 commit한다. Row의 `revision_no`는 해당 view가
+마지막으로 변경된 global revision이다. 다른 view write도 stale expected revision이면 conflict이며 동일한
+normalized payload는 stale 검사를 통과한 뒤 revision을 증가시키지 않는 no-op이다. Position object key와
+collapse/hidden key 배열은 code-unit 순서로 canonicalize한다.
+
+Layout transaction은 canonical source, schema history, `schema_revision_no`와 project `updated_at`을 변경하지
+않는다. 따라서 node 이동이나 viewport 저장이 Project Home 최근 수정 정렬을 바꾸지 않는다. Malformed JSON,
+non-finite coordinate, duplicate key 또는 row revision이 project global revision보다 큰 persisted state는
+fail-closed storage invariant로 처리하며 row upsert나 project revision CAS 중 하나라도 실패하면 전체
+transaction을 rollback한다.
+
 최근 non-checkpoint revision 100개를 보존한다. Checkpoint 여부는 별도 boolean으로 중복 저장하지 않고
 revision origin에서 파생한다. `SQL_IMPORT`, `RESTORE`, `PARSER_MIGRATION`은 checkpoint이며
 `SOURCE_EDIT`, `VISUAL_COMMAND`는 pruning 대상이다. 현재 last-valid pointer가 가리키는 revision은
