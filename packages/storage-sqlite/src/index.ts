@@ -1,5 +1,6 @@
 export { createSqliteLayoutRepository } from "./layout-repository.js";
 export { createSqliteProjectRepository } from "./project-repository.js";
+export { createSqliteSqlImportRepository } from "./sql-import-repository.js";
 export {
   appMetadata,
   DETAIL_LEVELS,

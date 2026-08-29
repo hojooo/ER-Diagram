@@ -111,6 +111,22 @@ Raw importer는 오류를 반환하지 않았으므로 관찰 사실과 다르�
 - JavaScript parser의 일시적 memory를 zeroize한다고 주장하지 않는다. Configurable source size와 parser
   timeout은 별도 resource-limit 경계가 담당한다.
 
+### M2-004 preview evidence와 authoritative Apply 경계
+
+- Preview는 project ID, base schema revision, dialect, source/candidate hash, 전체 versioned report, initial
+  `REJECT` policy와 retention mode를 canonical JSON으로 만든 뒤 SHA-256 evidence hash를 계산한다.
+- Conversion 실패도 candidate가 없는 `FAILED` artifact로 저장하고 HTTP adapter에서는 report를 포함한
+  성공 response로 다룬다. Preview만으로 canonical DBML, schema revision 또는 layout을 변경하지 않는다.
+- Apply는 client가 보낸 source를 artifact dialect로 다시 parse하고 report, record-free candidate와 preview
+  hash를 재생성한다. Stored report나 candidate를 신뢰해 parse를 건너뛰지 않는다.
+- `CONFIRM_DDL_ONLY`는 Apply 시점의 사용자 승인이고 source·conversion evidence가 아니므로 preview hash
+  preimage에 포함하지 않는다. 승인 후에도 `ConversionReport.applyEligible=false`는 그대로 유지하고
+  별도 data policy만 `READY`로 바뀐다.
+- Stored envelope, row dialect, original/candidate hash 또는 status 조합이 다르면 fail-closed invariant로
+  처리한다. Response와 error에는 original SQL, row literal, internal graph와 SQLite 원인을 포함하지 않는다.
+- Successful Apply는 candidate가 current draft와 같아도 `SQL_IMPORT` checkpoint를 하나 만들며 revision,
+  project pointer, artifact transition과 pruning을 원자적으로 저장한다.
+
 ## Verification
 
 - `pnpm --filter @er-diagram/test-fixtures test test/sql-capability-fixtures.test.ts`
@@ -122,3 +138,6 @@ Raw importer는 오류를 반환하지 않았으므로 관찰 사실과 다르�
 - `pnpm --filter @er-diagram/test-fixtures test test/sql-import-report-fixtures.test.ts`
 - `pnpm --filter @er-diagram/core test test/sql-import.test.ts`
 - `pnpm --filter @er-diagram/core test test/data-exclusion.test.ts`
+- `pnpm --filter @er-diagram/core test test/application/sql-import.test.ts`
+- `pnpm --filter @er-diagram/storage-sqlite test test/sql-import-repository.test.ts`
+- `pnpm --filter @er-diagram/server test:integration sql-import`

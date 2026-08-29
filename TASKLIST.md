@@ -226,7 +226,9 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
 - [x] `M2-003` DML/민감 data exclusion과 opt-in original SQL retention
   - conversion report와 사용자 DDL-only 승인 상태를 분리하고 original SQL은 opt-in일 때만 보존한다.
   - 검증: `pnpm --filter @er-diagram/core test test/data-exclusion.test.ts`
-- [ ] `M2-004` import preview/apply API, hash 재검증, checkpoint/rollback
+- [x] `M2-004` import preview/apply API, hash 재검증, checkpoint/rollback
+  - 성공·실패 preview artifact, versioned evidence hash와 authoritative Apply reparse를 구현한다.
+  - Apply는 `SQL_IMPORT` checkpoint, project pointer와 artifact status를 원자적으로 저장한다.
   - 검증: `pnpm --filter @er-diagram/server test:integration sql-import`
 - [ ] `M2-005` new-project/replace-only import preview UI
   - 검증: `pnpm test:e2e sql-import`

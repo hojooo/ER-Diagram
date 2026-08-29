@@ -44,26 +44,33 @@ export async function prepareSqlImportForApply(
   input: SqlImportPreparationInput,
 ): Promise<PreparedSqlImport> {
   const conversion = await convertSqlImport(input);
-  const dataStatementNos = conversion.report.statements
-    .filter(({ kind }) => kind === "DML" || kind === "COPY")
-    .map(({ statementNo }) => statementNo);
-  const hasDataStatements = dataStatementNos.length > 0;
-  const dataStatementHandling = input.dataStatementHandling ?? "REJECT";
   const originalSqlRetention = input.originalSqlRetention ?? "DISCARD";
 
   return {
     conversion,
-    policy: {
-      policyVersion: SQL_DATA_POLICY_VERSION,
-      dataStatementNos,
-      dataHandling: dataHandling(hasDataStatements, dataStatementHandling),
-      applyReadiness: applyReadiness(conversion, hasDataStatements, dataStatementHandling),
-    },
+    policy: evaluateSqlImportDataPolicy(conversion, input.dataStatementHandling),
     artifactSource: {
       retention: originalSqlRetention,
       originalHash: conversion.report.sourceHash,
       originalSql: originalSqlRetention === "RETAIN" ? input.source : null,
     },
+  };
+}
+
+export function evaluateSqlImportDataPolicy(
+  conversion: SqlImportConversionResult,
+  dataStatementHandling: SqlDataStatementHandling = "REJECT",
+): SqlImportDataPolicyDecision {
+  const dataStatementNos = conversion.report.statements
+    .filter(({ kind }) => kind === "DML" || kind === "COPY")
+    .map(({ statementNo }) => statementNo);
+  const hasDataStatements = dataStatementNos.length > 0;
+
+  return {
+    policyVersion: SQL_DATA_POLICY_VERSION,
+    dataStatementNos,
+    dataHandling: dataHandling(hasDataStatements, dataStatementHandling),
+    applyReadiness: applyReadiness(conversion, hasDataStatements, dataStatementHandling),
   };
 }
 

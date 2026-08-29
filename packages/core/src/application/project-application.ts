@@ -1,30 +1,35 @@
 import type { Diagnostic } from "@er-diagram/contracts";
 import { parseDbmlV2 } from "../dbml-parser.js";
 import { DBML_PARSER_VERSION } from "../schema-graph.js";
-import {
-  type CreateProjectApplicationOptions,
-  type CreateProjectCommand,
-  type DeleteProjectCommand,
-  type DiagnosticSummary,
-  type DraftValidity,
-  type DuplicateProjectCommand,
-  NON_CHECKPOINT_REVISION_LIMIT,
-  type Project,
-  type ProjectApplication,
-  type ProjectApplicationError,
-  type ProjectApplicationResult,
-  type ProjectMutation,
-  type ProjectPersistencePort,
-  type ProjectPersistenceReader,
-  type ProjectPersistenceTransaction,
-  type ProjectSourceParser,
-  type ProjectState,
-  type ProjectSummary,
-  type RenameProjectCommand,
-  type RestoreRevisionCommand,
-  type SaveDraftCommand,
-  type SchemaRevision,
+import type {
+  CreateProjectApplicationOptions,
+  CreateProjectCommand,
+  DeleteProjectCommand,
+  DiagnosticSummary,
+  DraftValidity,
+  DuplicateProjectCommand,
+  Project,
+  ProjectApplication,
+  ProjectApplicationError,
+  ProjectApplicationResult,
+  ProjectMutation,
+  ProjectPersistencePort,
+  ProjectPersistenceReader,
+  ProjectPersistenceTransaction,
+  ProjectSourceParser,
+  ProjectState,
+  ProjectSummary,
+  RenameProjectCommand,
+  RestoreRevisionCommand,
+  SaveDraftCommand,
+  SchemaRevision,
 } from "./project.js";
+import {
+  ProjectStateReadError,
+  pruneProjectRevisions,
+  readProjectState,
+  summarizeDiagnostics,
+} from "./project-state.js";
 
 interface ValidatedSource {
   readonly source: string;
@@ -157,7 +162,7 @@ async function saveDraft(
       updatedAt,
     };
     updateProjectOrFail(transaction, updated, command.expectedSchemaRevisionNo);
-    pruneRevisions(transaction, updated);
+    pruneProjectRevisions(transaction, updated);
     return mutation(readProjectState(transaction, updated.id), validated.diagnostics, true);
   });
 }
@@ -343,7 +348,7 @@ async function restoreRevision(
       updatedAt,
     };
     updateProjectOrFail(transaction, updated, command.expectedSchemaRevisionNo);
-    pruneRevisions(transaction, updated);
+    pruneProjectRevisions(transaction, updated);
     return mutation(readProjectState(transaction, command.projectId), validated.diagnostics, true);
   });
 }
@@ -361,18 +366,6 @@ async function validateSource(
     diagnostics,
     diagnosticSummary: summarizeDiagnostics(diagnostics),
   };
-}
-
-function summarizeDiagnostics(diagnostics: readonly Diagnostic[]): DiagnosticSummary {
-  let errors = 0;
-  let warnings = 0;
-  let infos = 0;
-  for (const diagnostic of diagnostics) {
-    if (diagnostic.severity === "ERROR") errors += 1;
-    else if (diagnostic.severity === "WARNING") warnings += 1;
-    else infos += 1;
-  }
-  return { errors, warnings, infos, parserVersion: DBML_PARSER_VERSION };
 }
 
 function createRevision(input: {
@@ -413,69 +406,6 @@ function listProjectSummaries(reader: ProjectPersistenceReader): readonly Projec
       updatedAt: project.updatedAt,
     };
   });
-}
-
-function readProjectState(reader: ProjectPersistenceReader, projectId: string): ProjectState {
-  const project = reader.getProject(projectId);
-  if (!project) throw new ExpectedProjectFailure(projectNotFound(projectId));
-  const currentRevision = reader.getRevisionByNumber(projectId, project.schemaRevisionNo);
-  if (!currentRevision) {
-    throw new ExpectedProjectFailure(
-      invariant(projectId, `Current revision ${project.schemaRevisionNo} does not exist.`),
-    );
-  }
-  if (
-    currentRevision.source !== project.draftSource ||
-    currentRevision.sourceHash !== project.draftHash ||
-    currentRevision.parserVersion !== project.parserVersion
-  ) {
-    throw new ExpectedProjectFailure(
-      invariant(projectId, "Project draft does not match its current revision."),
-    );
-  }
-
-  let lastValidRevision: SchemaRevision | null = null;
-  if (project.lastValidRevisionId) {
-    lastValidRevision = reader.getRevisionById(projectId, project.lastValidRevisionId);
-    if (lastValidRevision?.validity !== "VALID") {
-      throw new ExpectedProjectFailure(
-        invariant(projectId, "Project last-valid pointer does not reference a valid revision."),
-      );
-    }
-    if (lastValidRevision.revisionNo > currentRevision.revisionNo) {
-      throw new ExpectedProjectFailure(
-        invariant(projectId, "Project last-valid revision is newer than its current revision."),
-      );
-    }
-  }
-  if (currentRevision.validity === "VALID" && project.lastValidRevisionId !== currentRevision.id) {
-    throw new ExpectedProjectFailure(
-      invariant(projectId, "A valid current revision must also be the last-valid revision."),
-    );
-  }
-
-  return { project, currentRevision, lastValidRevision };
-}
-
-function pruneRevisions(transaction: ProjectPersistenceTransaction, project: Project): void {
-  const nonCheckpoints = transaction
-    .listRevisions(project.id)
-    .filter(
-      (revision) => revision.origin === "SOURCE_EDIT" || revision.origin === "VISUAL_COMMAND",
-    );
-  const protectedIds = new Set(
-    nonCheckpoints.slice(0, NON_CHECKPOINT_REVISION_LIMIT).map(({ id }) => id),
-  );
-  if (project.lastValidRevisionId) protectedIds.add(project.lastValidRevisionId);
-  const revisionIds = nonCheckpoints.filter(({ id }) => !protectedIds.has(id)).map(({ id }) => id);
-  if (revisionIds.length === 0) return;
-
-  const deleted = transaction.deleteRevisions(project.id, revisionIds);
-  if (deleted !== revisionIds.length) {
-    throw new ExpectedProjectFailure(
-      invariant(project.id, "Revision retention did not delete the expected rows."),
-    );
-  }
 }
 
 function updateProjectOrFail(
@@ -574,6 +504,7 @@ function readResult<T>(operation: () => T): ProjectApplicationResult<T> {
     return success(operation());
   } catch (error) {
     if (error instanceof ExpectedProjectFailure) return failure(error.applicationError);
+    if (error instanceof ProjectStateReadError) return failure(mapProjectStateError(error));
     throw error;
   }
 }
@@ -586,6 +517,13 @@ function transactionResult<T>(
     return success(persistence.transaction(operation));
   } catch (error) {
     if (error instanceof ExpectedProjectFailure) return failure(error.applicationError);
+    if (error instanceof ProjectStateReadError) return failure(mapProjectStateError(error));
     throw error;
   }
+}
+
+function mapProjectStateError(error: ProjectStateReadError): ProjectApplicationError {
+  return error.reason === "NOT_FOUND"
+    ? projectNotFound(error.projectId)
+    : invariant(error.projectId, error.message);
 }

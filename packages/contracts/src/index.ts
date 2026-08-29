@@ -337,6 +337,330 @@ export const saveLayoutRequestSchema = z
   .strict();
 export type SaveLayoutRequest = z.infer<typeof saveLayoutRequestSchema>;
 
+export const sqlCapabilityIdSchema = z.enum([
+  "ALTER_ADD_FOREIGN_KEY",
+  "ALTER_ADD_UNIQUE",
+  "ALTER_COLUMN_MUTATION",
+  "ARRAY_BUILTIN",
+  "ARRAY_SCHEMA_ENUM",
+  "AUTO_INCREMENT",
+  "BASIC_CONSTRAINTS",
+  "COMMENTS",
+  "COMPOSITE_KEYS",
+  "COPY_DATA",
+  "CREATE_TABLE",
+  "DML",
+  "DROP_STATEMENT",
+  "ENUM",
+  "FOREIGN_KEY_ACTIONS",
+  "FUNCTION_INDEX",
+  "GENERATED_COLUMN",
+  "IDENTITY",
+  "INDEX_METHODS",
+  "MYSQL_INDEXES",
+  "MYSQL_TABLE_OPTIONS",
+  "PARTIAL_INDEX",
+  "PROCEDURE_OR_FUNCTION_BODY",
+  "SCHEMA_QUALIFIED_TABLE",
+  "SERIAL",
+  "TABLESPACE",
+  "TRIGGER",
+  "VIEW",
+]);
+export type SqlCapabilityId = z.infer<typeof sqlCapabilityIdSchema>;
+
+export const schemaElementKindSchema = z.enum([
+  "project",
+  "note",
+  "table",
+  "column",
+  "index",
+  "check",
+  "enum",
+  "enumValue",
+  "reference",
+  "group",
+  "partial",
+  "partialColumn",
+  "partialIndex",
+  "partialCheck",
+  "view",
+]);
+export type SchemaElementKind = z.infer<typeof schemaElementKindSchema>;
+
+export const conversionStatusSchema = z.enum([
+  "EXACT",
+  "NORMALIZED",
+  "PARTIAL",
+  "UNSUPPORTED",
+  "ERROR",
+]);
+export type ConversionStatus = z.infer<typeof conversionStatusSchema>;
+
+export const sqlStatementKindSchema = z.enum([
+  "CREATE_SCHEMA",
+  "CREATE_TABLE",
+  "CREATE_ENUM",
+  "CREATE_INDEX",
+  "ALTER_TABLE",
+  "COMMENT",
+  "VIEW",
+  "DROP",
+  "TRIGGER",
+  "ROUTINE",
+  "DML",
+  "COPY",
+  "UNKNOWN",
+]);
+export type SqlStatementKind = z.infer<typeof sqlStatementKindSchema>;
+
+const schemaElementAddOrDeleteSchema = z
+  .object({
+    operation: z.enum(["ADD", "DELETE"]),
+    elementKind: schemaElementKindSchema,
+    key: z.string().min(1),
+    parentKey: z.string().min(1).nullable(),
+  })
+  .strict();
+
+const schemaElementUpdateSchema = z
+  .object({
+    operation: z.literal("UPDATE"),
+    elementKind: schemaElementKindSchema,
+    key: z.string().min(1),
+    parentKey: z.string().min(1).nullable(),
+    changedFields: z.array(z.string().min(1)),
+  })
+  .strict();
+
+export const schemaElementChangeSchema = z.union([
+  schemaElementAddOrDeleteSchema,
+  schemaElementUpdateSchema,
+]);
+export type SchemaElementChange = z.infer<typeof schemaElementChangeSchema>;
+
+export const sqlClauseConversionSchema = z
+  .object({
+    clauseNo: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    capabilityId: sqlCapabilityIdSchema.nullable(),
+    status: conversionStatusSchema,
+    code: z.string().min(1),
+    message: z.string().min(1),
+    range: sourceRangeSchema,
+  })
+  .strict();
+export type SqlClauseConversion = z.infer<typeof sqlClauseConversionSchema>;
+
+export const sqlStatementConversionSchema = z
+  .object({
+    statementNo: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    kind: sqlStatementKindSchema,
+    capabilityId: sqlCapabilityIdSchema.nullable(),
+    status: conversionStatusSchema,
+    code: z.string().min(1),
+    message: z.string().min(1),
+    range: sourceRangeSchema,
+    clauses: z.array(sqlClauseConversionSchema),
+  })
+  .strict();
+export type SqlStatementConversion = z.infer<typeof sqlStatementConversionSchema>;
+
+const sqlSemanticVerificationNotRunSchema = z
+  .object({
+    status: z.literal("NOT_RUN"),
+    sourceModelHash: z.null(),
+    candidateSchemaHash: z.null(),
+    changes: z.tuple([]),
+  })
+  .strict();
+
+const sqlSemanticVerificationVerifiedSchema = z
+  .object({
+    status: z.literal("VERIFIED"),
+    sourceModelHash: sha256HexSchema,
+    candidateSchemaHash: sha256HexSchema,
+    changes: z.tuple([]),
+  })
+  .strict();
+
+const sqlSemanticVerificationFailedSchema = z
+  .object({
+    status: z.literal("FAILED"),
+    sourceModelHash: sha256HexSchema,
+    candidateSchemaHash: sha256HexSchema,
+    changes: z.array(schemaElementChangeSchema),
+  })
+  .strict();
+
+export const sqlSemanticVerificationSchema = z.discriminatedUnion("status", [
+  sqlSemanticVerificationNotRunSchema,
+  sqlSemanticVerificationVerifiedSchema,
+  sqlSemanticVerificationFailedSchema,
+]);
+export type SqlSemanticVerification = z.infer<typeof sqlSemanticVerificationSchema>;
+
+export const conversionReportSchema = z
+  .object({
+    reportVersion: z.literal(1),
+    dialect: primaryDialectSchema,
+    sourceFilepath: z.string().min(1),
+    sourceHash: sha256HexSchema,
+    parserInputHash: sha256HexSchema,
+    parserVersions: z
+      .object({ dbmlCore: z.literal("9.1.1"), dbmlParse: z.literal("9.1.1") })
+      .strict(),
+    capabilityMatrixVersion: z.literal(1),
+    schemaSemanticsVersion: z.literal(1),
+    overallStatus: conversionStatusSchema,
+    applyEligible: z.boolean(),
+    candidateDbmlHash: sha256HexSchema.nullable(),
+    statements: z.array(sqlStatementConversionSchema),
+    diagnostics: z.array(diagnosticSchema),
+    semanticVerification: sqlSemanticVerificationSchema,
+  })
+  .strict();
+export type ConversionReport = z.infer<typeof conversionReportSchema>;
+
+export const sqlDataStatementHandlingSchema = z.enum(["REJECT", "CONFIRM_DDL_ONLY"]);
+export type SqlDataStatementHandling = z.infer<typeof sqlDataStatementHandlingSchema>;
+
+export const originalSqlRetentionModeSchema = z.enum(["DISCARD", "RETAIN"]);
+export type OriginalSqlRetentionMode = z.infer<typeof originalSqlRetentionModeSchema>;
+
+export const sqlImportApplyReadinessSchema = z.enum([
+  "READY",
+  "CONVERSION_FAILED",
+  "NO_SCHEMA_ELEMENTS",
+  "DATA_EXCLUSION_CONFIRMATION_REQUIRED",
+]);
+export type SqlImportApplyReadiness = z.infer<typeof sqlImportApplyReadinessSchema>;
+
+export const sqlImportDataHandlingSchema = z.enum([
+  "NOT_PRESENT",
+  "CONFIRMATION_REQUIRED",
+  "CONFIRMED_DDL_ONLY",
+]);
+export type SqlImportDataHandling = z.infer<typeof sqlImportDataHandlingSchema>;
+
+const uniquePositiveStatementNumbersSchema = z
+  .array(z.number().int().positive().max(Number.MAX_SAFE_INTEGER))
+  .superRefine((statementNos, context) => {
+    const seen = new Set<number>();
+    for (const [index, statementNo] of statementNos.entries()) {
+      if (seen.has(statementNo)) {
+        context.addIssue({
+          code: "custom",
+          message: "Data statement numbers must be unique.",
+          path: [index],
+        });
+      }
+      seen.add(statementNo);
+    }
+  });
+
+export const sqlImportDataPolicyDecisionSchema = z
+  .object({
+    policyVersion: z.literal(1),
+    dataStatementNos: uniquePositiveStatementNumbersSchema,
+    dataHandling: sqlImportDataHandlingSchema,
+    applyReadiness: sqlImportApplyReadinessSchema,
+  })
+  .strict();
+export type SqlImportDataPolicyDecision = z.infer<typeof sqlImportDataPolicyDecisionSchema>;
+
+export const sqlImportPreviewRequestSchema = z
+  .object({
+    commandId: commandIdSchema,
+    expectedSchemaRevisionNo: schemaRevisionNoSchema,
+    dialect: primaryDialectSchema,
+    source: z.string(),
+    originalSqlRetention: originalSqlRetentionModeSchema.optional(),
+  })
+  .strict();
+export type SqlImportPreviewRequest = z.infer<typeof sqlImportPreviewRequestSchema>;
+
+const sqlImportPreviewResponseBase = {
+  artifactId: projectIdSchema,
+  createdAt: utcIsoTimestampSchema,
+  baseSchemaRevisionNo: schemaRevisionNoSchema,
+  previewHash: sha256HexSchema,
+  originalSqlRetention: originalSqlRetentionModeSchema,
+  report: conversionReportSchema,
+  policy: sqlImportDataPolicyDecisionSchema,
+};
+
+const sqlImportSuccessfulPreviewResponseSchema = z
+  .object({
+    ...sqlImportPreviewResponseBase,
+    artifactStatus: z.literal("PREVIEWED"),
+    candidate: z.object({ dbml: z.string(), dbmlHash: sha256HexSchema }).strict(),
+  })
+  .strict();
+
+const sqlImportFailedPreviewResponseSchema = z
+  .object({
+    ...sqlImportPreviewResponseBase,
+    artifactStatus: z.literal("FAILED"),
+    candidate: z.null(),
+  })
+  .strict();
+
+export const sqlImportPreviewResponseSchema = z.discriminatedUnion("artifactStatus", [
+  sqlImportSuccessfulPreviewResponseSchema,
+  sqlImportFailedPreviewResponseSchema,
+]);
+export type SqlImportPreviewResponse = z.infer<typeof sqlImportPreviewResponseSchema>;
+
+export const sqlImportApplyRequestSchema = z
+  .object({
+    commandId: commandIdSchema,
+    expectedSchemaRevisionNo: schemaRevisionNoSchema,
+    artifactId: projectIdSchema,
+    previewHash: sha256HexSchema,
+    source: z.string(),
+    dataStatementHandling: sqlDataStatementHandlingSchema.optional(),
+  })
+  .strict();
+export type SqlImportApplyRequest = z.infer<typeof sqlImportApplyRequestSchema>;
+
+export const sqlImportApplyResponseSchema = z
+  .object({
+    artifactId: projectIdSchema,
+    artifactStatus: z.literal("APPLIED"),
+    previewHash: sha256HexSchema,
+    appliedAt: utcIsoTimestampSchema,
+    policy: sqlImportDataPolicyDecisionSchema,
+    state: projectStateSchema,
+    diagnostics: z.array(diagnosticSchema),
+    revisionCreated: z.literal(true),
+  })
+  .strict();
+export type SqlImportApplyResponse = z.infer<typeof sqlImportApplyResponseSchema>;
+
+export const sqlImportPreviewEvidenceSchema = z
+  .object({
+    projectId: projectIdSchema,
+    baseSchemaRevisionNo: schemaRevisionNoSchema,
+    dialect: primaryDialectSchema,
+    sourceHash: sha256HexSchema,
+    candidateDbmlHash: sha256HexSchema.nullable(),
+    report: conversionReportSchema,
+  })
+  .strict();
+export type SqlImportPreviewEvidence = z.infer<typeof sqlImportPreviewEvidenceSchema>;
+
+export const sqlImportArtifactEnvelopeSchema = z
+  .object({
+    previewVersion: z.literal(1),
+    evidence: sqlImportPreviewEvidenceSchema,
+    previewHash: sha256HexSchema,
+    previewPolicy: sqlImportDataPolicyDecisionSchema,
+    appliedPolicy: sqlImportDataPolicyDecisionSchema.nullable(),
+    originalSqlRetention: originalSqlRetentionModeSchema,
+  })
+  .strict();
+export type SqlImportArtifactEnvelope = z.infer<typeof sqlImportArtifactEnvelopeSchema>;
+
 export const projectsResponseSchema = z
   .object({ projects: z.array(projectSummarySchema) })
   .strict();

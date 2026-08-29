@@ -7,7 +7,11 @@ import {
   layoutResponseSchema,
   projectMutationResponseSchema,
 } from "@er-diagram/contracts";
-import { createLayoutApplication, createProjectApplication } from "@er-diagram/core";
+import {
+  createLayoutApplication,
+  createProjectApplication,
+  type SqlImportApplication,
+} from "@er-diagram/core";
 import {
   createSqliteLayoutRepository,
   createSqliteProjectRepository,
@@ -41,6 +45,7 @@ function createFixture() {
     layoutApplication: createLayoutApplication({
       persistence: createSqliteLayoutRepository(storage),
     }),
+    sqlImportApplication: {} as SqlImportApplication,
     generateCorrelationId: () => "123e4567-e89b-42d3-a456-426614174001",
   });
   resources.push({ server, storage });

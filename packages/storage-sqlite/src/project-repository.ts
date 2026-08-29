@@ -15,11 +15,11 @@ import {
   type SqliteTransaction,
 } from "./sqlite-storage.js";
 
-type ProjectDatabase = SqliteDatabase | SqliteTransaction;
+export type ProjectDatabase = SqliteDatabase | SqliteTransaction;
 type StoredProject = typeof projects.$inferSelect;
 type StoredRevision = typeof schemaRevisions.$inferSelect;
 
-class SqliteProjectReader<TDatabase extends ProjectDatabase> {
+export class SqliteProjectReader<TDatabase extends ProjectDatabase> {
   protected readonly database: TDatabase;
 
   constructor(database: TDatabase) {
@@ -71,7 +71,7 @@ class SqliteProjectReader<TDatabase extends ProjectDatabase> {
   }
 }
 
-class SqliteProjectTransaction
+export class SqliteProjectTransaction
   extends SqliteProjectReader<SqliteTransaction>
   implements ProjectPersistenceTransaction
 {

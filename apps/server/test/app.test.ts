@@ -1,10 +1,11 @@
-import type { LayoutApplication, ProjectApplication } from "@er-diagram/core";
+import type { LayoutApplication, ProjectApplication, SqlImportApplication } from "@er-diagram/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { createServer } from "../src/index.js";
 
 const servers = [] as ReturnType<typeof createServer>[];
 const unusedProjectApplication = {} as ProjectApplication;
 const unusedLayoutApplication = {} as LayoutApplication;
+const unusedSqlImportApplication = {} as SqlImportApplication;
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.close()));
@@ -15,6 +16,7 @@ describe("Fastify adapter bootstrap", () => {
     const server = createServer({
       projectApplication: unusedProjectApplication,
       layoutApplication: unusedLayoutApplication,
+      sqlImportApplication: unusedSqlImportApplication,
     });
     servers.push(server);
 
