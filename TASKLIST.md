@@ -233,8 +233,9 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
 - [x] `M2-005` new-project/replace-only import preview UI
   - stateless preview와 atomic new-project import, saved-workspace replace 진입과 독립 loss/data 확인을 제공한다.
   - 검증: `pnpm --filter @er-diagram/web test test/sql-import.test.tsx`
-- [ ] `M2-006` same-dialect export, reparse와 semantic equality
-  - 검증: `pnpm --filter @er-diagram/core test sql-export`
+- [x] `M2-006` same-dialect export, reparse와 semantic equality
+  - record/inactive-free export clone, versioned loss report와 exportable graph B→C 검증을 적용한다.
+  - 검증: `pnpm --filter @er-diagram/core test test/sql-export.test.ts`
 - [ ] `M2-007` invalid/last-valid export UX와 report download
   - 검증: `pnpm test:e2e sql-export`
 - [ ] `M2-GATE` PostgreSQL/MySQL same-dialect semantic round-trip, silent loss 0
