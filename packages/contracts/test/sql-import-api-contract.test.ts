@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   conversionReportSchema,
+  createProjectRequestSchema,
   sqlImportApplyRequestSchema,
   sqlImportApplyResponseSchema,
   sqlImportArtifactEnvelopeSchema,
   sqlImportPreviewRequestSchema,
   sqlImportPreviewResponseSchema,
+  sqlImportStandalonePreviewRequestSchema,
+  sqlImportStandalonePreviewResponseSchema,
 } from "../src/index.js";
 
 const PROJECT_ID = "018f0f87-7b5a-7cc0-8000-000000000001";
@@ -102,6 +105,94 @@ function state() {
 }
 
 describe("SQL import preview and apply HTTP contracts", () => {
+  it("accepts strict stateless previews and atomic SQL project creation", () => {
+    const request = sqlImportStandalonePreviewRequestSchema.parse({
+      commandId: COMMAND_ID,
+      dialect: "POSTGRESQL",
+      source: "CREATE TABLE users (id bigint PRIMARY KEY);",
+      originalSqlRetention: "RETAIN",
+    });
+    const response = sqlImportStandalonePreviewResponseSchema.parse({
+      previewStatus: "PREVIEWED",
+      previewHash: HASH,
+      originalSqlRetention: "RETAIN",
+      report: report(),
+      policy: policy(),
+      candidate: { dbml: "Table users { id bigint [pk] }\n", dbmlHash: OTHER_HASH },
+    });
+    const create = createProjectRequestSchema.parse({
+      operation: "CREATE_FROM_SQL_IMPORT",
+      commandId: COMMAND_ID,
+      name: "Imported schema",
+      primaryDialect: "POSTGRESQL",
+      source: request.source,
+      previewHash: response.previewHash,
+      originalSqlRetention: "RETAIN",
+      dataStatementHandling: "CONFIRM_DDL_ONLY",
+    });
+
+    const clone = Reflect.get(globalThis, "structuredClone") as
+      | ((value: unknown) => unknown)
+      | undefined;
+    expect(clone).toBeTypeOf("function");
+    if (clone) {
+      expect(clone(JSON.parse(JSON.stringify({ request, response, create })))).toEqual({
+        request,
+        response,
+        create,
+      });
+    }
+    expect(
+      sqlImportStandalonePreviewRequestSchema.safeParse({ ...request, projectId: PROJECT_ID })
+        .success,
+    ).toBe(false);
+    expect(
+      createProjectRequestSchema.safeParse({ ...create, expectedSchemaRevisionNo: 1 }).success,
+    ).toBe(false);
+  });
+
+  it("keeps legacy replace and new create artifact envelopes compatible", () => {
+    const legacy = sqlImportArtifactEnvelopeSchema.parse({
+      previewVersion: 1,
+      evidence: {
+        projectId: PROJECT_ID,
+        baseSchemaRevisionNo: 1,
+        dialect: "POSTGRESQL",
+        sourceHash: HASH,
+        candidateDbmlHash: OTHER_HASH,
+        report: report(),
+      },
+      previewHash: HASH,
+      previewPolicy: policy(),
+      appliedPolicy: null,
+      originalSqlRetention: "DISCARD",
+    });
+    const created = sqlImportArtifactEnvelopeSchema.parse({
+      operation: "CREATE_PROJECT",
+      previewVersion: 1,
+      evidence: {
+        dialect: "POSTGRESQL",
+        sourceHash: HASH,
+        candidateDbmlHash: OTHER_HASH,
+        report: report(),
+      },
+      previewHash: HASH,
+      previewPolicy: policy(),
+      appliedPolicy: policy(),
+      originalSqlRetention: "RETAIN",
+    });
+
+    expect("operation" in legacy).toBe(false);
+    expect(created).toMatchObject({ operation: "CREATE_PROJECT", appliedPolicy: policy() });
+    const clone = Reflect.get(globalThis, "structuredClone") as
+      | ((value: unknown) => unknown)
+      | undefined;
+    expect(clone).toBeTypeOf("function");
+    if (clone) {
+      expect(clone(JSON.parse(JSON.stringify([legacy, created])))).toEqual([legacy, created]);
+    }
+  });
+
   it("accepts strict JSON-safe preview and apply envelopes", () => {
     const previewRequest = sqlImportPreviewRequestSchema.parse({
       commandId: COMMAND_ID,

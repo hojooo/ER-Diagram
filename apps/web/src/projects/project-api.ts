@@ -20,6 +20,17 @@ import {
   renameProjectRequestSchema,
   saveLayoutRequestSchema,
   saveDraftRequestSchema,
+  type SqlDataStatementHandling,
+  type SqlImportApplyResponse,
+  sqlImportApplyRequestSchema,
+  sqlImportApplyResponseSchema,
+  type SqlImportPreviewResponse,
+  sqlImportPreviewRequestSchema,
+  sqlImportPreviewResponseSchema,
+  type SqlImportStandalonePreviewResponse,
+  sqlImportStandalonePreviewRequestSchema,
+  sqlImportStandalonePreviewResponseSchema,
+  type OriginalSqlRetentionMode,
 } from "@er-diagram/contracts";
 
 export interface CreateProjectInput {
@@ -61,6 +72,35 @@ export interface SaveLayoutInput extends GetLayoutInput {
   readonly layout: DiagramLayoutValue;
 }
 
+export interface PreviewStandaloneSqlImportInput {
+  readonly dialect: PrimaryDialect;
+  readonly source: string;
+  readonly originalSqlRetention?: OriginalSqlRetentionMode;
+}
+
+export interface CreateProjectFromSqlImportInput {
+  readonly name: string;
+  readonly primaryDialect: PrimaryDialect;
+  readonly source: string;
+  readonly previewHash: string;
+  readonly originalSqlRetention?: OriginalSqlRetentionMode;
+  readonly dataStatementHandling?: SqlDataStatementHandling;
+}
+
+export interface PreviewProjectSqlImportInput extends PreviewStandaloneSqlImportInput {
+  readonly projectId: string;
+  readonly expectedSchemaRevisionNo: number;
+}
+
+export interface ApplyProjectSqlImportInput {
+  readonly projectId: string;
+  readonly expectedSchemaRevisionNo: number;
+  readonly artifactId: string;
+  readonly previewHash: string;
+  readonly source: string;
+  readonly dataStatementHandling?: SqlDataStatementHandling;
+}
+
 export interface ProjectApi {
   listProjects(): Promise<ProjectsResponse>;
   getProject(projectId: string): Promise<ProjectResponse>;
@@ -71,6 +111,14 @@ export interface ProjectApi {
   getLayout(input: GetLayoutInput): Promise<LayoutResponse>;
   saveLayout(input: SaveLayoutInput): Promise<LayoutMutationResponse>;
   deleteProject(input: DeleteProjectInput): Promise<void>;
+  previewStandaloneSqlImport(
+    input: PreviewStandaloneSqlImportInput,
+  ): Promise<SqlImportStandalonePreviewResponse>;
+  createProjectFromSqlImport(
+    input: CreateProjectFromSqlImportInput,
+  ): Promise<SqlImportApplyResponse>;
+  previewProjectSqlImport(input: PreviewProjectSqlImportInput): Promise<SqlImportPreviewResponse>;
+  applyProjectSqlImport(input: ApplyProjectSqlImportInput): Promise<SqlImportApplyResponse>;
 }
 
 export class ProjectApiError extends Error {
@@ -251,6 +299,93 @@ export function createHttpProjectApi(options: HttpProjectApiOptions = {}): Proje
         method: "DELETE",
         path: `/projects/${encodeURIComponent(projectId)}`,
         expectedStatus: 204,
+        body,
+        commandId,
+      });
+    },
+    previewStandaloneSqlImport: (input) => {
+      const commandId = generateCommandId();
+      const body = parseClientInput(sqlImportStandalonePreviewRequestSchema, {
+        commandId,
+        dialect: input.dialect,
+        source: input.source,
+        ...(input.originalSqlRetention === undefined
+          ? {}
+          : { originalSqlRetention: input.originalSqlRetention }),
+      });
+      return request(fetcher, basePath, {
+        method: "POST",
+        path: "/sql-import/preview",
+        expectedStatus: 200,
+        responseSchema: sqlImportStandalonePreviewResponseSchema,
+        body,
+        commandId,
+      });
+    },
+    createProjectFromSqlImport: (input) => {
+      const commandId = generateCommandId();
+      const body = parseClientInput(createProjectRequestSchema, {
+        operation: "CREATE_FROM_SQL_IMPORT",
+        commandId,
+        name: input.name,
+        primaryDialect: input.primaryDialect,
+        source: input.source,
+        previewHash: input.previewHash,
+        ...(input.originalSqlRetention === undefined
+          ? {}
+          : { originalSqlRetention: input.originalSqlRetention }),
+        ...(input.dataStatementHandling === undefined
+          ? {}
+          : { dataStatementHandling: input.dataStatementHandling }),
+      });
+      return request(fetcher, basePath, {
+        method: "POST",
+        path: "/projects",
+        expectedStatus: 201,
+        responseSchema: sqlImportApplyResponseSchema,
+        body,
+        commandId,
+      });
+    },
+    previewProjectSqlImport: (input) => {
+      const projectId = parseClientInput(projectIdSchema, input.projectId);
+      const commandId = generateCommandId();
+      const body = parseClientInput(sqlImportPreviewRequestSchema, {
+        commandId,
+        expectedSchemaRevisionNo: input.expectedSchemaRevisionNo,
+        dialect: input.dialect,
+        source: input.source,
+        ...(input.originalSqlRetention === undefined
+          ? {}
+          : { originalSqlRetention: input.originalSqlRetention }),
+      });
+      return request(fetcher, basePath, {
+        method: "POST",
+        path: `/projects/${encodeURIComponent(projectId)}/sql-import/preview`,
+        expectedStatus: 200,
+        responseSchema: sqlImportPreviewResponseSchema,
+        body,
+        commandId,
+      });
+    },
+    applyProjectSqlImport: (input) => {
+      const projectId = parseClientInput(projectIdSchema, input.projectId);
+      const commandId = generateCommandId();
+      const body = parseClientInput(sqlImportApplyRequestSchema, {
+        commandId,
+        expectedSchemaRevisionNo: input.expectedSchemaRevisionNo,
+        artifactId: input.artifactId,
+        previewHash: input.previewHash,
+        source: input.source,
+        ...(input.dataStatementHandling === undefined
+          ? {}
+          : { dataStatementHandling: input.dataStatementHandling }),
+      });
+      return request(fetcher, basePath, {
+        method: "POST",
+        path: `/projects/${encodeURIComponent(projectId)}/sql-import/apply`,
+        expectedStatus: 200,
+        responseSchema: sqlImportApplyResponseSchema,
         body,
         commandId,
       });

@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
 import {
+  isCreateProjectSqlImportEnvelope,
   parseSqlImportArtifactEnvelope,
   type SqlImportArtifact,
   type SqlImportPersistencePort,
   type SqlImportPersistenceTransaction,
   SqlImportPersistenceInvariantError,
+  sqlImportCreatePreviewHashPreimage,
   sqlImportPreviewHashPreimage,
 } from "@er-diagram/core";
 import { and, eq } from "drizzle-orm";
@@ -111,7 +113,6 @@ function mapImportArtifact(row: StoredImportArtifact): SqlImportArtifact {
   };
   const report = envelope.evidence.report;
   if (
-    envelope.evidence.projectId !== row.projectId ||
     envelope.evidence.dialect !== row.dialect ||
     envelope.evidence.sourceHash !== row.originalHash ||
     report.sourceHash !== row.originalHash ||
@@ -122,12 +123,24 @@ function mapImportArtifact(row: StoredImportArtifact): SqlImportArtifact {
   ) {
     return invalid("Stored SQL import artifact row does not match its preview evidence.");
   }
+  if (
+    !isCreateProjectSqlImportEnvelope(envelope) &&
+    envelope.evidence.projectId !== row.projectId
+  ) {
+    return invalid("Stored SQL import artifact row does not match its project evidence.");
+  }
   const previewHash = sha256(
-    sqlImportPreviewHashPreimage({
-      evidence: envelope.evidence,
-      previewPolicy: envelope.previewPolicy,
-      originalSqlRetention: envelope.originalSqlRetention,
-    }),
+    isCreateProjectSqlImportEnvelope(envelope)
+      ? sqlImportCreatePreviewHashPreimage({
+          evidence: envelope.evidence,
+          previewPolicy: envelope.previewPolicy,
+          originalSqlRetention: envelope.originalSqlRetention,
+        })
+      : sqlImportPreviewHashPreimage({
+          evidence: envelope.evidence,
+          previewPolicy: envelope.previewPolicy,
+          originalSqlRetention: envelope.originalSqlRetention,
+        }),
   );
   if (previewHash !== envelope.previewHash) {
     return invalid("Stored SQL import preview hash does not match its evidence.");
@@ -139,6 +152,10 @@ function mapImportArtifact(row: StoredImportArtifact): SqlImportArtifact {
     }
   } else if (row.originalSql !== null) {
     return invalid("Discarded SQL import unexpectedly retains original source.");
+  }
+
+  if (isCreateProjectSqlImportEnvelope(envelope) && row.status !== "APPLIED") {
+    return invalid("Created-project SQL import artifact must already be applied.");
   }
 
   if (row.status === "FAILED") {

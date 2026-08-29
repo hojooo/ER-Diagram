@@ -185,6 +185,22 @@ class FakeProjectApi implements ProjectApi {
     if (this.mutationError) throw this.mutationError;
     this.projects = this.projects.filter((item) => item.project.id !== input.projectId);
   }
+
+  async previewStandaloneSqlImport(): Promise<never> {
+    throw new Error("SQL import is not used by this fixture.");
+  }
+
+  async createProjectFromSqlImport(): Promise<never> {
+    throw new Error("SQL import is not used by this fixture.");
+  }
+
+  async previewProjectSqlImport(): Promise<never> {
+    throw new Error("SQL import is not used by this fixture.");
+  }
+
+  async applyProjectSqlImport(): Promise<never> {
+    throw new Error("SQL import is not used by this fixture.");
+  }
 }
 
 function renderApp(api: ProjectApi, initialEntry = "/") {

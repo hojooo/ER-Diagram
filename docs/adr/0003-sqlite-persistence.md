@@ -64,9 +64,11 @@ revision origin에서 파생한다. `SQL_IMPORT`, `RESTORE`, `PARSER_MIGRATION`�
 `SOURCE_EDIT`, `VISUAL_COMMAND`는 pruning 대상이다. 현재 last-valid pointer가 가리키는 revision은
 100개 한도 밖이어도 보호한다. 이 경우 non-checkpoint revision은 최대 101개가 남을 수 있다. Original
 SQL은 `DISCARD`를 기본값으로 사용해 `original_sql=null`로 저장하고, 사용자가 `RETAIN`을 명시한 경우에만
-conversion 성공 여부와 관계없이 byte-identical 원문을 저장한다. P0는 별도 TTL을 두지 않으며 retained
-source는 import artifact 또는 project 삭제 시 함께 제거한다. Core policy는 persistence 전용 입력만
-선택하고 실제 artifact write와 transaction은 import application 경계가 담당한다.
+byte-identical 원문을 저장한다. Project-bound preview는 conversion 성공 여부와 관계없이 선택한 retention을
+artifact에 적용하지만, stateless new-project preview는 durable row를 만들지 않으므로 successful Apply
+시점부터만 retention이 유효하다. P0는 별도 TTL을 두지 않으며 retained source는 import artifact 또는
+project 삭제 시 함께 제거한다. Core policy는 persistence 전용 입력만 선택하고 실제 artifact write와
+transaction은 import application 경계가 담당한다.
 
 SQL import preview는 conversion 성공과 실패를 각각 `PREVIEWED`, `FAILED` artifact로 저장한다. 이
 transaction은 expected schema revision과 primary dialect를 다시 확인하지만 project source, revision,
@@ -81,6 +83,14 @@ last-valid pointer update, artifact의 `APPLIED`·`applied_at`·applied policy u
 실패하면 전체 transaction을 rollback한다. Candidate가 current source와 같아도 checkpoint를 만들며 기존
 current revision 자체가 rollback 기준이므로 별도 pre-import duplicate revision은 만들지 않는다. Apply는
 layout row와 `layout_revision_no`를 변경하지 않는다.
+
+새 project SQL import는 preview persistence와 create persistence를 분리한다. Stateless preview 성공·실패와
+사용자 취소는 SQLite를 변경하지 않는다. Apply는 authoritative reparse와 evidence 검증을 transaction 밖에서
+완료한 뒤 `BEGIN IMMEDIATE` 안에서 project, `VALID + SQL_IMPORT` revision 1, last-valid pointer와
+`CREATE_PROJECT` envelope의 direct `APPLIED` artifact를 함께 insert한다. Project, revision 또는 artifact
+insert와 invariant 검증 중 하나라도 실패하면 전체 transaction을 rollback하며 layout row는 생성하지 않는다.
+기존 replace envelope과 create-project envelope은 versioned union으로 함께 읽되 status·hash·retention
+조합을 variant별로 fail-closed 검증한다.
 
 하나의 server process만 SQLite에 write한다. Multi-process horizontal write와 shared network filesystem database는 P0 범위가 아니다.
 

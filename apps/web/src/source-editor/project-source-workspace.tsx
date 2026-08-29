@@ -604,6 +604,9 @@ export function ProjectSourceWorkspace({
   const hasUnsavedLayout = layoutSnapshot?.hasUnsavedChanges ?? false;
   const hasUnsavedWorkspace = hasUnsavedSource || hasUnsavedLayout;
   const navigationBlocker = useBlocker(hasUnsavedWorkspace);
+  const requiresSavedWorkspace =
+    navigationBlocker.state === "blocked" &&
+    navigationBlocker.location.pathname === `/projects/${projectId}/sql-import`;
 
   useEffect(() => {
     if (navigationBlocker.state !== "blocked") {
@@ -823,6 +826,7 @@ export function ProjectSourceWorkspace({
         blocker={navigationBlocker}
         snapshot={sessionSnapshot}
         hasUnsavedLayout={hasUnsavedLayout}
+        requiresSavedWorkspace={requiresSavedWorkspace}
       />
     </>
   );
@@ -1475,10 +1479,12 @@ function UnsavedNavigationDialog({
   blocker,
   snapshot,
   hasUnsavedLayout,
+  requiresSavedWorkspace,
 }: {
   readonly blocker: ReturnType<typeof useBlocker>;
   readonly snapshot: SourceSessionSnapshot;
   readonly hasUnsavedLayout: boolean;
+  readonly requiresSavedWorkspace: boolean;
 }) {
   const stayRef = useRef<HTMLButtonElement>(null);
   const open = blocker.state === "blocked";
@@ -1500,22 +1506,27 @@ function UnsavedNavigationDialog({
         >
           <Dialog.Title className="text-xl font-semibold">Leave schema workspace?</Dialog.Title>
           <Dialog.Description className="mt-3 text-sm leading-6 text-slate-300">
-            {snapshot.persistence === "SAVING" ||
-            snapshot.persistence === "DIRTY" ||
-            hasUnsavedLayout
-              ? "Source and layout changes are being flushed. Navigation will continue automatically after every write succeeds."
-              : "Local source or layout changes have not been saved. Leaving now discards changes that were not sent; a write already sent to the server may still commit."}
+            {requiresSavedWorkspace &&
+            (snapshot.persistence === "ERROR" || snapshot.persistence === "CONFLICT")
+              ? "SQL import requires a fully saved source and layout. Resolve the current save error or conflict, then try Import SQL again."
+              : snapshot.persistence === "SAVING" ||
+                  snapshot.persistence === "DIRTY" ||
+                  hasUnsavedLayout
+                ? "Source and layout changes are being flushed. Navigation will continue automatically after every write succeeds."
+                : "Local source or layout changes have not been saved. Leaving now discards changes that were not sent; a write already sent to the server may still commit."}
           </Dialog.Description>
           <div className="mt-6 flex flex-row-reverse flex-wrap gap-3">
-            <button
-              className="min-h-11 rounded-lg bg-red-300 px-4 font-semibold text-red-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-300"
-              type="button"
-              onClick={() => {
-                if (blocker.state === "blocked") blocker.proceed();
-              }}
-            >
-              Leave workspace
-            </button>
+            {!requiresSavedWorkspace ? (
+              <button
+                className="min-h-11 rounded-lg bg-red-300 px-4 font-semibold text-red-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-300"
+                type="button"
+                onClick={() => {
+                  if (blocker.state === "blocked") blocker.proceed();
+                }}
+              >
+                Leave workspace
+              </button>
+            ) : null}
             <button
               ref={stayRef}
               className={secondaryButtonClass}

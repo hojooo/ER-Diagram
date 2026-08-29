@@ -106,11 +106,16 @@ export function sendSqlImportApplicationError(
       });
     case "SQL_IMPORT_PREVIEW_MISMATCH":
     case "SQL_IMPORT_ARTIFACT_ALREADY_APPLIED":
+    case "SQL_IMPORT_CREATE_PREVIEW_MISMATCH":
       return sendError(request, reply, 409, error.code, error.message);
     case "SQL_IMPORT_DIALECT_MISMATCH":
     case "SQL_IMPORT_CONVERSION_FAILED":
     case "SQL_IMPORT_NO_SCHEMA_ELEMENTS":
     case "SQL_IMPORT_DATA_CONFIRMATION_REQUIRED":
+    case "SQL_IMPORT_PROJECT_NAME_INVALID":
+    case "SQL_IMPORT_CREATE_CONVERSION_FAILED":
+    case "SQL_IMPORT_CREATE_NO_SCHEMA_ELEMENTS":
+    case "SQL_IMPORT_CREATE_DATA_CONFIRMATION_REQUIRED":
       return sendError(request, reply, 422, error.code, error.message);
     case "SQL_IMPORT_STORAGE_INVARIANT_VIOLATION":
       return sendError(

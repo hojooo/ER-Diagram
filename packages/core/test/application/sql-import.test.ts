@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   sqlImportApplyResponseSchema,
   sqlImportPreviewResponseSchema,
+  sqlImportStandalonePreviewResponseSchema,
 } from "@er-diagram/contracts";
 
 import {
@@ -27,6 +28,7 @@ class FakeSqlImportPersistence
   readonly revisions = new Map<string, SchemaRevision>();
   readonly artifacts = new Map<string, SqlImportArtifact>();
   failAfterArtifactApplied = false;
+  failAfterProjectInserted = false;
 
   listProjects(): readonly Project[] {
     return [...this.projects.values()].map(clone);
@@ -77,6 +79,7 @@ class FakeSqlImportPersistence
 
   insertProject(project: Project): void {
     this.projects.set(project.id, clone(project));
+    if (this.failAfterProjectInserted) throw new Error("forced project failure");
   }
 
   insertRevision(revision: SchemaRevision): void {
@@ -267,6 +270,168 @@ describe("SQL import preview application", () => {
     expect(firstPreview.previewHash).toBe(secondPreview.previewHash);
     expect(retained.previewHash).not.toBe(secondPreview.previewHash);
     expect(structuredClone(JSON.parse(JSON.stringify(firstPreview)))).toEqual(firstPreview);
+  });
+});
+
+describe("stateless SQL project import application", () => {
+  it("previews successful and failed SQL without persisting anything", async () => {
+    const fixture = createFixture();
+
+    const preview = success(
+      await fixture.imports.previewStandalone({
+        dialect: "POSTGRESQL",
+        source: POSTGRESQL_DDL,
+        originalSqlRetention: "RETAIN",
+      }),
+    );
+    const failed = success(
+      await fixture.imports.previewStandalone({
+        dialect: "POSTGRESQL",
+        source: "CREATE TABLE broken (id bigint",
+      }),
+    );
+
+    expect(sqlImportStandalonePreviewResponseSchema.parse(preview)).toEqual(preview);
+    expect(preview).toMatchObject({
+      previewStatus: "PREVIEWED",
+      originalSqlRetention: "RETAIN",
+      policy: { applyReadiness: "READY" },
+    });
+    expect(failed).toMatchObject({
+      previewStatus: "FAILED",
+      candidate: null,
+      policy: { applyReadiness: "CONVERSION_FAILED" },
+    });
+    expect(fixture.persistence.projects.size).toBe(0);
+    expect(fixture.persistence.revisions.size).toBe(0);
+    expect(fixture.persistence.artifacts.size).toBe(0);
+  });
+
+  it("reparses preview evidence and atomically creates revision 1 with an applied artifact", async () => {
+    const fixture = createFixture();
+    const preview = success(
+      await fixture.imports.previewStandalone({
+        dialect: "POSTGRESQL",
+        source: POSTGRESQL_DDL,
+        originalSqlRetention: "RETAIN",
+      }),
+    );
+
+    const applied = success(
+      await fixture.imports.createProjectFromPreview({
+        name: "  Imported schema  ",
+        primaryDialect: "POSTGRESQL",
+        source: POSTGRESQL_DDL,
+        previewHash: preview.previewHash,
+        originalSqlRetention: "RETAIN",
+      }),
+    );
+
+    expect(sqlImportApplyResponseSchema.parse(applied)).toEqual(applied);
+    expect(applied).toMatchObject({
+      artifactStatus: "APPLIED",
+      previewHash: preview.previewHash,
+      revisionCreated: true,
+      state: {
+        project: {
+          name: "Imported schema",
+          schemaRevisionNo: 1,
+          layoutRevisionNo: 0,
+        },
+        currentRevision: { revisionNo: 1, validity: "VALID", origin: "SQL_IMPORT" },
+      },
+    });
+    expect(applied.state.project.lastValidRevisionId).toBe(applied.state.currentRevision.id);
+    expect(fixture.persistence.projects.size).toBe(1);
+    expect(fixture.persistence.revisions.size).toBe(1);
+    expect(fixture.persistence.artifacts.size).toBe(1);
+    expect(
+      fixture.persistence.getImportArtifact(applied.state.project.id, applied.artifactId),
+    ).toMatchObject({
+      status: "APPLIED",
+      originalSql: POSTGRESQL_DDL,
+      envelope: { operation: "CREATE_PROJECT", appliedPolicy: applied.policy },
+    });
+  });
+
+  it("requires matching preview evidence, a valid name, schema elements, and DML confirmation", async () => {
+    const fixture = createFixture();
+    const mixedSource = `${POSTGRESQL_DDL} INSERT INTO users VALUES (1);`;
+    const mixedPreview = success(
+      await fixture.imports.previewStandalone({ dialect: "POSTGRESQL", source: mixedSource }),
+    );
+
+    expect(
+      failure(
+        await fixture.imports.createProjectFromPreview({
+          name: " ",
+          primaryDialect: "POSTGRESQL",
+          source: mixedSource,
+          previewHash: mixedPreview.previewHash,
+        }),
+      ).error.code,
+    ).toBe("SQL_IMPORT_PROJECT_NAME_INVALID");
+    expect(
+      failure(
+        await fixture.imports.createProjectFromPreview({
+          name: "Import",
+          primaryDialect: "POSTGRESQL",
+          source: mixedSource,
+          previewHash: "f".repeat(64),
+        }),
+      ).error.code,
+    ).toBe("SQL_IMPORT_CREATE_PREVIEW_MISMATCH");
+    expect(
+      failure(
+        await fixture.imports.createProjectFromPreview({
+          name: "Import",
+          primaryDialect: "POSTGRESQL",
+          source: mixedSource,
+          previewHash: mixedPreview.previewHash,
+        }),
+      ).error.code,
+    ).toBe("SQL_IMPORT_CREATE_DATA_CONFIRMATION_REQUIRED");
+
+    const dataOnlySource = "INSERT INTO users VALUES (1);";
+    const dataOnlyPreview = success(
+      await fixture.imports.previewStandalone({
+        dialect: "POSTGRESQL",
+        source: dataOnlySource,
+      }),
+    );
+    expect(
+      failure(
+        await fixture.imports.createProjectFromPreview({
+          name: "Import",
+          primaryDialect: "POSTGRESQL",
+          source: dataOnlySource,
+          previewHash: dataOnlyPreview.previewHash,
+          dataStatementHandling: "CONFIRM_DDL_ONLY",
+        }),
+      ).error.code,
+    ).toBe("SQL_IMPORT_CREATE_NO_SCHEMA_ELEMENTS");
+    expect(fixture.persistence.projects.size).toBe(0);
+    expect(fixture.persistence.artifacts.size).toBe(0);
+  });
+
+  it("rolls back project, revision, and artifact insertion as one transaction", async () => {
+    const fixture = createFixture();
+    const preview = success(
+      await fixture.imports.previewStandalone({ dialect: "POSTGRESQL", source: POSTGRESQL_DDL }),
+    );
+    fixture.persistence.failAfterProjectInserted = true;
+
+    await expect(
+      fixture.imports.createProjectFromPreview({
+        name: "Import",
+        primaryDialect: "POSTGRESQL",
+        source: POSTGRESQL_DDL,
+        previewHash: preview.previewHash,
+      }),
+    ).rejects.toThrow("forced project failure");
+    expect(fixture.persistence.projects.size).toBe(0);
+    expect(fixture.persistence.revisions.size).toBe(0);
+    expect(fixture.persistence.artifacts.size).toBe(0);
   });
 });
 

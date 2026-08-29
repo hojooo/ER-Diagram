@@ -30,7 +30,7 @@ export function createServer(options: CreateServerOptions): FastifyInstance {
   registerHttpErrorHandlers(server);
 
   server.get("/health/live", async () => ({ status: "ok" }));
-  registerProjectRoutes(server, options.projectApplication);
+  registerProjectRoutes(server, options.projectApplication, options.sqlImportApplication);
   registerLayoutRoutes(server, options.layoutApplication);
   registerSqlImportRoutes(server, options.sqlImportApplication);
 
