@@ -454,12 +454,68 @@ const visualCommandBaseShape = {
   expectedSchemaRevisionNo: schemaRevisionNoSchema,
 };
 
+const visualColumnDefaultNumberSchema = z
+  .object({ type: z.literal("number"), value: z.number().finite() })
+  .strict();
+const visualColumnDefaultStringSchema = z
+  .object({ type: z.literal("string"), value: z.string() })
+  .strict();
+const visualColumnDefaultBooleanSchema = z
+  .object({ type: z.literal("boolean"), value: z.boolean() })
+  .strict();
+const visualColumnDefaultExpressionSchema = z
+  .object({ type: z.literal("expression"), value: visualExpressionSchema })
+  .strict();
+const visualColumnDefaultNullSchema = z
+  .object({ type: z.literal("null"), value: z.null() })
+  .strict();
+
+export const visualColumnDefaultSchema = z.discriminatedUnion("type", [
+  visualColumnDefaultNumberSchema,
+  visualColumnDefaultStringSchema,
+  visualColumnDefaultBooleanSchema,
+  visualColumnDefaultExpressionSchema,
+  visualColumnDefaultNullSchema,
+]);
+export type VisualColumnDefault = z.infer<typeof visualColumnDefaultSchema>;
+
+const visualColumnValueSchema = z
+  .object({
+    name: visualIdentifierSchema,
+    type: visualDbmlTypeSchema,
+    primaryKey: z.boolean(),
+    unique: z.boolean(),
+    notNull: z.boolean(),
+    default: visualColumnDefaultSchema.nullable(),
+    increment: z.boolean(),
+    note: visualNoteSchema.nullable(),
+  })
+  .strict();
+
+const visualInitialColumnsSchema = z
+  .array(visualColumnValueSchema)
+  .min(1)
+  .superRefine((columns, context) => {
+    const names = new Set<string>();
+    for (const [index, column] of columns.entries()) {
+      if (names.has(column.name)) {
+        context.addIssue({
+          code: "custom",
+          message: "Initial column names must be unique.",
+          path: [index, "name"],
+        });
+      }
+      names.add(column.name);
+    }
+  });
+
 const visualTableValueSchema = z
   .object({
     schemaName: visualIdentifierSchema,
     name: visualIdentifierSchema,
     note: visualNoteSchema.nullable(),
     color: visualColorSchema.nullable(),
+    columns: visualInitialColumnsSchema,
   })
   .strict();
 
@@ -508,44 +564,6 @@ export const deleteTableCommandSchema = z
   })
   .strict();
 export type DeleteTableCommand = z.infer<typeof deleteTableCommandSchema>;
-
-const visualColumnDefaultNumberSchema = z
-  .object({ type: z.literal("number"), value: z.number().finite() })
-  .strict();
-const visualColumnDefaultStringSchema = z
-  .object({ type: z.literal("string"), value: z.string() })
-  .strict();
-const visualColumnDefaultBooleanSchema = z
-  .object({ type: z.literal("boolean"), value: z.boolean() })
-  .strict();
-const visualColumnDefaultExpressionSchema = z
-  .object({ type: z.literal("expression"), value: visualExpressionSchema })
-  .strict();
-const visualColumnDefaultNullSchema = z
-  .object({ type: z.literal("null"), value: z.null() })
-  .strict();
-
-export const visualColumnDefaultSchema = z.discriminatedUnion("type", [
-  visualColumnDefaultNumberSchema,
-  visualColumnDefaultStringSchema,
-  visualColumnDefaultBooleanSchema,
-  visualColumnDefaultExpressionSchema,
-  visualColumnDefaultNullSchema,
-]);
-export type VisualColumnDefault = z.infer<typeof visualColumnDefaultSchema>;
-
-const visualColumnValueSchema = z
-  .object({
-    name: visualIdentifierSchema,
-    type: visualDbmlTypeSchema,
-    primaryKey: z.boolean(),
-    unique: z.boolean(),
-    notNull: z.boolean(),
-    default: visualColumnDefaultSchema.nullable(),
-    increment: z.boolean(),
-    note: visualNoteSchema.nullable(),
-  })
-  .strict();
 
 const visualColumnChangesSchema = z
   .object({
