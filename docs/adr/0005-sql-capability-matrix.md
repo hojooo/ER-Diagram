@@ -142,6 +142,34 @@ Raw importer는 오류를 반환하지 않았으므로 관찰 사실과 다르�
   SQL이나 row literal을 넣지 않으며 browser semantic diff 실패는 server-side semantic verification을
   무효화하지 않는다.
 
+### M2-006 record-free same-dialect export 경계
+
+- Runtime export는 DBML v2 compiler의 database model과 `SchemaGraph`를 한 번의 compile에서 함께 얻는다.
+  Legacy `Parser.parse(source, "dbmlv2")` 경로를 사용하지 않으며 public parser result에는 DBML parser
+  object를 노출하지 않는다.
+- SQL exporter의 `includeRecords` option이 실제 SQL output을 제어하지 않으므로 normalized model을
+  `structuredClone()`한 뒤 clone의 `records`, table `recordIds`, inactive ref·endpoint·field 연결만 제거한다.
+  Canonical source, compiler database와 normalized graph는 수정하지 않는다.
+- Inactive relationship는 SQL constraint가 아닌 visualization enrichment이므로 `PARTIAL` omission으로
+  보고한다. `Records` token은 compiler filepath resolver로 UTF-16 range를 검증하되 row value를 report나
+  diagnostic에 넣지 않는다.
+- Exportable B/C semantics는 full `SchemaGraph` semantics와 분리한다. Project, group, view, layout, visual
+  metadata와 partial provenance는 제외하고 physical table·ordered column, dialect-normalized type,
+  nullability, PK/unique/default/check/index와 active FK endpoint·action을 보존한다.
+- Many-to-many는 generated junction table이 두 endpoint FK와 action, 대응 type과 전체 FK column
+  composite PK를 정확히 가질 때만 원래 relationship로 collapse한다. Junction 이름 충돌, action 손실이나
+  불완전 구조는 candidate를 차단한다. One-to-one과 필수/선택 cardinality는 SQL FK만으로 완전 복원되지
+  않으므로 `PARTIAL`이다.
+- Generated SQL은 empty-schema warning header를 붙인 뒤 source analyzer에서 DML/COPY 0건을 확인하고,
+  same-dialect parser와 shared SQL-model→DBML→graph adapter를 거친다. Source/generated exportable hash가
+  같고 element diff가 비어 있어야 성공한다.
+- PostgreSQL schema-qualified enum array와 MySQL table comment의 pinned gap은 source-ranged `PARTIAL`
+  evidence로만 허용한다. 그 밖의 semantic mismatch는 `ERROR`다. Custom type은 reparse 성공 시
+  `UNSUPPORTED` candidate를 유지하고 reparse 실패 시 원본 column range를 가진 fatal result로 차단한다.
+- Report는 versioned static rule code·message와 occurrence만 보존한다. DBML source, Records value,
+  generated SQL body와 native parser message는 포함하지 않는다. `PARTIAL`·`UNSUPPORTED` 확인과 file
+  download는 M2-007 adapter/UI가 담당한다.
+
 ## Verification
 
 - `pnpm --filter @er-diagram/test-fixtures test test/sql-capability-fixtures.test.ts`
@@ -156,3 +184,5 @@ Raw importer는 오류를 반환하지 않았으므로 관찰 사실과 다르�
 - `pnpm --filter @er-diagram/core test test/application/sql-import.test.ts`
 - `pnpm --filter @er-diagram/storage-sqlite test test/sql-import-repository.test.ts`
 - `pnpm --filter @er-diagram/server test:integration sql-import`
+- `pnpm --filter @er-diagram/test-fixtures test test/sql-export-fixtures.test.ts`
+- `pnpm --filter @er-diagram/core test test/sql-export.test.ts`

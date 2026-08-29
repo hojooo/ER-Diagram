@@ -1,4 +1,4 @@
-import { Parser } from "@dbml/core";
+import { Parser, type Database } from "@dbml/core";
 import { Filepath } from "@dbml/parse";
 import { diagnosticSchema, type Diagnostic } from "@er-diagram/contracts";
 import { normalizeDbmlDiagnostics } from "./dbml-diagnostics.js";
@@ -51,13 +51,41 @@ interface RegisteredSourceFile {
 }
 
 type CompilationResult =
-  | { ok: true; graph: SchemaGraph }
+  | {
+      ok: true;
+      graph: SchemaGraph;
+      database: Database;
+      sourceContext: Required<DbmlSourceContext>;
+    }
   | { ok: false; diagnostics: Diagnostic[] };
+
+export type DbmlAdapterParseResult =
+  | (DbmlParseSuccess & {
+      database: Database;
+      sourceContext: Required<DbmlSourceContext>;
+    })
+  | DbmlParseFailure;
 
 export async function parseDbmlV2(
   source: string,
   filepath = DEFAULT_FILEPATH,
 ): Promise<DbmlParseResult> {
+  const result = await parseDbmlV2ForAdapter(source, filepath);
+  return result.ok
+    ? {
+        ok: true,
+        sourceHash: result.sourceHash,
+        parserInputHash: result.parserInputHash,
+        graph: result.graph,
+      }
+    : result;
+}
+
+/** Package-internal adapter entrypoint. Parser models must never leave `packages/core`. */
+export async function parseDbmlV2ForAdapter(
+  source: string,
+  filepath = DEFAULT_FILEPATH,
+): Promise<DbmlAdapterParseResult> {
   const sourceHash = await sha256Utf8(source);
   const parserInputHash = sourceHash;
   if (filepath.length === 0) {
@@ -81,7 +109,14 @@ export async function parseDbmlV2(
   const compiled = await compileDbml(parser, file, [file]);
 
   return compiled.ok
-    ? { ok: true, sourceHash, parserInputHash, graph: compiled.graph }
+    ? {
+        ok: true,
+        sourceHash,
+        parserInputHash,
+        graph: compiled.graph,
+        database: compiled.database,
+        sourceContext: compiled.sourceContext,
+      }
     : { ok: false, sourceHash, parserInputHash, diagnostics: compiled.diagnostics };
 }
 
@@ -199,7 +234,12 @@ async function compileDbml(
       sourceByPublicFilepath: context.sourceByPublicFilepath,
       sourceText: buildCompilerSourceTextIndex(parser.DBMLCompiler, files),
     });
-    return { ok: true, graph: { ...graph, diagnostics } };
+    return {
+      ok: true,
+      graph: { ...graph, diagnostics },
+      database,
+      sourceContext: context,
+    };
   } catch (error) {
     return {
       ok: false,
