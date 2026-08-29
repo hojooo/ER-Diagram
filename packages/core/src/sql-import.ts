@@ -1,6 +1,5 @@
-import { ModelExporter, Parser, type Database } from "@dbml/core";
+import { Parser, type Database } from "@dbml/core";
 import type { Diagnostic, PrimaryDialect, SourceRange } from "@er-diagram/contracts";
-import { parseDbmlV2 } from "./dbml-parser.js";
 import { sha256Utf8 } from "./hash.js";
 import { DBML_PARSER_VERSION, type SchemaGraph } from "./schema-graph.js";
 import { SCHEMA_SEMANTICS_VERSION, type SchemaElementChange } from "./schema-semantics.js";
@@ -9,7 +8,7 @@ import {
   SQL_CAPABILITY_MATRIX_VERSION,
   type SqlCapabilityId,
 } from "./sql-capabilities.js";
-import { verifySqlModelToGraph } from "./sql-import-semantics.js";
+import { convertSqlModelToGraph } from "./sql-model-graph.js";
 import { analyzeSqlSource, rangeAtSqlParserPosition, sourceRange } from "./sql-source-analyzer.js";
 
 export const SQL_CONVERSION_REPORT_VERSION = 1 as const;
@@ -172,12 +171,8 @@ export async function convertSqlImport(
     );
   }
 
-  let candidateDbml: string;
-  try {
-    candidateDbml = ModelExporter.export(database.normalize(), "dbml", {
-      includeRecords: false,
-    });
-  } catch {
+  const candidate = await convertSqlModelToGraph(database, CANDIDATE_DBML_FILEPATH);
+  if (!candidate.ok && candidate.failure === "DBML_EXPORT") {
     return failedResult(
       baseReport(input.dialect, filepath, sourceHash, parserInputHash, analysis.statements),
       [
@@ -188,14 +183,11 @@ export async function convertSqlImport(
       ],
     );
   }
-
-  const candidateDbmlHash = await sha256Utf8(candidateDbml);
-  const candidateParse = await parseDbmlV2(candidateDbml, CANDIDATE_DBML_FILEPATH);
-  if (!candidateParse.ok) {
+  if (!candidate.ok) {
     return failedResult(
       {
         ...baseReport(input.dialect, filepath, sourceHash, parserInputHash, analysis.statements),
-        candidateDbmlHash,
+        candidateDbmlHash: candidate.dbmlHash,
       },
       [
         staticDiagnostic(
@@ -206,12 +198,12 @@ export async function convertSqlImport(
     );
   }
 
-  const semanticVerification = await verifySqlModelToGraph(database, candidateParse.graph);
+  const semanticVerification = candidate.semanticVerification;
   if (semanticVerification.status !== "VERIFIED") {
     return failedResult(
       {
         ...baseReport(input.dialect, filepath, sourceHash, parserInputHash, analysis.statements),
-        candidateDbmlHash,
+        candidateDbmlHash: candidate.dbmlHash,
         semanticVerification,
       },
       [
@@ -228,22 +220,21 @@ export async function convertSqlImport(
   const containsData = statements.some(
     (statement) => statement.kind === "DML" || statement.kind === "COPY",
   );
-  const hasSchemaElements =
-    candidateParse.graph.tables.length + candidateParse.graph.enums.length > 0;
+  const hasSchemaElements = candidate.graph.tables.length + candidate.graph.enums.length > 0;
   const report: ConversionReport = {
     ...baseReport(input.dialect, filepath, sourceHash, parserInputHash, statements),
     overallStatus,
     applyEligible: !containsData && hasSchemaElements,
-    candidateDbmlHash,
+    candidateDbmlHash: candidate.dbmlHash,
     semanticVerification,
   };
   return {
     ok: true,
     report,
     candidate: {
-      dbml: candidateDbml,
-      dbmlHash: candidateDbmlHash,
-      graph: candidateParse.graph,
+      dbml: candidate.dbml,
+      dbmlHash: candidate.dbmlHash,
+      graph: candidate.graph,
     },
   };
 }
