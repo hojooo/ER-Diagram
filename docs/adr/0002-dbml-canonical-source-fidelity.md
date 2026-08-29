@@ -104,6 +104,25 @@ source를 변경할 수 있다.
 
 Visual mutation은 source position을 기준으로 가장 작은 `TextEdit[]`를 만든다. Edit는 offset 내림차순으로 적용하고 수정된 전체 source를 DBML v2로 다시 parse한다. Reparse 결과의 semantic diff가 command가 기대한 변경과 정확히 일치할 때만 source를 commit한다. 실패하면 원본을 유지하고 diagnostic을 반환한다.
 
+Table·column command의 source patch는 token-aware fragment scanner를 사용한다. Scanner가 quoted
+identifier, string, triple-quoted note, backtick expression, comment와 bracket nesting을 확정하지 못하면
+수정하지 않는다. 기존 setting은 value span만 바꾸어 key spelling, comma spacing과 quote style을 보존하고,
+없는 setting이나 새 declaration만 canonical form으로 추가한다. 이 경계에서는 parser warning count도
+늘어나지 않아야 한다.
+
+Table rename은 pinned `@dbml/core.renameTable()`을 사용하되 결과 전체를 정본으로 채택하지 않는다.
+원본과 official output 사이에서 line structure를 보존하는 최소 UTF-16 edit를 만들고, 변경이 target table,
+parser-resolved Ref endpoint, `TableGroup` membership과 `DiagramView` table filter range 안에만 있는지
+검증한다. Column rename은 declaration, ordered Ref endpoint와 column index term만 구조적으로 갱신한다.
+Check, expression index와 expression default 같은 opaque expression에 target identifier가 있으면 자동
+rewrite하지 않고 source-only 진단으로 차단한다.
+
+Pinned DBML v2 grammar가 empty table을 거부하므로 `CREATE_TABLE` command는 unique한 초기 column 한 개
+이상을 함께 생성한다. `TablePartial` 주입 column은 definition range와 injection range가 다른 provenance를
+가지므로 local edit target과 reorder anchor로 사용하지 않는다. Delete는 외부 Ref·index·group·명시적 view
+filter 또는 opaque expression dependency를 자동 cascade하지 않으며, semantic no-op은 빈 edit와 빈 diff로
+성공한다.
+
 M0에서는 `CreateColumn` 한 종류로 이 경계를 증명한다. 대상 block 밖의 comment, partial, view와 formatting은 byte-identical이어야 하며 full-model DBML regeneration은 canonical source 갱신 경로로 사용하지 않는다.
 
 ## Alternatives considered
