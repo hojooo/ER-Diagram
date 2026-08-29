@@ -21,7 +21,7 @@
     "licenses:check": "node --test scripts/check-licenses.test.mjs && node scripts/check-licenses.mjs",
     "lint": "biome lint .",
     "test": "vitest run",
-    "test:e2e": "pnpm --filter @er-diagram/test-fixtures build && playwright test",
+    "test:e2e": "pnpm --filter @er-diagram/contracts build && pnpm --filter @er-diagram/core build && pnpm --filter @er-diagram/test-fixtures build && playwright test",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:m1-gate": "pnpm --filter @er-diagram/test-fixtures test test/synthetic-fixtures.test.ts && pnpm --filter @er-diagram/server test:integration milestone-1-gate && pnpm test:e2e milestone-1-gate",
     "test:m2-gate": "pnpm --filter @er-diagram/test-fixtures test test/sql-interchange-gate-fixtures.test.ts && pnpm --filter @er-diagram/core test test/sql-interchange-gate.test.ts && pnpm --filter @er-diagram/server test:integration milestone-2-gate && pnpm test:e2e milestone-2-gate",
