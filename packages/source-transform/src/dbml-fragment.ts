@@ -30,7 +30,12 @@ export interface ParsedTableHeader {
   settings: ParsedSettingsBlock | null;
 }
 
-export type SettingMutation = string | null | undefined;
+export interface ExistingSettingMutation {
+  create: string;
+  update: (entry: ParsedSetting) => string | null;
+}
+
+export type SettingMutation = string | ExistingSettingMutation | null | undefined;
 
 const MAX_DIFF_CELLS = 4_000_000;
 
@@ -75,15 +80,16 @@ export function rewriteSettings(
 ): string | null {
   const normalizedMutations = new Map(
     Object.entries(mutations).filter(
-      (entry): entry is [string, string | null] => entry[1] !== undefined,
+      (entry): entry is [string, Exclude<SettingMutation, undefined>] => entry[1] !== undefined,
     ),
   );
   if (normalizedMutations.size === 0) return fragment;
 
   if (!block) {
-    const additions = [...normalizedMutations.values()].filter(
-      (value): value is string => value !== null,
-    );
+    const additions = [...normalizedMutations.values()].flatMap((value) => {
+      if (value === null) return [];
+      return [typeof value === "object" ? value.create : value];
+    });
     if (additions.length === 0) return fragment;
     const trimmedInsertionOffset = trimEndOffset(fragment, 0, insertionOffset);
     return `${fragment.slice(0, trimmedInsertionOffset)} [${additions.join(", ")}]${fragment.slice(trimmedInsertionOffset)}`;
@@ -91,22 +97,29 @@ export function rewriteSettings(
 
   const seen = new Set<string>();
   const existingKeys = new Set<string>();
-  const rewrittenEntries: string[] = [];
-  for (const entry of block.entries) {
+  const rewrittenEntries: Array<{ originalIndex: number; raw: string }> = [];
+  for (const [originalIndex, entry] of block.entries.entries()) {
     if (seen.has(entry.key)) return null;
     seen.add(entry.key);
     existingKeys.add(entry.key);
     const mutation = normalizedMutations.get(entry.key);
     if (mutation === null) continue;
-    rewrittenEntries.push(mutation ?? entry.raw);
+    if (typeof mutation === "object") {
+      const updated = mutation.update(entry);
+      if (updated === null) return null;
+      rewrittenEntries.push({ originalIndex, raw: updated });
+    } else {
+      rewrittenEntries.push({ originalIndex, raw: mutation ?? entry.raw });
+    }
   }
 
+  const additions: string[] = [];
   for (const [key, mutation] of normalizedMutations) {
     if (mutation === null || existingKeys.has(key)) continue;
-    rewrittenEntries.push(mutation);
+    additions.push(typeof mutation === "object" ? mutation.create : mutation);
   }
 
-  if (rewrittenEntries.length === 0) {
+  if (rewrittenEntries.length === 0 && additions.length === 0) {
     let removalStart = block.startOffset;
     while (removalStart > 0 && /[\t ]/u.test(fragment[removalStart - 1] ?? "")) removalStart -= 1;
     return `${fragment.slice(0, removalStart)}${fragment.slice(block.endOffset)}`;
@@ -115,8 +128,31 @@ export function rewriteSettings(
   const inner = fragment.slice(block.startOffset + 1, block.endOffset - 1);
   const leading = inner.match(/^\s*/u)?.[0] ?? "";
   const trailing = inner.match(/\s*$/u)?.[0] ?? "";
-  const separator = detectSettingSeparator(inner);
-  const newInner = `${leading}${rewrittenEntries.join(separator)}${trailing}`;
+  const defaultSeparator = detectSettingSeparator(inner);
+  const content: string[] = [];
+  for (const [index, entry] of rewrittenEntries.entries()) {
+    if (index > 0) {
+      const previous = rewrittenEntries[index - 1];
+      content.push(
+        previous
+          ? settingSeparatorAfter(fragment, block.entries, previous.originalIndex, defaultSeparator)
+          : defaultSeparator,
+      );
+    }
+    content.push(entry.raw);
+  }
+  if (additions.length > 0) {
+    if (rewrittenEntries.length > 0) {
+      const previous = rewrittenEntries.at(-1);
+      content.push(
+        previous
+          ? settingSeparatorAfter(fragment, block.entries, previous.originalIndex, defaultSeparator)
+          : defaultSeparator,
+      );
+    }
+    content.push(additions.join(defaultSeparator));
+  }
+  const newInner = `${leading}${content.join("")}${trailing}`;
   return `${fragment.slice(0, block.startOffset + 1)}${newInner}${fragment.slice(block.endOffset - 1)}`;
 }
 
@@ -131,6 +167,39 @@ export function isQuotedIdentifier(source: string): boolean {
 
 export function renderDbmlString(value: string): string {
   return JSON.stringify(value);
+}
+
+export function renderDbmlStringWithStyle(value: string, existingSource: string): string {
+  const trimmed = existingSource.trim();
+  if (trimmed.startsWith("'''") && trimmed.endsWith("'''") && !value.includes("'''")) {
+    return `'''${value}'''`;
+  }
+  if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+    return `'${value
+      .replaceAll("\\", "\\\\")
+      .replaceAll("'", "\\'")
+      .replaceAll("\r", "\\r")
+      .replaceAll("\n", "\\n")
+      .replaceAll("\t", "\\t")}'`;
+  }
+  return renderDbmlString(value);
+}
+
+export function replaceSettingValue(entry: ParsedSetting, newValue: string): string | null {
+  const colon = findTopLevelCharacter(entry.raw, 0, ":");
+  if (colon === null) return null;
+  const valueStart = skipHorizontalWhitespace(entry.raw, colon + 1);
+  const valueEnd = trimEndOffset(entry.raw, valueStart, entry.raw.length);
+  if (valueStart >= valueEnd) return null;
+  return `${entry.raw.slice(0, valueStart)}${newValue}${entry.raw.slice(valueEnd)}`;
+}
+
+export function settingValueSource(entry: ParsedSetting): string | null {
+  const colon = findTopLevelCharacter(entry.raw, 0, ":");
+  if (colon === null) return null;
+  const valueStart = skipHorizontalWhitespace(entry.raw, colon + 1);
+  const valueEnd = trimEndOffset(entry.raw, valueStart, entry.raw.length);
+  return valueStart < valueEnd ? entry.raw.slice(valueStart, valueEnd) : null;
 }
 
 export function parseColumnTypeFragment(value: string): ColumnNode["type"] | null {
@@ -383,6 +452,19 @@ function detectSettingSeparator(inner: string): string {
   let end = comma + 1;
   while (end < inner.length && /[\t ]/u.test(inner[end] ?? "")) end += 1;
   return inner.slice(comma, end) || ", ";
+}
+
+function settingSeparatorAfter(
+  fragment: string,
+  entries: readonly ParsedSetting[],
+  entryIndex: number,
+  fallback: string,
+): string {
+  const entry = entries[entryIndex];
+  const next = entries[entryIndex + 1];
+  if (!entry || !next) return fallback;
+  const separator = fragment.slice(entry.contentEnd, next.contentStart);
+  return separator.includes(",") ? separator : fallback;
 }
 
 function splitTopLevel(
@@ -686,6 +768,12 @@ function consumeKeyword(source: string, offset: number, keyword: string): number
 function skipWhitespace(source: string, offset: number): number {
   let cursor = offset;
   while (cursor < source.length && /\s/u.test(source[cursor] ?? "")) cursor += 1;
+  return cursor;
+}
+
+function skipHorizontalWhitespace(source: string, offset: number): number {
+  let cursor = offset;
+  while (cursor < source.length && /[\t ]/u.test(source[cursor] ?? "")) cursor += 1;
   return cursor;
 }
 

@@ -17,6 +17,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@dbml/core": "9.1.1",
+    "@er-diagram/contracts": "workspace:*",
     "@er-diagram/core": "workspace:*"
   },
   "devDependencies": {

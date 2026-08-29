@@ -180,6 +180,12 @@ importers:
 
   packages/source-transform:
     dependencies:
+      '@dbml/core':
+        specifier: 9.1.1
+        version: 9.1.1
+      '@er-diagram/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@er-diagram/core':
         specifier: workspace:*
         version: link:../core
