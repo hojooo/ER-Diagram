@@ -96,6 +96,21 @@ Raw importer는 오류를 반환하지 않았으므로 관찰 사실과 다르�
 - DML/COPY가 있어도 row data를 제외한 candidate는 preview 증거로 반환할 수 있지만 자동 적용할 수 없다.
   명시적 DDL-only 승인과 original SQL retention은 후속 workflow 경계가 소유한다.
 
+### M2-003 data exclusion과 retention 경계
+
+- `ConversionReport` version 1과 `applyEligible`은 conversion 사실로 유지하며 사용자 확인에 따라 값을
+  변경하지 않는다. DML/COPY 승인 결과는 별도 versioned data policy의 `applyReadiness`로 표현한다.
+- Data policy는 source를 다시 작성하거나 client가 전달한 report를 신뢰하지 않고 같은 원본으로
+  conversion을 다시 수행한다. `CONFIRM_DDL_ONLY`는 record-free candidate를 변경하지 않고 적용 승인만
+  해제한다.
+- Parser에는 원본 SQL을 그대로 전달해 `sourceHash === parserInputHash`를 유지한다. PostgreSQL
+  `COPY FROM STDIN` inline dump처럼 pinned parser가 거부하는 입력은 payload를 제거해 복구하지 않고
+  parse error로 차단한다.
+- Original SQL은 `DISCARD`가 기본값이며 `RETAIN`일 때만 persistence 전용 입력에 전체 원문을 포함한다.
+  Report, diagnostics와 candidate는 retention 여부와 관계없이 row literal을 포함하지 않는다.
+- JavaScript parser의 일시적 memory를 zeroize한다고 주장하지 않는다. Configurable source size와 parser
+  timeout은 별도 resource-limit 경계가 담당한다.
+
 ## Verification
 
 - `pnpm --filter @er-diagram/test-fixtures test test/sql-capability-fixtures.test.ts`
@@ -106,3 +121,4 @@ Raw importer는 오류를 반환하지 않았으므로 관찰 사실과 다르�
 - Wrong-dialect fixture는 static status가 아니라 parser error 위치를 검증해야 한다.
 - `pnpm --filter @er-diagram/test-fixtures test test/sql-import-report-fixtures.test.ts`
 - `pnpm --filter @er-diagram/core test test/sql-import.test.ts`
+- `pnpm --filter @er-diagram/core test test/data-exclusion.test.ts`
