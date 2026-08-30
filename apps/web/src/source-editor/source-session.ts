@@ -472,6 +472,7 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
     }
     generation += 1;
     clearDebounce();
+    const previousActiveGraph = snapshot.activeGraph;
     persistedSource = state.project.draftSource;
     persistedSourceHash = state.project.draftHash;
     lastValidGraph = null;
@@ -483,7 +484,13 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
       diagnostics: [...diagnostics],
       graph: null,
     });
-    snapshot = initialSnapshot(state);
+    snapshot = {
+      ...initialSnapshot(state),
+      // Keep the inspector mounted while the authoritative source is reparsed. The graph is
+      // display-only during this transition: no source is associated with it and schema actions
+      // remain disabled until validation publishes the new current or last-valid graph.
+      activeGraph: previousActiveGraph,
+    };
     for (const listener of listeners) listener();
     options.onAdoptCommittedSource?.(persistedSource);
     options.onServerState?.(state);
