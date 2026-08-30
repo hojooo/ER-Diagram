@@ -133,3 +133,7 @@ layout-only gesture가 schema redo를 무효화하고 과거 schema restore가 �
 - Keyboard shortcut, native form-field undo, accessible status와 restore confirmation focus를 browser에서
   검사한다.
 - Reload 후 undo·redo는 비어 있지만 source-free durable History와 `RESTORE` checkpoint가 유지되는지 검사한다.
+- 실제 Monaco·parser worker·React Flow·ELK browser gate에서 source edit와 visual edit의 undo/redo,
+  redo invalidation, layout-only redo 보존, invalid draft와 last-valid diagram을 함께 검사한다.
+- Commit 후 response 유실은 같은 command ID의 explicit replay로만 복구하고 external `409`는 form draft를
+  보존한 재검토와 새 command ID를 요구하며 session stack을 초기화하는지 확인한다.

@@ -206,3 +206,7 @@ Rename 추적은 쉬워지지만 표준 DBML 호환성을 깨뜨리고 사용자
 - reparse 또는 semantic verification 실패 시 canonical source가 바뀌지 않아야 한다.
 - out-of-order worker/save 응답은 최신 Monaco buffer와 revision 기준을 덮지 않아야 한다.
 - invalid draft, worker failure와 revision conflict에서도 local source가 보존되어야 한다.
+- Versioned M3 gate corpus에서 20종 visual command를 각각 한 번 실행하고 매 단계의 최소 edit 재현,
+  source/schema hash, semantic diff closure와 unrelated comment·metadata·partial·view byte 보존을 확인한다.
+- Compact CRLF corpus뿐 아니라 143-table fidelity fixture의 대표 edit에서도 target table 밖 bytes와
+  `143/86/4/15/7/573` inventory가 유지되며, test-only unexpected edit는 semantic mismatch로 rollback되어야 한다.

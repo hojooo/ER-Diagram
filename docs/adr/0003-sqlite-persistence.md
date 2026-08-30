@@ -139,5 +139,10 @@ Portable하게 보이지만 revision, optimistic version, multiple sidecar의 tr
   upgrade되는지 확인한다.
 - read-only storage, unsupported schema version, invalid migration과 built package의 migration path가
   fail-closed인지 확인한다.
+- 실제 Fastify·Core·source-transform과 file-backed SQLite를 조합해 visual revision, receipt와 모든 view의
+  rename layout migration이 한 transaction으로 commit되며, injected failure와 key collision에서는 전부
+  rollback되는지 확인한다.
+- 같은 file을 쓰는 두 server의 concurrent expected revision write는 하나만 commit되어야 하고, close/reopen
+  뒤에도 source bytes/hash, last-valid pointer, layout revision과 durable receipt replay가 유지되어야 한다.
 - Retention과 checkpoint 예외를 fixture로 검증한다.
 - Backup/restore는 checksum, dry run, read-back을 포함한다.
