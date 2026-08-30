@@ -38,6 +38,7 @@ import {
   sameColumnType,
   settingValueSource,
 } from "./dbml-fragment.js";
+import { protectedPartialTarget } from "./partial-impact.js";
 import { applyTextEdits } from "./text-edits.js";
 import type {
   SourceTransformDiagnostic,
@@ -160,10 +161,7 @@ function preflightCommand(graph: SchemaGraph, command: TableColumnVisualCommand)
       : planFailure("VISUAL_TARGET_NOT_FOUND", "The target column was not found.");
   }
   if (targetColumn.injectedFrom) {
-    return planFailure(
-      "VISUAL_PARTIAL_TARGET_PROTECTED",
-      "A TablePartial-injected column cannot be edited as a local table column.",
-    );
+    return protectedPartialTarget(graph, targetColumn.injectedFrom, "column");
   }
 
   if (command.kind === "REORDER_COLUMN" && command.beforeColumnKey !== null) {
@@ -180,10 +178,7 @@ function preflightCommand(graph: SchemaGraph, command: TableColumnVisualCommand)
         : planFailure("VISUAL_TARGET_NOT_FOUND", "The reorder anchor column was not found.");
     }
     if (anchor.injectedFrom) {
-      return planFailure(
-        "VISUAL_PARTIAL_TARGET_PROTECTED",
-        "A TablePartial-injected column cannot be used as a reorder anchor.",
-      );
+      return protectedPartialTarget(graph, anchor.injectedFrom, "column reorder anchor");
     }
   }
 

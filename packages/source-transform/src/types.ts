@@ -1,4 +1,4 @@
-import type { SchemaGraphDiff } from "@er-diagram/core";
+import type { SchemaElementKey, SchemaGraphDiff } from "@er-diagram/core";
 
 export interface TextEdit {
   /** UTF-16 code-unit offset, inclusive. */
@@ -51,6 +51,18 @@ export interface VisualSourceTransformFailure {
   ok: false;
   source: string;
   diagnostics: SourceTransformDiagnostic[];
+  partialImpact?: VisualPartialImpact;
+}
+
+export interface VisualPartialImpact {
+  partialKey: SchemaElementKey;
+  partialName: string;
+  partialElementKey: SchemaElementKey;
+  definitionRange: SourceTransformDiagnosticRange;
+  affectedTables: Array<{
+    tableKey: SchemaElementKey;
+    injectionRange: SourceTransformDiagnosticRange;
+  }>;
 }
 
 export type VisualSourceTransformResult =

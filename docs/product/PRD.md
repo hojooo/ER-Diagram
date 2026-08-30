@@ -613,6 +613,18 @@ patch만 받는다. Table·column rename은 stable key가 바뀌는 효과를 �
 array(지정 항목만 표시), `null`(전체 숨김)의 tri-state를 유지한다. Table schema 이동, alias, custom
 metadata와 partial membership은 P0 visual command 범위 밖이며 source에서만 편집한다.
 
+Group membership delta는 current graph에 대해 strict하게 적용한다. 이미 포함된 table의 add, 포함되지
+않은 table의 remove 또는 다른 group에 속한 table의 add는 source를 바꾸지 않고 membership conflict로
+반환한다. `UPDATE_DIAGRAM_VIEW`는 요청하지 않은 filter와 view comment를 보존해야 한다. Pinned
+`syncDiagramView@9.1.1` 결과가 요청한 tri-state와 source-preserving local patch에 정확히 일치할 때만
+official 결과를 채택하고, 전체 view rewrite·comment 제거·비대상 filter 변경이 있으면 item-level token
+patch로 fallback한다. 어느 경로든 full DBML v2 reparse 후 target view의 요청 field만 변경되어야 한다.
+
+`TablePartial` 정의는 P0 visual command로 직접 수정하지 않는다. 주입 column·reference·index·check 또는
+주입 column을 reorder anchor/owner로 선택하면 local mutation을 차단하고 partial element의 definition
+range와 해당 partial을 주입한 모든 table의 stable key·injection range를 반환한다. Provenance나 range가
+불완전하면 일부 영향 목록을 추정하지 않고 source-range 오류로 실패한다.
+
 Pinned DBML v2 parser는 column이 없는 `Table` block을 유효한 schema로 받지 않는다. 따라서
 `CREATE_TABLE`은 이름이 서로 다른 초기 column을 한 개 이상 함께 받아 table과 column을 하나의
 검증 단위로 생성한다. 제품이 임의의 `id` column을 만들지는 않는다. 생성 payload의 note, color와
@@ -793,6 +805,18 @@ editor로 돌려보내며 자동 cascade하지 않는다.
 anchor로도 사용하지 않는다. 의미가 이미 같은 update·rename·reorder는 source edit와 semantic diff가 없는
 성공 no-op으로 반환한다. 모든 실제 edit는 full reparse와 command별 allowlist semantic diff를 통과해야 하며
 source range, reparse 또는 의미 검증 실패 시 원본 source를 그대로 반환한다.
+
+`TableGroup` membership patch는 normalized membership과 source token이 일대일로 대응할 때만 실행한다.
+Remove는 target declaration과 같은 줄의 trailing comment만 제거하고, add는 group note 앞 또는 closing
+brace에 schema-qualified name으로 삽입한다. `DiagramView` patch는 기존 filter token과 comment를 가능한
+한 유지하고 없는 block만 `Tables`, `Notes`, `TableGroups`, `Schemas` 순서로 생성한다. Official
+`syncDiagramView` candidate는 local minimal patch와 동일하고 최종 tri-state가 정확한 경우에만 사용한다.
+Filter 배열 순서만 다른 set-equivalent 요청은 source edit가 없는 성공 no-op이다.
+
+Partial-protected diagnostic은 단순 차단 code에 그치지 않고 partial key/name, target partial element key,
+definition range와 영향 table별 injection range를 plain data로 제공한다. 영향 table은 stable key 순으로
+정렬하며 같은 injection range는 한 번만 반환한다. Graph provenance와 source map이 일치하지 않으면 이
+payload를 반환하지 않는다.
 
 Relationship patch는 ordered endpoint와 16가지 multiplicity 조합을 pinned DBML operator로 표현한다.
 Anonymous single-column inline `ref`가 name·action·color·inactive 없이 계속 표현 가능한 경우에는 inline

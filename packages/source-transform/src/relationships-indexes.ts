@@ -14,6 +14,7 @@ import type {
 import {
   deriveMinimalTextEdits,
   detectNewline,
+  type ExistingSettingMutation,
   findDirectChildBlock,
   findTopLevelCharacterAt,
   isQuotedIdentifier,
@@ -21,6 +22,8 @@ import {
   lineIndentAt,
   lineSpanForRange,
   lineStartOffset,
+  type OffsetSpan,
+  type ParsedSetting,
   parseColumnDeclaration,
   parseSettingsBlockAt,
   renderDbmlString,
@@ -29,12 +32,10 @@ import {
   replaceSettingValue,
   rewriteSettingOccurrence,
   rewriteSettings,
-  settingValueSource,
-  type ExistingSettingMutation,
-  type OffsetSpan,
-  type ParsedSetting,
   type SettingMutation,
+  settingValueSource,
 } from "./dbml-fragment.js";
+import { protectedPartialTarget } from "./partial-impact.js";
 import type { TextEdit, VisualSourceTransformResult } from "./types.js";
 import {
   type EditPlan,
@@ -144,7 +145,7 @@ function preflightExistingReference(
 ): EditPlan {
   const target = graph.references.find((reference) => reference.key === command.targetReferenceKey);
   if (!target) return planFailure("VISUAL_TARGET_NOT_FOUND", "The target reference was not found.");
-  if (target.injectedFrom) return partialTarget("reference");
+  if (target.injectedFrom) return protectedPartialTarget(graph, target.injectedFrom, "reference");
   if (command.kind === "DELETE_REFERENCE") return { ok: true, edits: [] };
   const desired = mergeReference(target, command.changes);
   const endpoints = validateReferenceEndpoints(graph, desired.endpoints);
@@ -240,7 +241,7 @@ function preflightExistingIndex(
         )
       : planFailure("VISUAL_TARGET_NOT_FOUND", "The target index was not found.");
   }
-  if (target.injectedFrom) return partialTarget("index");
+  if (target.injectedFrom) return protectedPartialTarget(graph, target.injectedFrom, "index");
   if (hasAmbiguousAnonymousIndex(table, target)) return anonymousIdentityFailure("index");
   if (command.kind === "DELETE_INDEX") return { ok: true, edits: [] };
   const desired = mergeIndex(target, command.changes);
@@ -283,7 +284,9 @@ function validateIndexValue(
           )
         : planFailure("VISUAL_TARGET_NOT_FOUND", "An index column was not found.");
     }
-    if (column.injectedFrom) return partialTarget("index column");
+    if (column.injectedFrom) {
+      return protectedPartialTarget(graph, column.injectedFrom, "index column");
+    }
   }
   if (value.type !== null && !isRepresentableIndexType(value.type)) {
     return capabilityFailure("The requested index type is not a representable DBML scalar.");
@@ -347,7 +350,7 @@ function preflightExistingCheck(
         )
       : planFailure("VISUAL_TARGET_NOT_FOUND", "The target check was not found.");
   }
-  if (target.injectedFrom) return partialTarget("check");
+  if (target.injectedFrom) return protectedPartialTarget(graph, target.injectedFrom, "check");
   if (hasAmbiguousAnonymousCheck(owner.checks, target)) return anonymousIdentityFailure("check");
   if (command.kind === "DELETE_CHECK") return { ok: true, edits: [] };
   const desired = mergeCheck(target, command.changes);
@@ -416,7 +419,12 @@ function resolveCheckOwner(
         : planFailure("VISUAL_TARGET_NOT_FOUND", "The check owner column was not found."),
     };
   }
-  if (column.injectedFrom) return { ok: false, plan: partialTarget("check owner column") };
+  if (column.injectedFrom) {
+    return {
+      ok: false,
+      plan: protectedPartialTarget(graph, column.injectedFrom, "check owner column"),
+    };
+  }
   return { ok: true, table, column, checks: column.checks };
 }
 
@@ -1403,13 +1411,6 @@ function stringMutation(key: string, value: string): ExistingSettingMutation {
         : replaceSettingValue(entry, renderDbmlStringWithStyle(value, existing));
     },
   };
-}
-
-function partialTarget(kind: string): EditPlan {
-  return planFailure(
-    "VISUAL_PARTIAL_TARGET_PROTECTED",
-    `A TablePartial-injected ${kind} cannot be edited as a local table element.`,
-  );
 }
 
 function capabilityFailure(message: string): EditPlan {
