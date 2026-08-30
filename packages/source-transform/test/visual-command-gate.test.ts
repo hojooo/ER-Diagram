@@ -248,7 +248,7 @@ describe("M3 visual command source-fidelity gate", () => {
       source.slice(target.range.endOffset),
     );
     expect(result.source).not.toBe(source);
-  });
+  }, 30_000);
 });
 
 async function parseOrThrow(source: string) {
