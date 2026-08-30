@@ -269,8 +269,9 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
 - [x] `M3-006` thin Fastify visual-command API, 409/422, source redaction
   - strict command/path validation, durable replay response, partial impact transport와 redacted error mapping을 제공한다.
   - 검증: `pnpm --filter @er-diagram/server test:integration visual-commands`
-- [ ] `M3-007` accessible visual inspector/form과 source fallback
-  - 검증: `pnpm --filter @er-diagram/web test visual-editor`
+- [x] `M3-007` accessible visual inspector/form과 source fallback
+  - selection-driven inspector에서 20종 command를 제공하고 source/layout flush, authoritative state adoption, safe replay와 partial source fallback을 적용한다.
+  - 검증: `pnpm --filter @er-diagram/web test test/visual-editor.test.tsx`
 - [ ] `M3-008` source/visual session undo-redo와 durable restore
   - 검증: `pnpm test:e2e undo-redo`
 - [ ] `M3-GATE` unrelated source preservation, reparse, semantic diff, rollback 통과
