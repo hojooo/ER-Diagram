@@ -642,6 +642,27 @@ Visual command HTTP adapter는 `POST /api/v1/projects/:projectId/visual-commands
 반환한다. 따라서 최초 적용 이후 다른 revision이 생성된 뒤 replay하면 current state revision과 applied
 revision이 다를 수 있다. 정상적으로 검증된 command의 `commandId`는 `x-command-id`로 반환한다.
 
+제품 Web은 canvas gesture 대신 selection-driven `Visual schema inspector`에서 위 20종 command를 모두
+제공한다. Inspector는 선택된 table, column, reference, group과 current source-defined `DiagramView`에
+적용 가능한 action만 노출하고 index/check는 selected table의 nested inventory에서 편집한다. Column type
+입력은 project dialect의 built-in type과 current graph enum을 제안하되 native `datalist`에 없는 raw DBML
+type을 지우거나 client validation만으로 차단하지 않는다. Create·update·delete form은 contract payload를
+그대로 만들며 서버가 반환한 source와 graph를 Web에서 source patch로 재현하지 않는다.
+
+Visual command 제출 전에는 source debounce·queued/in-flight save와 모든 hydrated layout write를 순서대로
+flush한다. Flush 결과가 `SAVED + VALID + CURRENT_DRAFT`가 아니거나 form을 연 뒤 semantic hash가 바뀌면
+API를 호출하지 않고 recovery 또는 명시적 재검토를 요구한다. 성공 시 response의 authoritative
+`ProjectState`로 Monaco model, source session, query cache와 revision을 교체하고 parser worker가 새 source를
+검증한 뒤 diagram을 갱신한다. Explicit rename이 server-side layout migration을 수행했다면 hydrated layout을
+다시 읽고 client rename recovery를 중복 적용하지 않는다.
+
+Network 또는 response-contract failure처럼 commit 여부를 알 수 없는 경우에는 exact command payload와
+`commandId`를 보존하고 사용자의 `Retry safely`에서만 같은 ID로 replay한다. `409`는 자동 retry하지 않으며
+최신 project/layout을 refetch한 뒤 form을 잠그고 `Review latest schema`로 target과 owner를 다시 resolve해야
+한다. 재제출에는 새 command ID를 사용한다. `422` diagnostic range는 source navigation에 사용하고, range가
+없으면 current target range, 그것도 없으면 editor focus로만 fallback한다. Partial impact는 definition과 모든
+affected-table injection 위치를 각각 제공하며 partial을 local element처럼 우회 편집하지 않는다.
+
 Project 부재는 `404`, stale schema revision·command ID 재사용·layout rename migration 충돌은 `409`,
 invalid application command·invalid draft·source transform 실패는 `422`로 구분한다. Schema revision
 conflict만 `currentRevisionNo`를 포함한다. Transform 실패는 public diagnostic과 선택적인 partial impact를

@@ -275,6 +275,68 @@ describe("source session autosave", () => {
     });
     session.dispose();
   });
+
+  it("flushes and waits for the authoritative draft write to settle", async () => {
+    const pending = deferred<ProjectMutationResponse>();
+    const pendingValidation = deferred<DbmlWorkerParseResult>();
+    const saveDraft = vi.fn(async () => pending.promise);
+    const session = createSession({
+      saveDraft,
+      parseSource: async (source) =>
+        source === EDITED_SOURCE ? pendingValidation.promise : validParse(source),
+    });
+    session.start();
+    await settle();
+
+    session.edit(EDITED_SOURCE);
+    const flushed = session.flushAndWait();
+    await settle();
+
+    expect(saveDraft).toHaveBeenCalledOnce();
+    expect(session.getSnapshot().persistence).toBe("SAVING");
+    pending.resolve(mutation(EDITED_SOURCE, 2, "VALID"));
+    await settle();
+    expect(session.getSnapshot().persistence).toBe("SAVED");
+    let settled = false;
+    void flushed.then(() => {
+      settled = true;
+    });
+    await settle();
+    expect(settled).toBe(false);
+    pendingValidation.resolve(validParse(EDITED_SOURCE));
+
+    await expect(flushed).resolves.toMatchObject({
+      source: EDITED_SOURCE,
+      persistence: "SAVED",
+      validation: "VALID",
+      expectedSchemaRevisionNo: 2,
+    });
+    session.dispose();
+  });
+
+  it("adopts an authoritative visual-command state without creating a draft write", async () => {
+    const saveDraft = vi.fn();
+    const parseSource = vi.fn(async (source: string) => validParse(source));
+    const onAdoptCommittedSource = vi.fn();
+    const session = createSession({ saveDraft, parseSource, onAdoptCommittedSource });
+    session.start();
+    await settle();
+
+    const adopted = await session.adoptCommittedState(projectState(EDITED_SOURCE, 2, "VALID"));
+
+    expect(saveDraft).not.toHaveBeenCalled();
+    expect(onAdoptCommittedSource).toHaveBeenCalledExactlyOnceWith(EDITED_SOURCE);
+    expect(parseSource).toHaveBeenLastCalledWith(EDITED_SOURCE);
+    expect(adopted).toMatchObject({
+      source: EDITED_SOURCE,
+      sourceHash: fakeHash(EDITED_SOURCE),
+      persistence: "SAVED",
+      validation: "VALID",
+      activeGraphSource: "CURRENT_DRAFT",
+      expectedSchemaRevisionNo: 2,
+    });
+    session.dispose();
+  });
 });
 
 function createSession(override: Partial<Parameters<typeof createSourceSession>[0]> = {}) {

@@ -157,6 +157,19 @@ New key에 다른 position이 이미 있으면 임의 overwrite하지 않고 sou
 rollback한다. Rename 전 `baseSchemaHash`와 일치하는 row만 rename 후 hash로 전진시키며 이미 stale한
 provenance는 유지한다. 여러 row가 바뀌어도 하나의 project-global layout revision만 사용한다.
 
+Web visual inspector는 source나 layout의 또 다른 정본이 아니다. Command 전 source save·validation과 모든
+pending layout write를 flush하고, form을 연 시점의 semantic hash와 최종 current-draft hash가 같을 때만
+새 command ID를 만든다. 성공 결과는 browser에서 `TextEdit`를 재실행하지 않고 server가 반환한
+authoritative source·revision으로 Monaco와 parser session을 교체한다. Server가 explicit rename layout
+migration을 보고하면 hydrated view를 새 revision으로 reload하고 기존 client-side rename recovery는 생략한다.
+
+Commit 여부를 알 수 없는 transport failure는 exact payload와 command ID를 보존한 explicit replay만 허용한다.
+반대로 schema `409`는 최신 state에서 target 의미가 달라졌을 수 있으므로 자동 replay하지 않고 form을
+stale하게 잠근 뒤 재검토 시 새 command ID를 발급한다. Source fallback은 public diagnostic range,
+current target range, editor focus 순서로만 수행하며 위치가 없는 오류를 임의의 source 위치로 가장하지
+않는다. Partial provenance가 있으면 definition과 모든 injection range를 독립적으로 탐색하되 local element
+mutation으로 우회하지 않는다.
+
 M0에서는 `CreateColumn` 한 종류로 이 경계를 증명한다. 대상 block 밖의 comment, partial, view와 formatting은 byte-identical이어야 하며 full-model DBML regeneration은 canonical source 갱신 경로로 사용하지 않는다.
 
 ## Alternatives considered

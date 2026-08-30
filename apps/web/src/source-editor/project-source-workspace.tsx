@@ -5,6 +5,7 @@ import type {
   ProjectResponse,
   ProjectsResponse,
   ProjectState,
+  VisualCommand,
 } from "@er-diagram/contracts";
 import { diffSchemaGraphs, recoverLayoutStableKeys, type SchemaGraph } from "@er-diagram/core";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -50,6 +51,12 @@ import type {
 import { resolveDiagramViewKey } from "../diagram/view-session-state.js";
 import type { ProjectApi } from "../projects/project-api.js";
 import { projectQueryKeys } from "../projects/project-queries.js";
+import { VisualSchemaInspector } from "../visual-editor/visual-schema-inspector.js";
+import {
+  createVisualCommandSession,
+  type VisualCommandSessionController,
+  type VisualCommandSessionSnapshot,
+} from "../visual-editor/visual-command-session.js";
 import type { SourceEditorComponent, SourceEditorHandle } from "./editor-contract.js";
 import {
   createDbmlParserWorkerClient,
@@ -96,6 +103,10 @@ export function ProjectSourceWorkspace({
   const sessionRef = useRef<SourceSessionController | null>(null);
   const [layoutSnapshot, setLayoutSnapshot] = useState<LayoutSessionSnapshot | null>(null);
   const layoutSessionRef = useRef<LayoutSessionController | null>(null);
+  const [visualCommandSession, setVisualCommandSession] =
+    useState<VisualCommandSessionController | null>(null);
+  const [visualCommandSnapshot, setVisualCommandSnapshot] =
+    useState<VisualCommandSessionSnapshot | null>(null);
   const editorRef = useRef<SourceEditorHandle>(null);
   const lastCursorPositionRef = useRef<SourceCursorPosition | null>(null);
   const flushedBlockedNavigationRef = useRef(false);
@@ -103,6 +114,8 @@ export function ProjectSourceWorkspace({
   const focusRequestIdRef = useRef(0);
   const layoutRequestIdRef = useRef(0);
   const previousGraphRef = useRef<SchemaGraph | null>(null);
+  const skipNextClientRenameRecoveryRef = useRef(false);
+  const lastAppliedVisualCommandRef = useRef<VisualCommand | null>(null);
   const renderedLayoutRef = useRef<{
     readonly viewKey: DiagramViewKey;
     readonly positions: Readonly<Record<string, DiagramPosition>>;
@@ -162,7 +175,16 @@ export function ProjectSourceWorkspace({
     () => (activeGraph ? createDiagramNavigationIndex(activeGraph) : null),
     [activeGraph],
   );
-  const layoutInteractionLocked = layoutRequest !== null;
+  const visualWorkspaceLocked =
+    visualCommandSnapshot?.status === "FLUSHING_SOURCE" ||
+    visualCommandSnapshot?.status === "FLUSHING_LAYOUT" ||
+    visualCommandSnapshot?.status === "SUBMITTING" ||
+    visualCommandSnapshot?.status === "UNKNOWN_OUTCOME";
+  const layoutInteractionLocked =
+    layoutRequest !== null ||
+    visualWorkspaceLocked ||
+    visualCommandSnapshot?.layoutRefreshFailed === true;
+  const visualSessionsReady = sessionSnapshot !== null && layoutSnapshot !== null;
 
   const editActiveLayout = useCallback(
     (update: (current: DiagramLayoutValue) => DiagramLayoutValue) => {
@@ -303,10 +325,11 @@ export function ProjectSourceWorkspace({
       setLayoutRequest(null);
       setLayoutPreview(null);
       renderedLayoutRef.current = null;
-      const renameCandidates = diffSchemaGraphs(previousGraph, activeGraph).renameCandidates;
+      const graphDiff = diffSchemaGraphs(previousGraph, activeGraph);
+      const renameCandidates = graphDiff.renameCandidates;
       const controller = layoutSessionRef.current;
       let recoveredCount = 0;
-      if (controller && renameCandidates.length > 0) {
+      if (controller && renameCandidates.length > 0 && !skipNextClientRenameRecoveryRef.current) {
         for (const [viewKey, view] of controller.getSnapshot().views) {
           const recovered = recoverLayoutStableKeys(view.layout, renameCandidates);
           if (recovered.recoveredKeys.length === 0) continue;
@@ -326,13 +349,21 @@ export function ProjectSourceWorkspace({
         }
       }
       setLayoutRecoveryNotice(
-        recoveredCount > 0
-          ? `Recovered ${recoveredCount} renamed layout ${recoveredCount === 1 ? "key" : "keys"}. Previous keys were retained for safe fallback.`
-          : null,
+        skipNextClientRenameRecoveryRef.current
+          ? "Authoritative layout rename migration was reloaded from the server."
+          : recoveredCount > 0
+            ? `Recovered ${recoveredCount} renamed layout ${recoveredCount === 1 ? "key" : "keys"}. Previous keys were retained for safe fallback.`
+            : null,
       );
+      const appliedCommand = lastAppliedVisualCommandRef.current;
+      if (appliedCommand) {
+        applyVisualCommandSelection(selectionStore, previousGraph, activeGraph, appliedCommand);
+        lastAppliedVisualCommandRef.current = null;
+      }
+      skipNextClientRenameRecoveryRef.current = false;
     }
     previousGraphRef.current = activeGraph;
-  }, [activeGraph]);
+  }, [activeGraph, selectionStore]);
 
   useEffect(() => {
     if (!activeGraph) return;
@@ -409,6 +440,7 @@ export function ProjectSourceWorkspace({
         queryClient.setQueryData(projectQueryKeys.detail(projectId), response);
         return response.state;
       },
+      onAdoptCommittedSource: (source) => editorRef.current?.replaceSource(source),
       onServerState: (state) => {
         queryClient.setQueryData<ProjectResponse>(
           projectQueryKeys.detail(projectId),
@@ -441,6 +473,43 @@ export function ProjectSourceWorkspace({
     };
   }, [adapters, api, projectId, queryClient]);
 
+  useEffect(() => {
+    if (!visualSessionsReady) return;
+    const sourceSession = sessionRef.current;
+    const layoutSession = layoutSessionRef.current;
+    if (!sourceSession || !layoutSession) return;
+    const commandSession = createVisualCommandSession({
+      projectId,
+      sourceSession,
+      layoutSession,
+      applyVisualCommand: (input) => api.applyVisualCommand(input),
+      loadProject: async () => {
+        const response = await api.getProject(projectId);
+        queryClient.setQueryData(projectQueryKeys.detail(projectId), response);
+        return response.state;
+      },
+      onBeforeCommittedState: (_state, _mutation, command) => {
+        lastAppliedVisualCommandRef.current = command;
+        skipNextClientRenameRecoveryRef.current =
+          command.kind === "RENAME_TABLE" || command.kind === "RENAME_COLUMN";
+      },
+      onCommittedState: (state) => {
+        queryClient.setQueryData<ProjectResponse>(projectQueryKeys.detail(projectId), { state });
+        void queryClient.invalidateQueries({ queryKey: projectQueryKeys.list });
+      },
+    });
+    setVisualCommandSession(commandSession);
+    setVisualCommandSnapshot(commandSession.getSnapshot());
+    const unsubscribe = commandSession.subscribe(() => {
+      setVisualCommandSnapshot(commandSession.getSnapshot());
+    });
+    return () => {
+      unsubscribe();
+      setVisualCommandSession(null);
+      setVisualCommandSnapshot(null);
+    };
+  }, [api, projectId, queryClient, visualSessionsReady]);
+
   const handlePositionsCommit = useCallback(
     (positions: Readonly<Record<string, DiagramPosition>>) => {
       editActiveLayout((current) => ({
@@ -451,6 +520,27 @@ export function ProjectSourceWorkspace({
     },
     [activeGraph?.schemaHash, editActiveLayout],
   );
+
+  const handleReloadLayout = useCallback(async () => {
+    const controller = layoutSessionRef.current;
+    if (!controller) return;
+    const failedViews = [...controller.getSnapshot().views.values()]
+      .filter((view) => view.status === "ERROR")
+      .sort((left, right) =>
+        left.viewKey < right.viewKey ? -1 : left.viewKey > right.viewKey ? 1 : 0,
+      );
+    if (failedViews.length === 0) {
+      await controller.hydrate(resolvedViewKey, defaultLayout);
+    } else {
+      for (const view of failedViews) await controller.hydrate(view.viewKey, view.layout);
+    }
+    const refreshRecovered = [...controller.getSnapshot().views.values()].every(
+      (view) => view.status !== "ERROR",
+    );
+    if (refreshRecovered && visualCommandSession?.getSnapshot().layoutRefreshFailed) {
+      visualCommandSession.reset();
+    }
+  }, [defaultLayout, resolvedViewKey, visualCommandSession]);
 
   const handleViewportCommit = useCallback(
     (viewport: DiagramViewport) => {
@@ -694,6 +784,7 @@ export function ProjectSourceWorkspace({
                 onChange={(source) => sessionRef.current?.edit(source)}
                 onSave={() => sessionRef.current?.flush()}
                 onCursorPositionChange={handleCursorPositionChange}
+                readOnly={visualWorkspaceLocked}
               />
             </Suspense>
           </section>
@@ -738,9 +829,17 @@ export function ProjectSourceWorkspace({
             onRetryLayout={() => void layoutSessionRef.current?.retrySave()}
             onRetryLocalLayout={() => void layoutSessionRef.current?.retryLocalLayout()}
             onLoadServerLayout={() => void layoutSessionRef.current?.loadServerLayout()}
-            onReloadLayout={() =>
-              void layoutSessionRef.current?.hydrate(resolvedViewKey, defaultLayout)
+            onReloadLayout={() => void handleReloadLayout()}
+            visualCommandSession={visualCommandSession}
+            visualInteractionDisabled={
+              layoutInteractionLocked ||
+              !sessionSnapshot.canUseValidSchema ||
+              visualCommandSession === null
             }
+            onOpenVisualSource={(range) => {
+              if (range) editorRef.current?.revealSourceRange(range);
+              else editorRef.current?.focus();
+            }}
           />
         </div>
 
@@ -872,6 +971,9 @@ function DiagramPanel({
   onRetryLocalLayout,
   onLoadServerLayout,
   onReloadLayout,
+  visualCommandSession,
+  visualInteractionDisabled,
+  onOpenVisualSource,
 }: {
   readonly snapshot: SourceSessionSnapshot;
   readonly visibility: DiagramVisibility | null;
@@ -914,6 +1016,9 @@ function DiagramPanel({
   readonly onRetryLocalLayout: () => void;
   readonly onLoadServerLayout: () => void;
   readonly onReloadLayout: () => void;
+  readonly visualCommandSession: VisualCommandSessionController | null;
+  readonly visualInteractionDisabled: boolean;
+  readonly onOpenVisualSource: (range: import("@er-diagram/contracts").SourceRange | null) => void;
 }) {
   const graph = snapshot.activeGraph;
   const showingLastValid = snapshot.activeGraphSource === "LAST_VALID";
@@ -930,13 +1035,13 @@ function DiagramPanel({
     <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
       <div className="border-b border-slate-700 px-4 py-3">
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">
-          Read-only ER diagram
+          Editable ER diagram
         </p>
         <p className="mt-1 text-xs text-slate-400" aria-live="polite">
           {showingLastValid
             ? `Showing last-valid revision ${lastValidRevisionNo ?? "unknown"}. Source navigation is disabled until the current draft is valid.`
             : graph
-              ? "Showing the current valid draft. Select a table, column, or relationship to open its source."
+              ? "Showing the current valid draft. Select a schema element to inspect, edit, or open its source."
               : "Waiting for a valid schema graph."}
         </p>
       </div>
@@ -1012,7 +1117,9 @@ function DiagramPanel({
                 layoutPositions={layoutPositions}
                 layoutViewport={layoutViewport}
                 layoutRequest={layoutRequest}
-                interactionDisabled={layoutBusy || layoutConflict !== null}
+                interactionDisabled={
+                  layoutBusy || layoutConflict !== null || visualInteractionDisabled
+                }
                 onPositionsCommit={onPositionsCommit}
                 onViewportCommit={onViewportCommit}
                 onRenderedLayoutReady={onRenderedLayoutReady}
@@ -1023,6 +1130,19 @@ function DiagramPanel({
           <p className="sr-only" aria-live="polite">
             Showing {viewLabel} at {detailLevel.toLowerCase().replaceAll("_", " ")} detail.
           </p>
+          {visualCommandSession ? (
+            <VisualSchemaInspector
+              graph={graph}
+              primaryDialect={snapshot.serverState.project.primaryDialect}
+              currentViewKey={viewKey}
+              selectionStore={selectionStore}
+              commandSession={visualCommandSession}
+              interactionDisabled={visualInteractionDisabled}
+              sourceNavigationEnabled={sourceNavigationEnabled}
+              onOpenSource={onOpenVisualSource}
+              onReloadLayouts={onReloadLayout}
+            />
+          ) : null}
         </>
       ) : (
         <div className="grid min-h-[32rem] place-items-center bg-slate-950 p-6 text-center">
@@ -1605,6 +1725,92 @@ function validationLabel(status: SourceValidationStatus): string {
     INVALID: "Draft invalid",
     ERROR: "Validation error",
   }[status];
+}
+
+function applyVisualCommandSelection(
+  selectionStore: ReturnType<typeof createDiagramSelectionStore>,
+  before: SchemaGraph,
+  after: SchemaGraph,
+  command: VisualCommand,
+): void {
+  const diff = diffSchemaGraphs(before, after);
+  if (command.kind === "CREATE_TABLE") {
+    const keys = diff.changes
+      .filter((change) => change.operation === "ADD" && change.elementKind === "table")
+      .map((change) => change.key);
+    selectionStore
+      .getState()
+      .setSelection(
+        keys.length === 1
+          ? { elementKey: keys[0] as string, kind: "table", tableKeys: keys }
+          : null,
+      );
+    return;
+  }
+  if (command.kind === "CREATE_COLUMN") {
+    const keys = diff.changes
+      .filter((change) => change.operation === "ADD" && change.elementKind === "column")
+      .map((change) => change.key);
+    selectionStore
+      .getState()
+      .setSelection(
+        keys.length === 1
+          ? { elementKey: keys[0] as string, kind: "column", tableKeys: [command.targetTableKey] }
+          : null,
+      );
+    return;
+  }
+  if (command.kind === "CREATE_REFERENCE") {
+    const keys = diff.changes
+      .filter((change) => change.operation === "ADD" && change.elementKind === "reference")
+      .map((change) => change.key);
+    const reference =
+      keys.length === 1 ? after.references.find((candidate) => candidate.key === keys[0]) : null;
+    selectionStore.getState().setSelection(
+      reference
+        ? {
+            elementKey: reference.key,
+            kind: "reference",
+            tableKeys: [...new Set(reference.endpoints.map((endpoint) => endpoint.tableKey))],
+          }
+        : null,
+    );
+    return;
+  }
+  if (command.kind === "RENAME_TABLE" || command.kind === "RENAME_COLUMN") {
+    const kind = command.kind === "RENAME_TABLE" ? "table" : "column";
+    const beforeKey =
+      command.kind === "RENAME_TABLE" ? command.targetTableKey : command.targetColumnKey;
+    const candidates = diff.renameCandidates.filter(
+      (candidate) => candidate.elementKind === kind && candidate.beforeKey === beforeKey,
+    );
+    if (candidates.length !== 1) {
+      selectionStore.getState().setSelection(null);
+      return;
+    }
+    const afterKey = candidates[0]?.afterKey;
+    if (!afterKey) return;
+    const tableKeys =
+      kind === "table"
+        ? [afterKey]
+        : [
+            after.tables.find((table) => table.columns.some((column) => column.key === afterKey))
+              ?.key,
+          ].filter((value): value is string => value !== undefined);
+    selectionStore.getState().setSelection({ elementKey: afterKey, kind, tableKeys });
+    return;
+  }
+  if (command.kind === "DELETE_COLUMN") {
+    selectionStore.getState().setSelection({
+      elementKey: command.targetTableKey,
+      kind: "table",
+      tableKeys: [command.targetTableKey],
+    });
+    return;
+  }
+  if (command.kind === "DELETE_TABLE" || command.kind === "DELETE_REFERENCE") {
+    selectionStore.getState().setSelection(null);
+  }
 }
 
 function isSelectionVisible(selection: DiagramSelection, visibility: DiagramVisibility): boolean {

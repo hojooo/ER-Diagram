@@ -268,6 +268,10 @@ class LayoutProjectApi implements ProjectApi {
     throw new Error("Draft save is not expected in layout tests.");
   }
 
+  applyVisualCommand: ProjectApi["applyVisualCommand"] = async () => {
+    throw new Error("Visual commands are not expected in layout tests.");
+  };
+
   async getProject() {
     return { state: this.state };
   }

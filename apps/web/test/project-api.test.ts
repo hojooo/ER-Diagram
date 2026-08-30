@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { VisualCommand } from "@er-diagram/contracts";
 
 import { createHttpProjectApi, ProjectApiError } from "../src/projects/project-api.js";
 
@@ -315,6 +316,109 @@ describe("HTTP project API", () => {
       commandId: COMMAND_ID,
       expectedLayoutRevisionNo: 0,
       layout,
+    });
+  });
+
+  it("posts a caller-owned visual command and preserves replay evidence", async () => {
+    const command: VisualCommand = {
+      commandId: COMMAND_ID,
+      expectedSchemaRevisionNo: 1,
+      kind: "UPDATE_TABLE",
+      targetTableKey: 'table:["public","users"]',
+      changes: { note: "Reviewed" },
+    };
+    const response = {
+      state,
+      revisionCreated: false,
+      layoutMigrated: false,
+      replayed: true,
+      appliedSchemaRevisionNo: 1,
+      appliedLayoutRevisionNo: 0,
+    };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse(response, {
+        status: 200,
+        headers: { "x-command-id": COMMAND_ID },
+      }),
+    );
+    const api = createHttpProjectApi({ fetch: fetcher });
+
+    await expect(api.applyVisualCommand({ projectId: PROJECT_ID, command })).resolves.toEqual(
+      response,
+    );
+    expect(fetcher).toHaveBeenCalledWith(
+      `/api/v1/projects/${PROJECT_ID}/visual-commands`,
+      expect.objectContaining({ method: "POST", body: JSON.stringify(command) }),
+    );
+  });
+
+  it("preserves public visual diagnostics and partial impact without response text", async () => {
+    const range = {
+      filepath: "/main.dbml",
+      startOffset: 10,
+      endOffset: 20,
+      startLine: 2,
+      startColumn: 1,
+      endLine: 2,
+      endColumn: 11,
+    };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse(
+        {
+          code: "VISUAL_COMMAND_TRANSFORM_FAILED",
+          message: "The visual command could not be applied.",
+          correlationId: CORRELATION_ID,
+          diagnostics: [
+            {
+              code: "VISUAL_PARTIAL_TARGET_PROTECTED",
+              message: "Edit the partial definition instead.",
+              severity: "ERROR",
+              range,
+            },
+          ],
+          partialImpact: {
+            partialKey: 'partial:["audit"]',
+            partialName: "audit",
+            partialElementKey: 'partialColumn:["audit","created_at"]',
+            definitionRange: range,
+            affectedTables: [
+              {
+                tableKey: 'table:["public","users"]',
+                injectionRange: {
+                  ...range,
+                  startOffset: 30,
+                  endOffset: 36,
+                  startLine: 4,
+                  endLine: 4,
+                },
+              },
+            ],
+          },
+        },
+        { status: 422 },
+      ),
+    );
+    const api = createHttpProjectApi({ fetch: fetcher });
+
+    const error = await api
+      .applyVisualCommand({
+        projectId: PROJECT_ID,
+        command: {
+          commandId: COMMAND_ID,
+          expectedSchemaRevisionNo: 1,
+          kind: "DELETE_COLUMN",
+          targetTableKey: 'table:["public","users"]',
+          targetColumnKey: 'column:["public","users","created_at"]',
+        },
+      })
+      .catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(ProjectApiError);
+    expect(error).toMatchObject({
+      status: 422,
+      code: "VISUAL_COMMAND_TRANSFORM_FAILED",
+      diagnostics: [{ code: "VISUAL_PARTIAL_TARGET_PROTECTED", range }],
+      partialImpact: { partialName: "audit" },
     });
   });
 

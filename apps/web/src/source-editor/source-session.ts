@@ -40,6 +40,8 @@ export interface SourceSessionController {
   start(): void;
   edit(source: string): void;
   flush(): void;
+  flushAndWait(): Promise<SourceSessionSnapshot>;
+  adoptCommittedState(state: ProjectState): Promise<SourceSessionSnapshot>;
   retrySave(): void;
   retryValidation(): void;
   retryLocalDraft(): void;
@@ -53,6 +55,7 @@ export interface CreateSourceSessionOptions {
   readonly saveDraft: (input: SaveDraftInput) => Promise<ProjectMutationResponse>;
   readonly loadProject: () => Promise<ProjectState>;
   readonly onServerState?: (state: ProjectState) => void;
+  readonly onAdoptCommittedSource?: (source: string) => void;
   readonly debounceMs?: number;
   readonly hashSource?: (source: string) => Promise<string>;
 }
@@ -86,6 +89,7 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
   let started = false;
   let disposed = false;
   let activeSave = false;
+  let savePump: Promise<void> | null = null;
   let queuedSave: QueuedSave | undefined;
   const workerOutcomes = new Map<string, SourceValidationOutcome>();
   const serverOutcomes = new Map<string, SourceValidationOutcome>();
@@ -105,7 +109,7 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
   function start(): void {
     if (started || disposed) return;
     started = true;
-    validateCurrentSource(snapshot.source, generation);
+    void validateCurrentSource(snapshot.source, generation);
     const { currentRevision, lastValidRevision } = options.initialState;
     if (
       currentRevision.validity === "INVALID" &&
@@ -135,72 +139,78 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
     debounceTimer = setTimeout(runDebouncedWork, debounceMs);
   }
 
-  function runDebouncedWork(): void {
+  function runDebouncedWork(): Promise<void> {
     debounceTimer = undefined;
     const source = snapshot.source;
     const currentGeneration = generation;
-    validateCurrentSource(source, currentGeneration);
+    const validation = validateCurrentSource(source, currentGeneration);
     if (snapshot.persistence !== "CONFLICT") queueSave(source, currentGeneration);
+    return validation;
   }
 
   function flush(): void {
     if (disposed) return;
     clearDebounce();
-    runDebouncedWork();
+    void runDebouncedWork();
   }
 
-  function validateCurrentSource(source: string, requestGeneration: number): void {
+  async function flushAndWait(): Promise<SourceSessionSnapshot> {
+    if (disposed) return snapshot;
+    clearDebounce();
+    const validation = runDebouncedWork();
+    await Promise.all([validation, pumpSaveQueue()]);
+    return snapshot;
+  }
+
+  async function validateCurrentSource(source: string, requestGeneration: number): Promise<void> {
     if (disposed) return;
     if (requestGeneration === generation && source === snapshot.source) {
       publish({ validation: "VALIDATING", validationError: null });
     }
 
-    void options.parseSource(source).then(
-      (result) => {
-        if (disposed || requestGeneration !== generation || source !== snapshot.source) return;
-        if (source === persistedSource && result.sourceHash !== persistedSourceHash) {
-          publish({
-            sourceHash: result.sourceHash,
-            validation: "ERROR",
-            diagnostics: [],
-            activeGraph: lastValidGraph,
-            activeGraphSource: lastValidGraph ? "LAST_VALID" : null,
-            canUseValidSchema: false,
-            validationError: {
-              code: "SOURCE_HASH_MISMATCH",
-              message: "The persisted source hash did not match the current draft bytes.",
-            },
-          });
-          return;
-        }
-        const outcome: SourceValidationOutcome = result.ok
-          ? { validity: "VALID", diagnostics: result.diagnostics, graph: result.graph }
-          : { validity: "INVALID", diagnostics: result.diagnostics, graph: null };
-        workerOutcomes.set(result.sourceHash, outcome);
-        applyWorkerOutcome(result.sourceHash, outcome);
-      },
-      () => {
-        if (disposed || requestGeneration !== generation || source !== snapshot.source) return;
-        void hashSource(source).then((sourceHash) => {
-          if (disposed || requestGeneration !== generation || source !== snapshot.source) return;
-          const fallback = serverOutcomes.get(sourceHash);
-          failedWorkerHashes.add(sourceHash);
-          publish({
-            sourceHash,
-            validation: "ERROR",
-            diagnostics: fallback?.diagnostics ?? [],
-            activeGraph: lastValidGraph,
-            activeGraphSource: lastValidGraph ? "LAST_VALID" : null,
-            canUseValidSchema: false,
-            validationError: {
-              code: "PARSER_WORKER_UNAVAILABLE",
-              message:
-                "Browser validation is unavailable. The saved draft was still checked by the server.",
-            },
-          });
+    try {
+      const result = await options.parseSource(source);
+      if (disposed || requestGeneration !== generation || source !== snapshot.source) return;
+      if (source === persistedSource && result.sourceHash !== persistedSourceHash) {
+        publish({
+          sourceHash: result.sourceHash,
+          validation: "ERROR",
+          diagnostics: [],
+          activeGraph: lastValidGraph,
+          activeGraphSource: lastValidGraph ? "LAST_VALID" : null,
+          canUseValidSchema: false,
+          validationError: {
+            code: "SOURCE_HASH_MISMATCH",
+            message: "The persisted source hash did not match the current draft bytes.",
+          },
         });
-      },
-    );
+        return;
+      }
+      const outcome: SourceValidationOutcome = result.ok
+        ? { validity: "VALID", diagnostics: result.diagnostics, graph: result.graph }
+        : { validity: "INVALID", diagnostics: result.diagnostics, graph: null };
+      workerOutcomes.set(result.sourceHash, outcome);
+      applyWorkerOutcome(result.sourceHash, outcome);
+    } catch {
+      if (disposed || requestGeneration !== generation || source !== snapshot.source) return;
+      const sourceHash = await hashSource(source);
+      if (disposed || requestGeneration !== generation || source !== snapshot.source) return;
+      const fallback = serverOutcomes.get(sourceHash);
+      failedWorkerHashes.add(sourceHash);
+      publish({
+        sourceHash,
+        validation: "ERROR",
+        diagnostics: fallback?.diagnostics ?? [],
+        activeGraph: lastValidGraph,
+        activeGraphSource: lastValidGraph ? "LAST_VALID" : null,
+        canUseValidSchema: false,
+        validationError: {
+          code: "PARSER_WORKER_UNAVAILABLE",
+          message:
+            "Browser validation is unavailable. The saved draft was still checked by the server.",
+        },
+      });
+    }
   }
 
   function applyWorkerOutcome(sourceHash: string, outcome: SourceValidationOutcome): void {
@@ -270,101 +280,108 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
     void pumpSaveQueue();
   }
 
-  async function pumpSaveQueue(): Promise<void> {
-    if (disposed || activeSave || snapshot.persistence === "CONFLICT") return;
-    const candidate = queuedSave;
-    if (!candidate) return;
-    queuedSave = undefined;
-
-    const sourceHash = await hashSource(candidate.source);
-    if (disposed) return;
-    const newerQueuedSave = queuedSave as QueuedSave | undefined;
-    if (newerQueuedSave && newerQueuedSave.generation > candidate.generation) {
-      void pumpSaveQueue();
-      return;
-    }
-    if (sourceHash === persistedSourceHash && candidate.source === persistedSource) {
-      if (candidate.generation === generation && candidate.source === snapshot.source) {
-        publish({ sourceHash, persistence: "SAVED", persistenceError: null });
-      }
-      void pumpSaveQueue();
-      return;
-    }
-
-    activeSave = true;
-    if (candidate.generation === generation && candidate.source === snapshot.source) {
-      publish({ persistence: "SAVING", persistenceError: null });
-    }
-    const expectedSchemaRevisionNo = snapshot.expectedSchemaRevisionNo;
-
-    try {
-      const response = await options.saveDraft({
-        projectId,
-        source: candidate.source,
-        expectedSchemaRevisionNo,
-      });
-      assertSaveResponse(
-        response,
-        projectId,
-        candidate.source,
-        sourceHash,
-        expectedSchemaRevisionNo,
-      );
-      const state = response.state;
-      persistedSource = candidate.source;
-      persistedSourceHash = sourceHash;
-      const serverOutcome: SourceValidationOutcome = {
-        validity: state.currentRevision.validity,
-        diagnostics: response.diagnostics,
-        graph: null,
-      };
-      serverOutcomes.set(sourceHash, serverOutcome);
-      options.onServerState?.(state);
-      publish({
-        expectedSchemaRevisionNo: state.project.schemaRevisionNo,
-        serverState: state,
-        persistence:
-          candidate.source === snapshot.source && candidate.generation === generation
-            ? "SAVED"
-            : "DIRTY",
-        persistenceError: null,
-      });
-
-      if (
-        failedWorkerHashes.has(sourceHash) &&
-        candidate.source === snapshot.source &&
-        candidate.generation === generation
-      ) {
-        publish({ diagnostics: response.diagnostics });
-      }
-
-      const workerOutcome = workerOutcomes.get(sourceHash);
-      if (
-        candidate.source === snapshot.source &&
-        candidate.generation === generation &&
-        workerOutcome
-      ) {
-        applyWorkerOutcome(sourceHash, workerOutcome);
-      }
-    } catch (error) {
-      queuedSave = undefined;
-      if (isRevisionConflict(error)) {
-        publish({
-          persistence: "CONFLICT",
-          persistenceError: publicPersistenceError(error),
-        });
-        void refreshConflictState();
-      } else {
-        publish({
-          persistence: "ERROR",
-          persistenceError: publicPersistenceError(error),
-        });
-      }
-    } finally {
-      activeSave = false;
+  function pumpSaveQueue(): Promise<void> {
+    if (savePump) return savePump;
+    if (disposed || snapshot.persistence === "CONFLICT") return Promise.resolve();
+    savePump = drainSaveQueue().finally(() => {
+      savePump = null;
       const currentPersistence = snapshot.persistence as SourcePersistenceStatus;
       if (queuedSave && currentPersistence !== "CONFLICT" && currentPersistence !== "ERROR") {
         void pumpSaveQueue();
+      }
+    });
+    return savePump;
+  }
+
+  async function drainSaveQueue(): Promise<void> {
+    while (!disposed && snapshot.persistence !== "CONFLICT") {
+      const candidate = queuedSave;
+      if (!candidate) return;
+      queuedSave = undefined;
+
+      const sourceHash = await hashSource(candidate.source);
+      if (disposed) return;
+      const newerQueuedSave = queuedSave as QueuedSave | undefined;
+      if (newerQueuedSave && newerQueuedSave.generation > candidate.generation) continue;
+      if (sourceHash === persistedSourceHash && candidate.source === persistedSource) {
+        if (candidate.generation === generation && candidate.source === snapshot.source) {
+          publish({ sourceHash, persistence: "SAVED", persistenceError: null });
+        }
+        continue;
+      }
+
+      activeSave = true;
+      if (candidate.generation === generation && candidate.source === snapshot.source) {
+        publish({ persistence: "SAVING", persistenceError: null });
+      }
+      const expectedSchemaRevisionNo = snapshot.expectedSchemaRevisionNo;
+
+      try {
+        const response = await options.saveDraft({
+          projectId,
+          source: candidate.source,
+          expectedSchemaRevisionNo,
+        });
+        assertSaveResponse(
+          response,
+          projectId,
+          candidate.source,
+          sourceHash,
+          expectedSchemaRevisionNo,
+        );
+        const state = response.state;
+        persistedSource = candidate.source;
+        persistedSourceHash = sourceHash;
+        const serverOutcome: SourceValidationOutcome = {
+          validity: state.currentRevision.validity,
+          diagnostics: response.diagnostics,
+          graph: null,
+        };
+        serverOutcomes.set(sourceHash, serverOutcome);
+        options.onServerState?.(state);
+        publish({
+          expectedSchemaRevisionNo: state.project.schemaRevisionNo,
+          serverState: state,
+          persistence:
+            candidate.source === snapshot.source && candidate.generation === generation
+              ? "SAVED"
+              : "DIRTY",
+          persistenceError: null,
+        });
+
+        if (
+          failedWorkerHashes.has(sourceHash) &&
+          candidate.source === snapshot.source &&
+          candidate.generation === generation
+        ) {
+          publish({ diagnostics: response.diagnostics });
+        }
+
+        const workerOutcome = workerOutcomes.get(sourceHash);
+        if (
+          candidate.source === snapshot.source &&
+          candidate.generation === generation &&
+          workerOutcome
+        ) {
+          applyWorkerOutcome(sourceHash, workerOutcome);
+        }
+      } catch (error) {
+        queuedSave = undefined;
+        if (isRevisionConflict(error)) {
+          publish({
+            persistence: "CONFLICT",
+            persistenceError: publicPersistenceError(error),
+          });
+          void refreshConflictState();
+        } else {
+          publish({
+            persistence: "ERROR",
+            persistenceError: publicPersistenceError(error),
+          });
+        }
+        return;
+      } finally {
+        activeSave = false;
       }
     }
   }
@@ -387,7 +404,7 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
 
   function retryValidation(): void {
     if (disposed) return;
-    validateCurrentSource(snapshot.source, generation);
+    void validateCurrentSource(snapshot.source, generation);
   }
 
   function retryLocalDraft(): void {
@@ -421,7 +438,7 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
     });
     snapshot = initialSnapshot(state);
     for (const listener of listeners) listener();
-    validateCurrentSource(snapshot.source, generation);
+    void validateCurrentSource(snapshot.source, generation);
     if (
       state.currentRevision.validity === "INVALID" &&
       state.lastValidRevision &&
@@ -430,6 +447,43 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
       validateLastValidSource(state.lastValidRevision.source, state.lastValidRevision.sourceHash);
     }
     return state.project.draftSource;
+  }
+
+  async function adoptCommittedState(state: ProjectState): Promise<SourceSessionSnapshot> {
+    assertCommittedState(state, projectId);
+    if (disposed) return snapshot;
+    if (activeSave || savePump || queuedSave) {
+      throw clientStateError(
+        "CLIENT_SOURCE_SESSION_BUSY",
+        "The source session cannot adopt server state while a draft write is active.",
+      );
+    }
+    generation += 1;
+    clearDebounce();
+    persistedSource = state.project.draftSource;
+    persistedSourceHash = state.project.draftHash;
+    lastValidGraph = null;
+    workerOutcomes.clear();
+    serverOutcomes.clear();
+    failedWorkerHashes.clear();
+    serverOutcomes.set(persistedSourceHash, {
+      validity: state.currentRevision.validity,
+      diagnostics: [],
+      graph: null,
+    });
+    snapshot = initialSnapshot(state);
+    for (const listener of listeners) listener();
+    options.onAdoptCommittedSource?.(persistedSource);
+    options.onServerState?.(state);
+    await validateCurrentSource(snapshot.source, generation);
+    if (
+      state.currentRevision.validity === "INVALID" &&
+      state.lastValidRevision &&
+      state.lastValidRevision.sourceHash !== state.currentRevision.sourceHash
+    ) {
+      validateLastValidSource(state.lastValidRevision.source, state.lastValidRevision.sourceHash);
+    }
+    return snapshot;
   }
 
   function clearDebounce(): void {
@@ -455,12 +509,34 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
     start,
     edit,
     flush,
+    flushAndWait,
+    adoptCommittedState,
     retrySave,
     retryValidation,
     retryLocalDraft,
     loadServerDraft,
     dispose,
   };
+}
+
+function assertCommittedState(state: ProjectState, projectId: string): void {
+  if (
+    state.project.id !== projectId ||
+    state.currentRevision.projectId !== projectId ||
+    state.project.draftSource !== state.currentRevision.source ||
+    state.project.draftHash !== state.currentRevision.sourceHash ||
+    state.project.schemaRevisionNo !== state.currentRevision.revisionNo ||
+    state.project.parserVersion !== state.currentRevision.parserVersion
+  ) {
+    throw clientStateError(
+      "CLIENT_COMMITTED_STATE_MISMATCH",
+      "The committed project state did not satisfy the source session contract.",
+    );
+  }
+}
+
+function clientStateError(code: string, message: string): Error {
+  return Object.assign(new Error(message), { code });
 }
 
 function initialSnapshot(state: ProjectState): SourceSessionSnapshot {

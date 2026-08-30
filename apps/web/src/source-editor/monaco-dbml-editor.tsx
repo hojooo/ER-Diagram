@@ -29,6 +29,7 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
       onChange,
       onSave,
       onCursorPositionChange,
+      readOnly = false,
       loadRuntime = loadMonacoRuntime,
     },
     forwardedRef,
@@ -37,6 +38,7 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
     const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
     const modelRef = useRef<editor.ITextModel | null>(null);
     const monacoRef = useRef<MonacoRuntime | null>(null);
+    const readOnlyRef = useRef(readOnly);
     const initialSourceRef = useRef(initialSource);
     const diagnosticsRef = useRef(diagnostics);
     const onChangeRef = useRef(onChange);
@@ -49,6 +51,7 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
     onChangeRef.current = onChange;
     onSaveRef.current = onSave;
     onCursorPositionChangeRef.current = onCursorPositionChange;
+    readOnlyRef.current = readOnly;
 
     useImperativeHandle(
       forwardedRef,
@@ -121,6 +124,7 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
             tabSize: 2,
             theme: "vs-dark",
             wordWrap: "off",
+            readOnly: readOnlyRef.current,
           });
           activeEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
             onSaveRef.current();
@@ -129,7 +133,7 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
             if (!suppressChangeRef.current && model) onChangeRef.current(model.getValue());
           });
           cursorListener = activeEditor.onDidChangeCursorPosition((event) => {
-            if (!model) return;
+            if (suppressChangeRef.current || !model) return;
             onCursorPositionChangeRef.current?.({
               filepath: DBML_MAIN_FILEPATH,
               offset: model.getOffsetAt(event.position),
@@ -160,6 +164,10 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
         monacoRef.current = null;
       };
     }, [loadRuntime, projectId]);
+
+    useEffect(() => {
+      editorRef.current?.updateOptions({ readOnly });
+    }, [readOnly]);
 
     useEffect(() => {
       const monaco = monacoRef.current;
