@@ -123,6 +123,18 @@ Pinned DBML v2 grammar가 empty table을 거부하므로 `CREATE_TABLE` command�
 filter 또는 opaque expression dependency를 자동 cascade하지 않으며, semantic no-op은 빈 edit와 빈 diff로
 성공한다.
 
+Reference·index·check patch도 같은 verified transform pipeline을 사용한다. Inline `ref`는 anonymous
+single-column이며 standalone setting이 필요 없는 동안만 inline으로 유지하고, 그 범위를 넘는 update는
+정확한 repeated `ref` occurrence를 제거한 뒤 standalone `Ref`로 materialize한다. Repeated column `check`
+setting도 target occurrence만 수정하고 sibling setting은 byte-identical하게 유지한다.
+
+Anonymous index/check의 semantic signature가 중복되면 occurrence ordinal이 edit 후 재배치될 수 있으므로
+visual mutation을 차단한다. Pinned grammar가 표현하지 못하는 non-public top-level Ref, named column check,
+expression primary index와 안전하게 quote할 수 없는 expression도 capability diagnostic으로 source editor에
+위임한다. Mixed index term은 pinned parser가 expression을 column보다 앞으로 정규화하므로 visual command가
+요구한 ordered term을 보존할 수 있는 expression-first 조합만 허용한다. 모든 실제 change는 target element의
+ADD/DELETE/UPDATE closure와 정확히 일치하고 rename candidate나 새 warning을 만들지 않아야 한다.
+
 M0에서는 `CreateColumn` 한 종류로 이 경계를 증명한다. 대상 block 밖의 comment, partial, view와 formatting은 byte-identical이어야 하며 full-model DBML regeneration은 canonical source 갱신 경로로 사용하지 않는다.
 
 ## Alternatives considered
