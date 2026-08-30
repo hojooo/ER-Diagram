@@ -357,6 +357,549 @@ export const saveLayoutRequestSchema = z
   .strict();
 export type SaveLayoutRequest = z.infer<typeof saveLayoutRequestSchema>;
 
+export const visualCommandKindSchema = z.enum([
+  "CREATE_TABLE",
+  "UPDATE_TABLE",
+  "RENAME_TABLE",
+  "DELETE_TABLE",
+  "CREATE_COLUMN",
+  "UPDATE_COLUMN",
+  "RENAME_COLUMN",
+  "REORDER_COLUMN",
+  "DELETE_COLUMN",
+  "CREATE_REFERENCE",
+  "UPDATE_REFERENCE",
+  "DELETE_REFERENCE",
+  "CREATE_INDEX",
+  "UPDATE_INDEX",
+  "DELETE_INDEX",
+  "CREATE_CHECK",
+  "UPDATE_CHECK",
+  "DELETE_CHECK",
+  "UPDATE_GROUP_MEMBERSHIP",
+  "UPDATE_DIAGRAM_VIEW",
+]);
+export type VisualCommandKind = z.infer<typeof visualCommandKindSchema>;
+
+const visualIdentifierSchema = z
+  .string()
+  .refine((value) => value.trim().length > 0, "Identifier must not be blank.")
+  .refine((value) => !/[\0\r\n]/u.test(value), "Identifier must be a single line.");
+
+const visualNoteSchema = z
+  .string()
+  .refine((value) => !value.includes("\0"), "Note must not contain a null character.");
+
+const visualExpressionSchema = z
+  .string()
+  .refine((value) => value.trim().length > 0, "Expression must not be blank.")
+  .refine((value) => !value.includes("\0"), "Expression must not contain a null character.");
+
+export const visualDbmlTypeSchema = z
+  .string()
+  .refine((value) => value.trim().length > 0, "DBML type must not be blank.")
+  .refine((value) => !/[\0\r\n{};]/u.test(value), "DBML type must be a safe single line.")
+  .refine(
+    (value) => !value.includes("//") && !value.includes("/*") && !value.includes("*/"),
+    "DBML type must not contain a comment delimiter.",
+  );
+export type VisualDbmlType = z.infer<typeof visualDbmlTypeSchema>;
+
+export const visualColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/u);
+export type VisualColor = z.infer<typeof visualColorSchema>;
+
+function visualElementKeyFor(kind: string) {
+  return z.string().regex(new RegExp(`^${kind}:.+`, "u"));
+}
+
+export const visualTableKeySchema = visualElementKeyFor("table");
+export const visualColumnKeySchema = visualElementKeyFor("column");
+export const visualReferenceKeySchema = visualElementKeyFor("reference");
+export const visualIndexKeySchema = visualElementKeyFor("index");
+export const visualCheckKeySchema = visualElementKeyFor("check");
+export const visualGroupKeySchema = visualElementKeyFor("group");
+export const visualViewKeySchema = visualElementKeyFor("view");
+export const visualNoteKeySchema = visualElementKeyFor("note");
+
+function uniqueStringArraySchema(itemSchema: z.ZodString) {
+  return z.array(itemSchema).superRefine((values, context) => {
+    const seen = new Set<string>();
+    for (const [index, value] of values.entries()) {
+      if (seen.has(value)) {
+        context.addIssue({
+          code: "custom",
+          message: "Keys must be unique.",
+          path: [index],
+        });
+      }
+      seen.add(value);
+    }
+  });
+}
+
+const visualTableKeysSchema = uniqueStringArraySchema(visualTableKeySchema);
+const visualColumnKeysSchema = uniqueStringArraySchema(visualColumnKeySchema);
+const visualGroupKeysSchema = uniqueStringArraySchema(visualGroupKeySchema);
+const visualNoteKeysSchema = uniqueStringArraySchema(visualNoteKeySchema);
+const visualSchemaNamesSchema = uniqueStringArraySchema(visualIdentifierSchema);
+
+function requireNonEmptyPatch(value: Record<string, unknown>, context: z.RefinementCtx): void {
+  if (!Object.values(value).some((field) => field !== undefined)) {
+    context.addIssue({ code: "custom", message: "At least one change is required." });
+  }
+}
+
+const visualCommandBaseShape = {
+  commandId: commandIdSchema,
+  expectedSchemaRevisionNo: schemaRevisionNoSchema,
+};
+
+const visualTableValueSchema = z
+  .object({
+    schemaName: visualIdentifierSchema,
+    name: visualIdentifierSchema,
+    note: visualNoteSchema.nullable(),
+    color: visualColorSchema.nullable(),
+  })
+  .strict();
+
+const visualTableChangesSchema = z
+  .object({
+    note: visualNoteSchema.nullable().optional(),
+    color: visualColorSchema.nullable().optional(),
+  })
+  .strict()
+  .superRefine(requireNonEmptyPatch);
+
+export const createTableCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("CREATE_TABLE"),
+    table: visualTableValueSchema,
+  })
+  .strict();
+export type CreateTableCommand = z.infer<typeof createTableCommandSchema>;
+
+export const updateTableCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("UPDATE_TABLE"),
+    targetTableKey: visualTableKeySchema,
+    changes: visualTableChangesSchema,
+  })
+  .strict();
+export type UpdateTableCommand = z.infer<typeof updateTableCommandSchema>;
+
+export const renameTableCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("RENAME_TABLE"),
+    targetTableKey: visualTableKeySchema,
+    newName: visualIdentifierSchema,
+  })
+  .strict();
+export type RenameTableCommand = z.infer<typeof renameTableCommandSchema>;
+
+export const deleteTableCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("DELETE_TABLE"),
+    targetTableKey: visualTableKeySchema,
+  })
+  .strict();
+export type DeleteTableCommand = z.infer<typeof deleteTableCommandSchema>;
+
+const visualColumnDefaultNumberSchema = z
+  .object({ type: z.literal("number"), value: z.number().finite() })
+  .strict();
+const visualColumnDefaultStringSchema = z
+  .object({ type: z.literal("string"), value: z.string() })
+  .strict();
+const visualColumnDefaultBooleanSchema = z
+  .object({ type: z.literal("boolean"), value: z.boolean() })
+  .strict();
+const visualColumnDefaultExpressionSchema = z
+  .object({ type: z.literal("expression"), value: visualExpressionSchema })
+  .strict();
+const visualColumnDefaultNullSchema = z
+  .object({ type: z.literal("null"), value: z.null() })
+  .strict();
+
+export const visualColumnDefaultSchema = z.discriminatedUnion("type", [
+  visualColumnDefaultNumberSchema,
+  visualColumnDefaultStringSchema,
+  visualColumnDefaultBooleanSchema,
+  visualColumnDefaultExpressionSchema,
+  visualColumnDefaultNullSchema,
+]);
+export type VisualColumnDefault = z.infer<typeof visualColumnDefaultSchema>;
+
+const visualColumnValueSchema = z
+  .object({
+    name: visualIdentifierSchema,
+    type: visualDbmlTypeSchema,
+    primaryKey: z.boolean(),
+    unique: z.boolean(),
+    notNull: z.boolean(),
+    default: visualColumnDefaultSchema.nullable(),
+    increment: z.boolean(),
+    note: visualNoteSchema.nullable(),
+  })
+  .strict();
+
+const visualColumnChangesSchema = z
+  .object({
+    type: visualDbmlTypeSchema.optional(),
+    primaryKey: z.boolean().optional(),
+    unique: z.boolean().optional(),
+    notNull: z.boolean().optional(),
+    default: visualColumnDefaultSchema.nullable().optional(),
+    increment: z.boolean().optional(),
+    note: visualNoteSchema.nullable().optional(),
+  })
+  .strict()
+  .superRefine(requireNonEmptyPatch);
+
+export const createColumnCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("CREATE_COLUMN"),
+    targetTableKey: visualTableKeySchema,
+    column: visualColumnValueSchema,
+  })
+  .strict();
+export type CreateColumnCommand = z.infer<typeof createColumnCommandSchema>;
+
+export const updateColumnCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("UPDATE_COLUMN"),
+    targetTableKey: visualTableKeySchema,
+    targetColumnKey: visualColumnKeySchema,
+    changes: visualColumnChangesSchema,
+  })
+  .strict();
+export type UpdateColumnCommand = z.infer<typeof updateColumnCommandSchema>;
+
+export const renameColumnCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("RENAME_COLUMN"),
+    targetTableKey: visualTableKeySchema,
+    targetColumnKey: visualColumnKeySchema,
+    newName: visualIdentifierSchema,
+  })
+  .strict();
+export type RenameColumnCommand = z.infer<typeof renameColumnCommandSchema>;
+
+export const reorderColumnCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("REORDER_COLUMN"),
+    targetTableKey: visualTableKeySchema,
+    targetColumnKey: visualColumnKeySchema,
+    beforeColumnKey: visualColumnKeySchema.nullable(),
+  })
+  .strict()
+  .superRefine((command, context) => {
+    if (command.beforeColumnKey === command.targetColumnKey) {
+      context.addIssue({
+        code: "custom",
+        message: "A column cannot be ordered before itself.",
+        path: ["beforeColumnKey"],
+      });
+    }
+  });
+export type ReorderColumnCommand = z.infer<typeof reorderColumnCommandSchema>;
+
+export const deleteColumnCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("DELETE_COLUMN"),
+    targetTableKey: visualTableKeySchema,
+    targetColumnKey: visualColumnKeySchema,
+  })
+  .strict();
+export type DeleteColumnCommand = z.infer<typeof deleteColumnCommandSchema>;
+
+export const visualReferenceActionSchema = z.enum([
+  "cascade",
+  "restrict",
+  "set null",
+  "set default",
+  "no action",
+]);
+export type VisualReferenceAction = z.infer<typeof visualReferenceActionSchema>;
+
+export const visualReferenceMultiplicitySchema = z
+  .object({
+    min: z.union([z.literal(0), z.literal(1)]),
+    max: z.union([z.literal(1), z.null()]),
+  })
+  .strict();
+export type VisualReferenceMultiplicity = z.infer<typeof visualReferenceMultiplicitySchema>;
+
+export const visualReferenceEndpointSchema = z
+  .object({
+    tableKey: visualTableKeySchema,
+    columnKeys: visualColumnKeysSchema.min(1),
+    multiplicity: visualReferenceMultiplicitySchema,
+  })
+  .strict();
+export type VisualReferenceEndpoint = z.infer<typeof visualReferenceEndpointSchema>;
+
+const visualReferenceEndpointsSchema = z
+  .tuple([visualReferenceEndpointSchema, visualReferenceEndpointSchema])
+  .superRefine((endpoints, context) => {
+    if (endpoints[0].columnKeys.length !== endpoints[1].columnKeys.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Reference endpoints must contain the same number of columns.",
+      });
+    }
+  });
+
+const visualReferenceValueSchema = z
+  .object({
+    schemaName: visualIdentifierSchema,
+    name: visualIdentifierSchema.nullable(),
+    endpoints: visualReferenceEndpointsSchema,
+    onDelete: visualReferenceActionSchema.nullable(),
+    onUpdate: visualReferenceActionSchema.nullable(),
+    color: visualColorSchema.nullable(),
+    inactive: z.boolean(),
+  })
+  .strict();
+
+const visualReferenceChangesSchema = z
+  .object({
+    name: visualIdentifierSchema.nullable().optional(),
+    endpoints: visualReferenceEndpointsSchema.optional(),
+    onDelete: visualReferenceActionSchema.nullable().optional(),
+    onUpdate: visualReferenceActionSchema.nullable().optional(),
+    color: visualColorSchema.nullable().optional(),
+    inactive: z.boolean().optional(),
+  })
+  .strict()
+  .superRefine(requireNonEmptyPatch);
+
+export const createReferenceCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("CREATE_REFERENCE"),
+    reference: visualReferenceValueSchema,
+  })
+  .strict();
+export type CreateReferenceCommand = z.infer<typeof createReferenceCommandSchema>;
+
+export const updateReferenceCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("UPDATE_REFERENCE"),
+    targetReferenceKey: visualReferenceKeySchema,
+    changes: visualReferenceChangesSchema,
+  })
+  .strict();
+export type UpdateReferenceCommand = z.infer<typeof updateReferenceCommandSchema>;
+
+export const deleteReferenceCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("DELETE_REFERENCE"),
+    targetReferenceKey: visualReferenceKeySchema,
+  })
+  .strict();
+export type DeleteReferenceCommand = z.infer<typeof deleteReferenceCommandSchema>;
+
+const visualIndexColumnTermSchema = z
+  .object({ kind: z.literal("COLUMN"), columnKey: visualColumnKeySchema })
+  .strict();
+const visualIndexExpressionTermSchema = z
+  .object({ kind: z.literal("EXPRESSION"), expression: visualExpressionSchema })
+  .strict();
+
+export const visualIndexTermSchema = z.discriminatedUnion("kind", [
+  visualIndexColumnTermSchema,
+  visualIndexExpressionTermSchema,
+]);
+export type VisualIndexTerm = z.infer<typeof visualIndexTermSchema>;
+
+const visualIndexTermsSchema = z.array(visualIndexTermSchema).min(1);
+const visualIndexValueSchema = z
+  .object({
+    name: visualIdentifierSchema.nullable(),
+    terms: visualIndexTermsSchema,
+    type: visualDbmlTypeSchema.nullable(),
+    unique: z.boolean(),
+    primaryKey: z.boolean(),
+    note: visualNoteSchema.nullable(),
+  })
+  .strict();
+
+const visualIndexChangesSchema = z
+  .object({
+    name: visualIdentifierSchema.nullable().optional(),
+    terms: visualIndexTermsSchema.optional(),
+    type: visualDbmlTypeSchema.nullable().optional(),
+    unique: z.boolean().optional(),
+    primaryKey: z.boolean().optional(),
+    note: visualNoteSchema.nullable().optional(),
+  })
+  .strict()
+  .superRefine(requireNonEmptyPatch);
+
+export const createIndexCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("CREATE_INDEX"),
+    targetTableKey: visualTableKeySchema,
+    index: visualIndexValueSchema,
+  })
+  .strict();
+export type CreateIndexCommand = z.infer<typeof createIndexCommandSchema>;
+
+export const updateIndexCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("UPDATE_INDEX"),
+    targetTableKey: visualTableKeySchema,
+    targetIndexKey: visualIndexKeySchema,
+    changes: visualIndexChangesSchema,
+  })
+  .strict();
+export type UpdateIndexCommand = z.infer<typeof updateIndexCommandSchema>;
+
+export const deleteIndexCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("DELETE_INDEX"),
+    targetTableKey: visualTableKeySchema,
+    targetIndexKey: visualIndexKeySchema,
+  })
+  .strict();
+export type DeleteIndexCommand = z.infer<typeof deleteIndexCommandSchema>;
+
+const visualCheckValueSchema = z
+  .object({
+    name: visualIdentifierSchema.nullable(),
+    expression: visualExpressionSchema,
+  })
+  .strict();
+
+const visualCheckChangesSchema = z
+  .object({
+    name: visualIdentifierSchema.nullable().optional(),
+    expression: visualExpressionSchema.optional(),
+  })
+  .strict()
+  .superRefine(requireNonEmptyPatch);
+
+const visualCheckOwnerShape = {
+  targetTableKey: visualTableKeySchema,
+  ownerColumnKey: visualColumnKeySchema.nullable(),
+};
+
+export const createCheckCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("CREATE_CHECK"),
+    ...visualCheckOwnerShape,
+    check: visualCheckValueSchema,
+  })
+  .strict();
+export type CreateCheckCommand = z.infer<typeof createCheckCommandSchema>;
+
+export const updateCheckCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("UPDATE_CHECK"),
+    ...visualCheckOwnerShape,
+    targetCheckKey: visualCheckKeySchema,
+    changes: visualCheckChangesSchema,
+  })
+  .strict();
+export type UpdateCheckCommand = z.infer<typeof updateCheckCommandSchema>;
+
+export const deleteCheckCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("DELETE_CHECK"),
+    ...visualCheckOwnerShape,
+    targetCheckKey: visualCheckKeySchema,
+  })
+  .strict();
+export type DeleteCheckCommand = z.infer<typeof deleteCheckCommandSchema>;
+
+export const updateGroupMembershipCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("UPDATE_GROUP_MEMBERSHIP"),
+    targetGroupKey: visualGroupKeySchema,
+    addTableKeys: visualTableKeysSchema,
+    removeTableKeys: visualTableKeysSchema,
+  })
+  .strict()
+  .superRefine((command, context) => {
+    if (command.addTableKeys.length === 0 && command.removeTableKeys.length === 0) {
+      context.addIssue({ code: "custom", message: "At least one membership change is required." });
+    }
+    const removed = new Set(command.removeTableKeys);
+    for (const [index, key] of command.addTableKeys.entries()) {
+      if (removed.has(key)) {
+        context.addIssue({
+          code: "custom",
+          message: "A table cannot be added and removed in the same command.",
+          path: ["addTableKeys", index],
+        });
+      }
+    }
+  });
+export type UpdateGroupMembershipCommand = z.infer<typeof updateGroupMembershipCommandSchema>;
+
+const visualDiagramViewChangesSchema = z
+  .object({
+    visibleTableKeys: visualTableKeysSchema.nullable().optional(),
+    visibleNoteKeys: visualNoteKeysSchema.nullable().optional(),
+    visibleGroupKeys: visualGroupKeysSchema.nullable().optional(),
+    visibleSchemaNames: visualSchemaNamesSchema.nullable().optional(),
+  })
+  .strict()
+  .superRefine(requireNonEmptyPatch);
+
+export const updateDiagramViewCommandSchema = z
+  .object({
+    ...visualCommandBaseShape,
+    kind: z.literal("UPDATE_DIAGRAM_VIEW"),
+    targetViewKey: visualViewKeySchema,
+    changes: visualDiagramViewChangesSchema,
+  })
+  .strict();
+export type UpdateDiagramViewCommand = z.infer<typeof updateDiagramViewCommandSchema>;
+
+export const visualCommandSchema = z.discriminatedUnion("kind", [
+  createTableCommandSchema,
+  updateTableCommandSchema,
+  renameTableCommandSchema,
+  deleteTableCommandSchema,
+  createColumnCommandSchema,
+  updateColumnCommandSchema,
+  renameColumnCommandSchema,
+  reorderColumnCommandSchema,
+  deleteColumnCommandSchema,
+  createReferenceCommandSchema,
+  updateReferenceCommandSchema,
+  deleteReferenceCommandSchema,
+  createIndexCommandSchema,
+  updateIndexCommandSchema,
+  deleteIndexCommandSchema,
+  createCheckCommandSchema,
+  updateCheckCommandSchema,
+  deleteCheckCommandSchema,
+  updateGroupMembershipCommandSchema,
+  updateDiagramViewCommandSchema,
+]);
+export type VisualCommand = z.infer<typeof visualCommandSchema>;
+
 export const sqlCapabilityIdSchema = z.enum([
   "ALTER_ADD_FOREIGN_KEY",
   "ALTER_ADD_UNIQUE",

@@ -89,6 +89,19 @@ position과 viewport를 저장하며 Cancel은 추가 write 없이 exact baselin
 view의 position, viewport, collapse, hidden state와 LOD 전체를 fresh ELK 결과로 교체하고 worker 또는 save가
 실패하면 기존 durable row를 보존한다.
 
+Visual schema mutation의 public contract는 `commandId`, positive `expectedSchemaRevisionNo`와 explicit
+`kind`를 가진 strict discriminated union이다. Command target은 parser object나 source offset이 아니라
+normalized graph의 kind-qualified stable key로 지정한다. Table·column rename은 일반 update patch에
+숨기지 않고 별도 command로 표현해 key 변경과 후속 layout migration을 명시적으로 처리할 수 있게 한다.
+그 밖의 update는 non-empty `changes` patch만 허용하고, create는 현재 visual catalog가 소유하는 값을
+명시적으로 전달한다.
+
+이 wire contract는 canonical source를 소유하거나 domain correctness를 확정하지 않는다. Zod는 variant
+shape, key kind prefix와 command-local 구조를 검증하고, target 존재·owner 관계·이름 충돌·partial
+provenance·dialect capability는 current graph resolve와 application 단계에 남긴다. 검증된 command도
+source-position `TextEdit`, DBML v2 full reparse와 expected semantic diff가 모두 통과해야만 canonical
+source를 변경할 수 있다.
+
 Visual mutation은 source position을 기준으로 가장 작은 `TextEdit[]`를 만든다. Edit는 offset 내림차순으로 적용하고 수정된 전체 source를 DBML v2로 다시 parse한다. Reparse 결과의 semantic diff가 command가 기대한 변경과 정확히 일치할 때만 source를 commit한다. 실패하면 원본을 유지하고 diagnostic을 반환한다.
 
 M0에서는 `CreateColumn` 한 종류로 이 경계를 증명한다. 대상 block 밖의 comment, partial, view와 formatting은 byte-identical이어야 하며 full-model DBML regeneration은 canonical source 갱신 경로로 사용하지 않는다.

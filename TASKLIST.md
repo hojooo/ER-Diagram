@@ -105,8 +105,8 @@ docs/
 - `ConversionStatus`: `EXACT | NORMALIZED | PARTIAL | UNSUPPORTED | ERROR`
 - `SchemaGraph`: parser version, semantic hash, tables, enums, references, groups, partials,
   views, diagnostics, source map을 갖는 parser-neutral graph다.
-- `VisualCommand`: table, column, reference, index, group, view 생성·수정·삭제를 나타내는
-  Zod discriminated union이다.
+- `VisualCommand`: expected schema revision과 command ID를 포함하고 table, column, reference,
+  index, check, group, view의 20개 mutation을 구분하는 strict Zod discriminated union이다.
 - 모든 visual mutation은 `VisualCommand → TextEdit[] → full reparse → expected semantic diff`
   순서를 통과해야 한다.
 
@@ -246,8 +246,9 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
 
 ### Milestone 3 — Visual Schema Editing
 
-- [ ] `M3-001` expected revision을 포함한 `VisualCommand` Zod union
-  - 검증: `pnpm --filter @er-diagram/contracts test visual-command`
+- [x] `M3-001` expected revision을 포함한 `VisualCommand` Zod union
+  - 20개 command와 strict payload, typed default, stable-key kind, non-empty patch를 검증한다.
+  - 검증: `pnpm --filter @er-diagram/contracts test test/visual-command.test.ts`
 - [ ] `M3-002` table/column create/update/rename/reorder/delete minimal patch
   - 검증: `pnpm --filter @er-diagram/source-transform test table-column`
 - [ ] `M3-003` reference/index/constraint patch와 DBML capability guard
