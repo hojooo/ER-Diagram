@@ -420,6 +420,10 @@ export const visualCheckKeySchema = visualElementKeyFor("check");
 export const visualGroupKeySchema = visualElementKeyFor("group");
 export const visualViewKeySchema = visualElementKeyFor("view");
 export const visualNoteKeySchema = visualElementKeyFor("note");
+export const visualPartialKeySchema = visualElementKeyFor("partial");
+export const visualPartialColumnKeySchema = visualElementKeyFor("partialColumn");
+export const visualPartialIndexKeySchema = visualElementKeyFor("partialIndex");
+export const visualPartialCheckKeySchema = visualElementKeyFor("partialCheck");
 
 function uniqueStringArraySchema(itemSchema: z.ZodString) {
   return z.array(itemSchema).superRefine((values, context) => {
@@ -917,6 +921,78 @@ export const visualCommandSchema = z.discriminatedUnion("kind", [
   updateDiagramViewCommandSchema,
 ]);
 export type VisualCommand = z.infer<typeof visualCommandSchema>;
+export const visualCommandRequestSchema = visualCommandSchema;
+export type VisualCommandRequest = z.infer<typeof visualCommandRequestSchema>;
+
+const visualCommandPartialElementKeySchema = z.union([
+  visualPartialColumnKeySchema,
+  visualPartialIndexKeySchema,
+  visualPartialCheckKeySchema,
+]);
+
+const visualCommandAffectedTableSchema = z
+  .object({
+    tableKey: visualTableKeySchema,
+    injectionRange: sourceRangeSchema,
+  })
+  .strict();
+
+const visualCommandAffectedTablesSchema = z
+  .array(visualCommandAffectedTableSchema)
+  .min(1)
+  .superRefine((affectedTables, context) => {
+    const tableKeys = new Set<string>();
+    const injectionRanges = new Set<string>();
+    let previousTableKey: string | undefined;
+    for (const [index, affectedTable] of affectedTables.entries()) {
+      if (tableKeys.has(affectedTable.tableKey)) {
+        context.addIssue({
+          code: "custom",
+          message: "Affected table keys must be unique.",
+          path: [index, "tableKey"],
+        });
+      }
+      tableKeys.add(affectedTable.tableKey);
+
+      if (
+        previousTableKey !== undefined &&
+        compareCodeUnits(previousTableKey, affectedTable.tableKey) >= 0
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "Affected tables must be sorted by stable key.",
+          path: [index, "tableKey"],
+        });
+      }
+      previousTableKey = affectedTable.tableKey;
+
+      const { filepath, startOffset, endOffset } = affectedTable.injectionRange;
+      const rangeIdentity = `${filepath}\u0000${String(startOffset)}\u0000${String(endOffset)}`;
+      if (injectionRanges.has(rangeIdentity)) {
+        context.addIssue({
+          code: "custom",
+          message: "Affected table injection ranges must be unique.",
+          path: [index, "injectionRange"],
+        });
+      }
+      injectionRanges.add(rangeIdentity);
+    }
+  });
+
+export const visualCommandPartialImpactSchema = z
+  .object({
+    partialKey: visualPartialKeySchema,
+    partialName: visualIdentifierSchema,
+    partialElementKey: visualCommandPartialElementKeySchema,
+    definitionRange: sourceRangeSchema,
+    affectedTables: visualCommandAffectedTablesSchema,
+  })
+  .strict();
+export type VisualCommandPartialImpact = z.infer<typeof visualCommandPartialImpactSchema>;
+
+function compareCodeUnits(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
 
 export const sqlCapabilityIdSchema = z.enum([
   "ALTER_ADD_FOREIGN_KEY",
@@ -1463,6 +1539,18 @@ export const layoutMutationResponseSchema = z
   .strict();
 export type LayoutMutationResponse = z.infer<typeof layoutMutationResponseSchema>;
 
+export const visualCommandMutationResponseSchema = z
+  .object({
+    state: projectStateSchema,
+    revisionCreated: z.boolean(),
+    layoutMigrated: z.boolean(),
+    replayed: z.boolean(),
+    appliedSchemaRevisionNo: schemaRevisionNoSchema,
+    appliedLayoutRevisionNo: layoutRevisionNoSchema,
+  })
+  .strict();
+export type VisualCommandMutationResponse = z.infer<typeof visualCommandMutationResponseSchema>;
+
 export const errorResponseSchema = z
   .object({
     code: z.string().min(1),
@@ -1470,6 +1558,7 @@ export const errorResponseSchema = z
     correlationId: correlationIdSchema,
     currentRevisionNo: layoutRevisionNoSchema.optional(),
     diagnostics: z.array(diagnosticSchema).optional(),
+    partialImpact: visualCommandPartialImpactSchema.optional(),
   })
   .strict();
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;
