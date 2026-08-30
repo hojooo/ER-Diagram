@@ -235,6 +235,38 @@ describe("DiagramView source patches", () => {
     ]);
   });
 
+  it("represents one all-filter without changing the other active filters", async () => {
+    const result = await expectSuccess(
+      source,
+      command({
+        kind: "UPDATE_DIAGRAM_VIEW",
+        targetViewKey: VIEW_KEY,
+        changes: { visibleTableKeys: [] },
+      }),
+    );
+    const graph = await graphOf(result.source);
+
+    expect(graph.views[0]).toMatchObject({
+      visibleTableKeys: [],
+      visibleNoteKeys: [NOTE_KEY],
+      visibleGroupKeys: [GROUP_KEY],
+      visibleSchemaNames: ["public"],
+    });
+    expect(result.source).toContain("// view comment must survive");
+    expect(result.source).toContain('Notes { "docs.note" }');
+    expect(result.source).toContain('TableGroups { "identity domain" }');
+    expect(result.source).toContain("Schemas { public }");
+    expect(result.semanticDiff.changes).toEqual([
+      {
+        operation: "UPDATE",
+        elementKind: "view",
+        key: VIEW_KEY,
+        parentKey: null,
+        changedFields: ["visibleTableKeys"],
+      },
+    ]);
+  });
+
   it("preserves [] | non-empty | null tri-state for every filter kind", async () => {
     const all = await expectSuccess(
       source,
