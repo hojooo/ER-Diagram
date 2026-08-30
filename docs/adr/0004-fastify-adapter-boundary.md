@@ -43,6 +43,13 @@ Fastify를 P0 HTTP/CLI adapter와 composition root로 사용하고 import를 `ap
 - Export conversion의 fatal result는 검토 가능한 report를 포함한 HTTP `200`으로 mapping한다. Project 부재는
   `404`, stale revision은 `409`, invalid current 또는 last-valid 부재는 `422`, stored project invariant는
   source를 가린 `500`으로 mapping한다.
+- Visual command route는 strict command/path validation, `x-command-id` echo, Core application 호출과
+  response validation만 수행한다. Source transform, semantic verification, idempotent receipt와 SQLite
+  transaction은 handler에서 실행하지 않는다.
+- Visual command의 project 부재는 `404`, stale revision·command ID reuse·layout migration conflict는
+  `409`, invalid command·invalid draft·transform failure는 `422`로 mapping한다. Transform diagnostic과
+  partial impact range에는 adapter filepath `/main.dbml`을 결합하되 canonical source, command payload,
+  text edit, semantic diff와 persistence 원인은 error response에 포함하지 않는다.
 
 NestJS 전환이 필요하면 `apps/server` adapter와 composition을 교체하고 contracts, use cases, ports, SQLite adapter를 재사용한다. Authentication, multi-user authorization, queue, WebSocket 또는 복잡한 integration 요구가 실제로 확정될 때 별도 ADR을 작성한다. Spring Boot는 JVM 조직 표준이나 enterprise integration이 제품 핵심이 되는 경우에만 다시 검토한다.
 
@@ -65,7 +72,8 @@ Module, decorator와 integration ecosystem은 향후 복잡한 server에는 유�
 - P0 server 구현과 integration test가 작고 명시적이다.
 - Fastify-specific plugin, lifecycle과 error mapping은 `apps/server`에서만 관리한다.
 - Fastify `inject` test는 실제 file-backed SQLite adapter까지 연결하되 server factory에는 project,
-  layout, SQL import와 SQL export application을 주입해 persistence와 parser 정책을 HTTP handler에서 분리한다.
+  layout, SQL import/export와 visual command application을 주입해 persistence와 parser 정책을 HTTP
+  handler에서 분리한다.
 - Framework 교체 시 HTTP bootstrap과 adapter test는 다시 작성하지만 business rule과 persistence adapter는 유지할 수 있다.
 - Core contract 변경 없이 해결할 수 없는 server 요구가 생기면 먼저 제품 범위와 ADR을 갱신해야 한다.
 

@@ -11,6 +11,7 @@ import {
   createProjectApplication,
   createSqlExportApplication,
   type SqlImportApplication,
+  type VisualCommandApplication,
 } from "@er-diagram/core";
 import {
   createSqliteLayoutRepository,
@@ -48,6 +49,7 @@ function fixture() {
     }),
     sqlImportApplication: {} as SqlImportApplication,
     sqlExportApplication: createSqlExportApplication({ persistence: projectRepository }),
+    visualCommandApplication: {} as VisualCommandApplication,
     generateCorrelationId: () => "123e4567-e89b-42d3-a456-426614174001",
   });
   resources.push({ server, storage });

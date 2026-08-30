@@ -15,6 +15,7 @@ import {
   type ProjectApplication,
   type SqlExportApplication,
   type SqlImportApplication,
+  type VisualCommandApplication,
 } from "@er-diagram/core";
 import {
   createSqliteLayoutRepository,
@@ -81,6 +82,7 @@ function trackedServer(
     layoutApplication,
     sqlImportApplication: {} as SqlImportApplication,
     sqlExportApplication: {} as SqlExportApplication,
+    visualCommandApplication: {} as VisualCommandApplication,
     generateCorrelationId: correlationGenerator(),
   });
   openServers.add(server);

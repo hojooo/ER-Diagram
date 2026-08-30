@@ -18,6 +18,7 @@ import {
   createProjectApplication,
   createSqlExportApplication,
   createSqlImportApplication,
+  type VisualCommandApplication,
 } from "@er-diagram/core";
 import {
   createSqliteLayoutRepository,
@@ -74,6 +75,7 @@ function openRuntime(filename: string): Runtime {
       now: () => toUtcIsoTimestamp(epochMs++),
     }),
     sqlExportApplication: createSqlExportApplication({ persistence: projectRepository }),
+    visualCommandApplication: {} as VisualCommandApplication,
     generateCorrelationId: () => CORRELATION_ID,
   });
   const runtime = { storage, server, importRepository };
