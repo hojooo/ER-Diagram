@@ -135,6 +135,22 @@ expression primary index와 안전하게 quote할 수 없는 expression도 capab
 요구한 ordered term을 보존할 수 있는 expression-first 조합만 허용한다. 모든 실제 change는 target element의
 ADD/DELETE/UPDATE closure와 정확히 일치하고 rename candidate나 새 warning을 만들지 않아야 한다.
 
+`TableGroup` membership은 normalized graph와 source declaration이 일대일로 대응할 때만 strict add/remove
+delta를 적용한다. 이미 존재하는 membership의 add, 존재하지 않는 membership의 remove와 다른 group에 이미
+속한 table의 add는 충돌로 처리한다. 신규 membership만 schema-qualified canonical identifier로 만들고 기존
+member, leading comment, note, color와 metadata는 그대로 둔다.
+
+`syncDiagramView`는 source 정본을 소유하지 않는 검증용 candidate다. 완전한 desired view를 공식 API에
+전달하되 결과가 item-level local patch와 byte-identical하여 comment, formatting과 요청하지 않은 filter를
+보존할 때만 채택한다. 그렇지 않으면 target filter의 entity token만 수정하는 local patch로 fallback한다.
+두 경로 모두 full reparse와 target view field allowlist를 통과해야 하며 `[]`, non-empty, `null` tri-state가
+달라지면 rollback한다.
+
+주입 element 보호는 provenance를 단순 boolean으로 축약하지 않는다. Partial element definition range와
+해당 partial을 주입한 모든 table의 injection range가 source map과 일치할 때만 결정론적으로 정렬된 impact를
+반환한다. 누락되거나 서로 다른 injection range를 하나로 추정하지 않으며, 이러한 불일치는 source range
+오류로 fail-closed 처리한다. Partial definition 자체는 canonical source editor에서만 변경한다.
+
 M0에서는 `CreateColumn` 한 종류로 이 경계를 증명한다. 대상 block 밖의 comment, partial, view와 formatting은 byte-identical이어야 하며 full-model DBML regeneration은 canonical source 갱신 경로로 사용하지 않는다.
 
 ## Alternatives considered

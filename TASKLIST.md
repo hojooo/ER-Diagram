@@ -257,8 +257,9 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - standalone·inline Ref, ordered composite endpoint와 16가지 multiplicity를 source-preserving edit로 처리한다.
   - index/check의 owner·PK·partial·anonymous identity와 pinned grammar capability를 fail-closed 검증한다.
   - 검증: `pnpm --filter @er-diagram/source-transform test test/relationships-indexes.test.ts`
-- [ ] `M3-004` group/view patch와 `TablePartial` provenance protection
-  - 검증: `pnpm --filter @er-diagram/source-transform test groups-views-partials`
+- [x] `M3-004` group/view patch와 `TablePartial` provenance protection
+  - strict membership delta, source-preserving view filter와 partial definition/affected-table impact를 구현한다.
+  - 검증: `pnpm --filter @er-diagram/source-transform test test/groups-views-partials.test.ts`
 - [ ] `M3-005` idempotent command application transaction과 layout rename migration
   - 검증: `pnpm --filter @er-diagram/core test visual-command-application`
 - [ ] `M3-006` thin Fastify visual-command API, 409/422, source redaction
