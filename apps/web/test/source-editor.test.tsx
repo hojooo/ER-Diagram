@@ -199,6 +199,7 @@ describe("DBML source workspace", () => {
     renderWorkspace(api);
     const editor = (await screen.findByLabelText("DBML source editor")) as HTMLTextAreaElement;
     await findWorkspaceStatus("Draft valid");
+    await waitFor(() => expect(api.getLayoutInputs).toHaveLength(1));
 
     vi.useFakeTimers();
     fireEvent.change(editor, { target: { value: SECOND_VALID_SOURCE } });
@@ -206,11 +207,21 @@ describe("DBML source workspace", () => {
     await settleReact();
     vi.useRealTimers();
 
-    const external = projectState(SERVER_SOURCE, 3, "VALID");
+    const externalState = projectState(SERVER_SOURCE, 3, "VALID");
+    const external = {
+      ...externalState,
+      project: { ...externalState.project, layoutRevisionNo: 7 },
+    };
     api.conflictOnce = external;
     fireEvent.click(screen.getByRole("button", { name: /Undo schema change, 1 step/ }));
 
     await waitFor(() => expect(editor).toHaveValue(domValue(SERVER_SOURCE)));
+    await waitFor(() => expect(api.getLayoutInputs).toHaveLength(2));
+    await waitFor(() =>
+      expect(screen.getByTestId("fake-diagram-layout-keys")).toHaveTextContent(
+        'table:["public","server_state"]',
+      ),
+    );
     expect(screen.getByText("Schema revision").nextElementSibling).toHaveTextContent("3");
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /Undo schema change, 0 steps/ })).toBeDisabled(),
@@ -645,6 +656,7 @@ function FakeSchemaDiagram({
   viewKey,
   detailLevel,
   collapsedGroupKeys,
+  layoutPositions,
   selectionStore,
   sourceNavigationEnabled,
   onToggleGroup,
@@ -665,6 +677,11 @@ function FakeSchemaDiagram({
       </output>
       <output data-testid="fake-diagram-detail">{detailLevel}</output>
       <output data-testid="fake-diagram-collapse-count">{collapsedGroupKeys.size}</output>
+      <output data-testid="fake-diagram-layout-keys">
+        {Object.keys(layoutPositions ?? {})
+          .sort()
+          .join(",")}
+      </output>
       {graph.groups[0] ? (
         <button type="button" onClick={() => onToggleGroup(graph.groups[0]?.key ?? "")}>
           Toggle first fake group
@@ -692,6 +709,7 @@ function FakeSchemaDiagram({
 
 class SourceProjectApi implements ProjectApi {
   readonly saveDraftInputs: SaveDraftInput[] = [];
+  readonly getLayoutInputs: Array<{ projectId: string; viewKey: string }> = [];
   conflictOnce: ProjectState | null = null;
   nextSave: Promise<ProjectMutationResponse> | null = null;
 
@@ -729,8 +747,26 @@ class SourceProjectApi implements ProjectApi {
     throw new Error("Revision restore is not expected in source editor tests.");
   }
 
-  async getLayout() {
-    return { layout: null, currentLayoutRevisionNo: this.state.project.layoutRevisionNo };
+  async getLayout(input: { projectId: string; viewKey: string }) {
+    this.getLayoutInputs.push(input);
+    const revisionNo = this.state.project.layoutRevisionNo;
+    return {
+      layout:
+        revisionNo === 0
+          ? null
+          : {
+              projectId: input.projectId,
+              viewKey: input.viewKey,
+              positions: { 'table:["public","server_state"]': { x: 320, y: 180 } },
+              collapsedGroupKeys: [],
+              hiddenElementKeys: [],
+              viewport: { x: 12, y: 24, zoom: 1.25 },
+              detailLevel: "FULL" as const,
+              baseSchemaHash: sha256(SERVER_SOURCE),
+              revisionNo,
+            },
+      currentLayoutRevisionNo: revisionNo,
+    };
   }
 
   applyVisualCommand: ProjectApi["applyVisualCommand"] = async () => {

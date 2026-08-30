@@ -114,6 +114,8 @@ export interface SchemaHistorySessionController {
   dispose(): void;
 }
 
+export type SchemaHistoryStateAdoption = "HISTORY_COMMIT" | "EXTERNAL_CONFLICT";
+
 export interface CreateSchemaHistorySessionOptions {
   readonly projectId: string;
   readonly initialState: ProjectState;
@@ -125,7 +127,8 @@ export interface CreateSchemaHistorySessionOptions {
   ) => Promise<ProjectMutationResponse>;
   readonly adoptAuthoritativeState: (
     state: ProjectState,
-    diagnostics?: Readonly<ProjectMutationResponse["diagnostics"]>,
+    diagnostics: Readonly<ProjectMutationResponse["diagnostics"]>,
+    adoption: SchemaHistoryStateAdoption,
   ) => Promise<unknown>;
   readonly loadCurrentState: () => Promise<ProjectState>;
   readonly generateCommandId?: () => string;
@@ -448,7 +451,7 @@ export function createSchemaHistorySession(
         return;
       }
 
-      await options.adoptAuthoritativeState(latest);
+      await options.adoptAuthoritativeState(latest, [], "EXTERNAL_CONFLICT");
       fields = {
         status: "CONFLICT",
         current: point,
@@ -481,7 +484,7 @@ export function createSchemaHistorySession(
     pending: SchemaHistoryPendingOperation,
     diagnostics: Readonly<ProjectMutationResponse["diagnostics"]> = [],
   ): Promise<void> {
-    await options.adoptAuthoritativeState(state, diagnostics);
+    await options.adoptAuthoritativeState(state, diagnostics, "HISTORY_COMMIT");
 
     if (pending.kind === "UNDO") {
       if (fields.past.at(-1) !== pending.step) {

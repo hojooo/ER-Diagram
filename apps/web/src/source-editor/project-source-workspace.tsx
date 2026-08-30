@@ -542,7 +542,7 @@ export function ProjectSourceWorkspace({
       },
       saveDraft: (input) => api.saveDraft(input),
       restoreRevision: (input) => api.restoreRevision(input),
-      adoptAuthoritativeState: async (state, diagnostics) => {
+      adoptAuthoritativeState: async (state, diagnostics, adoption) => {
         const adopted = await sourceSession.adoptCommittedState(state, diagnostics);
         if (
           adopted.persistence !== "SAVED" ||
@@ -555,7 +555,10 @@ export function ProjectSourceWorkspace({
             "The committed history state could not be adopted.",
           );
         }
-        await layoutSession.adoptCommittedRevision(state.project.layoutRevisionNo, false);
+        await layoutSession.adoptCommittedRevision(
+          state.project.layoutRevisionNo,
+          adoption === "EXTERNAL_CONFLICT",
+        );
         queryClient.setQueryData<ProjectResponse>(projectQueryKeys.detail(projectId), { state });
         void queryClient.invalidateQueries({ queryKey: projectQueryKeys.list });
         void queryClient.invalidateQueries({ queryKey: projectQueryKeys.revisions(projectId) });

@@ -329,7 +329,7 @@ describe("schema history session", () => {
     await harness.session.retrySafely();
 
     expect(harness.loadCurrentState).toHaveBeenCalledOnce();
-    expect(harness.adoptAuthoritativeState).toHaveBeenCalledWith(committed, []);
+    expect(harness.adoptAuthoritativeState).toHaveBeenCalledWith(committed, [], "HISTORY_COMMIT");
     expect(harness.session.getSnapshot()).toMatchObject({
       status: "SUCCEEDED",
       current: { revisionNo: 3, sourceHash: hash(SOURCE_A), origin: "SOURCE_EDIT" },
@@ -349,7 +349,7 @@ describe("schema history session", () => {
 
     await harness.session.undo();
 
-    expect(harness.adoptAuthoritativeState).toHaveBeenCalledWith(external);
+    expect(harness.adoptAuthoritativeState).toHaveBeenCalledWith(external, [], "EXTERNAL_CONFLICT");
     expect(harness.session.getSnapshot()).toMatchObject({
       status: "CONFLICT",
       locked: false,
