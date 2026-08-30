@@ -272,8 +272,11 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
 - [x] `M3-007` accessible visual inspector/form과 source fallback
   - selection-driven inspector에서 20종 command를 제공하고 source/layout flush, authoritative state adoption, safe replay와 partial source fallback을 적용한다.
   - 검증: `pnpm --filter @er-diagram/web test test/visual-editor.test.tsx`
-- [ ] `M3-008` source/visual session undo-redo와 durable restore
-  - 검증: `pnpm test:e2e undo-redo`
+- [x] `M3-008` source/visual session undo-redo와 durable restore
+  - project별 100단계 revision snapshot stack에서 source autosave와 visual command를 통합하고 reload·외부 conflict에서는 초기화한다.
+  - undo/redo는 pruning 대상 `SOURCE_EDIT`, 명시적 revision restore는 `RESTORE` checkpoint로 저장한다. Source-changing restore만 undo step이며 layout은 복구하지 않는다.
+  - source-free History, invalid revision restore와 accessible button·shortcut·상태를 제공한다.
+  - 검증: `pnpm --filter @er-diagram/web test test/history-session.test.ts test/history-ui.test.tsx && pnpm test:e2e undo-redo`
 - [ ] `M3-GATE` unrelated source preservation, reparse, semantic diff, rollback 통과
 
 ### Milestone 4 — Security, Recovery, Open-source Release

@@ -12,10 +12,10 @@ import type {
   CreateProjectInput,
   DeleteProjectInput,
   DuplicateProjectInput,
-  SaveLayoutInput,
   ProjectApi,
   RenameProjectInput,
   SaveDraftInput,
+  SaveLayoutInput,
 } from "../src/projects/project-api.js";
 import { ProjectApiError } from "../src/projects/project-api.js";
 import type { SourceEditorComponent } from "../src/source-editor/editor-contract.js";
@@ -116,6 +116,14 @@ class FakeProjectApi implements ProjectApi {
       });
     }
     return { state };
+  }
+
+  async listRevisions() {
+    return { revisions: [] };
+  }
+
+  async restoreRevision(): Promise<never> {
+    throw new Error("Revision restore is not used by this fixture.");
   }
 
   async getLayout() {

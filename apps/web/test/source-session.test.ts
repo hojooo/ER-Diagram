@@ -314,6 +314,27 @@ describe("source session autosave", () => {
     session.dispose();
   });
 
+  it("reports the before state and authoritative response for a committed draft write", async () => {
+    vi.useFakeTimers();
+    const before = projectState(VALID_SOURCE, 1, "VALID");
+    const response = mutation(EDITED_SOURCE, 2, "VALID");
+    const onDraftCommitted = vi.fn();
+    const session = createSession({
+      initialState: before,
+      saveDraft: async () => response,
+      onDraftCommitted,
+    });
+    session.start();
+    await settle();
+
+    session.edit(EDITED_SOURCE);
+    await vi.advanceTimersByTimeAsync(SOURCE_AUTOSAVE_DEBOUNCE_MS);
+    await settle();
+
+    expect(onDraftCommitted).toHaveBeenCalledExactlyOnceWith(before, response);
+    session.dispose();
+  });
+
   it("adopts an authoritative visual-command state without creating a draft write", async () => {
     const saveDraft = vi.fn();
     const parseSource = vi.fn(async (source: string) => validParse(source));
@@ -334,6 +355,35 @@ describe("source session autosave", () => {
       validation: "VALID",
       activeGraphSource: "CURRENT_DRAFT",
       expectedSchemaRevisionNo: 2,
+    });
+    session.dispose();
+  });
+
+  it("keeps authoritative diagnostics when worker validation fails after state adoption", async () => {
+    const serverDiagnostic: Diagnostic = {
+      code: "DBML_PARSE_SYNTAX_UNEXPECTED_TOKEN",
+      message: "Unexpected token.",
+      severity: "ERROR",
+    };
+    const session = createSession({
+      parseSource: async (source) => {
+        if (source === INVALID_SOURCE) throw new Error("private worker failure");
+        return validParse(source);
+      },
+    });
+    session.start();
+    await settle();
+
+    const adopted = await session.adoptCommittedState(projectState(INVALID_SOURCE, 2, "INVALID"), [
+      serverDiagnostic,
+    ]);
+
+    expect(adopted).toMatchObject({
+      source: INVALID_SOURCE,
+      persistence: "SAVED",
+      validation: "ERROR",
+      diagnostics: [serverDiagnostic],
+      validationError: { code: "PARSER_WORKER_UNAVAILABLE" },
     });
     session.dispose();
   });

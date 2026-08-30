@@ -133,6 +133,103 @@ describe("DBML source workspace", () => {
     expect(screen.getByText("Schema revision").nextElementSibling).toHaveTextContent("3");
   });
 
+  it("records committed source revisions and adopts undo and redo without a duplicate autosave", async () => {
+    const api = new SourceProjectApi(projectState(VALID_SOURCE, 1, "VALID"));
+    renderWorkspace(api);
+    const editor = (await screen.findByLabelText("DBML source editor")) as HTMLTextAreaElement;
+    await findWorkspaceStatus("Draft valid");
+
+    vi.useFakeTimers();
+    fireEvent.change(editor, { target: { value: SECOND_VALID_SOURCE } });
+    await act(() => vi.advanceTimersByTimeAsync(750));
+    await settleReact();
+
+    const undo = screen.getByRole("button", { name: /Undo schema change, 1 step/ });
+    expect(undo).toBeEnabled();
+    vi.useRealTimers();
+    fireEvent.click(screen.getByRole("button", { name: "Create table" }));
+    const tableName = await screen.findByLabelText("Table name");
+    fireEvent.keyDown(tableName, { key: "z", ctrlKey: true });
+    expect(api.saveDraftInputs).toHaveLength(1);
+    expect(screen.getByRole("button", { name: /Undo schema change, 1 step/ })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    fireEvent.keyDown(screen.getByTestId("fake-relationship-edge"), {
+      key: "z",
+      ctrlKey: true,
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Redo schema change, 1 step/ })).toBeEnabled(),
+    );
+
+    expect(api.saveDraftInputs).toHaveLength(2);
+    expect(api.saveDraftInputs[1]).toMatchObject({
+      projectId: PROJECT_ID,
+      source: VALID_SOURCE,
+      expectedSchemaRevisionNo: 2,
+      commandId: expect.any(String),
+    });
+    expect(editor).toHaveValue(domValue(VALID_SOURCE));
+    expect(screen.getByText("Schema revision").nextElementSibling).toHaveTextContent("3");
+
+    const redo = screen.getByRole("button", { name: /Redo schema change, 1 step/ });
+    expect(redo).toBeEnabled();
+    fireEvent.keyDown(screen.getByRole("application", { name: "ER diagram canvas" }), {
+      key: "z",
+      ctrlKey: true,
+      shiftKey: true,
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Undo schema change, 1 step/ })).toBeEnabled(),
+    );
+
+    expect(api.saveDraftInputs).toHaveLength(3);
+    expect(api.saveDraftInputs[2]).toMatchObject({
+      projectId: PROJECT_ID,
+      source: SECOND_VALID_SOURCE,
+      expectedSchemaRevisionNo: 3,
+      commandId: expect.any(String),
+    });
+    expect(editor).toHaveValue(domValue(SECOND_VALID_SOURCE));
+    expect(screen.getByText("Schema revision").nextElementSibling).toHaveTextContent("4");
+  });
+
+  it("adopts an external revision and resets workspace history after an undo conflict", async () => {
+    const api = new SourceProjectApi(projectState(VALID_SOURCE, 1, "VALID"));
+    renderWorkspace(api);
+    const editor = (await screen.findByLabelText("DBML source editor")) as HTMLTextAreaElement;
+    await findWorkspaceStatus("Draft valid");
+    await waitFor(() => expect(api.getLayoutInputs).toHaveLength(1));
+
+    vi.useFakeTimers();
+    fireEvent.change(editor, { target: { value: SECOND_VALID_SOURCE } });
+    await act(() => vi.advanceTimersByTimeAsync(750));
+    await settleReact();
+    vi.useRealTimers();
+
+    const externalState = projectState(SERVER_SOURCE, 3, "VALID");
+    const external = {
+      ...externalState,
+      project: { ...externalState.project, layoutRevisionNo: 7 },
+    };
+    api.conflictOnce = external;
+    fireEvent.click(screen.getByRole("button", { name: /Undo schema change, 1 step/ }));
+
+    await waitFor(() => expect(editor).toHaveValue(domValue(SERVER_SOURCE)));
+    await waitFor(() => expect(api.getLayoutInputs).toHaveLength(2));
+    await waitFor(() =>
+      expect(screen.getByTestId("fake-diagram-layout-keys")).toHaveTextContent(
+        'table:["public","server_state"]',
+      ),
+    );
+    expect(screen.getByText("Schema revision").nextElementSibling).toHaveTextContent("3");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Undo schema change, 0 steps/ })).toBeDisabled(),
+    );
+    expect(screen.getByRole("button", { name: /Redo schema change, 0 steps/ })).toBeDisabled();
+    expect(screen.getByText("The project revision is stale.")).toBeVisible();
+  });
+
   it("preserves the local buffer on 409 and retries only after the latest revision loads", async () => {
     const api = new SourceProjectApi(projectState(VALID_SOURCE, 1, "VALID"));
     api.conflictOnce = projectState(SERVER_SOURCE, 2, "VALID");
@@ -355,6 +452,8 @@ describe("Monaco DBML adapter", () => {
     const editorHandle = createRef<SourceEditorHandle>();
     const onChange = vi.fn();
     const onSave = vi.fn();
+    const onUndo = vi.fn();
+    const onRedo = vi.fn();
     const onCursorPositionChange = vi.fn();
     const source = 'Table "사용자😀" {\r\n  id int\r\n}\r\n';
     const markerDiagnostic: Diagnostic = {
@@ -380,6 +479,8 @@ describe("Monaco DBML adapter", () => {
         diagnostics={[markerDiagnostic]}
         onChange={onChange}
         onSave={onSave}
+        onUndo={onUndo}
+        onRedo={onRedo}
         onCursorPositionChange={onCursorPositionChange}
         loadRuntime={async () => runtime.value}
       />,
@@ -447,8 +548,13 @@ describe("Monaco DBML adapter", () => {
     expect(runtime.model.getValue()).toBe("Table server { id int }");
     expect(runtime.model.lastEol).toBe(0);
     expect(onChange).toHaveBeenCalledTimes(changeCalls);
-    runtime.editor.saveCommand?.();
+    runtime.editor.commands.get(runtime.keybinding("KeyS"))?.();
     expect(onSave).toHaveBeenCalledOnce();
+    runtime.editor.commands.get(runtime.keybinding("KeyZ"))?.();
+    runtime.editor.commands.get(runtime.keybinding("KeyZ", true))?.();
+    runtime.editor.commands.get(runtime.keybinding("KeyY"))?.();
+    expect(onUndo).toHaveBeenCalledOnce();
+    expect(onRedo).toHaveBeenCalledTimes(2);
 
     rendered.unmount();
     expect(runtime.changeListenerDispose).toHaveBeenCalledOnce();
@@ -550,6 +656,7 @@ function FakeSchemaDiagram({
   viewKey,
   detailLevel,
   collapsedGroupKeys,
+  layoutPositions,
   selectionStore,
   sourceNavigationEnabled,
   onToggleGroup,
@@ -559,6 +666,9 @@ function FakeSchemaDiagram({
   const table = graph.tables[0];
   return (
     <div role="application" aria-label="ER diagram canvas">
+      <svg aria-label="Fake relationships">
+        <g data-testid="fake-relationship-edge" tabIndex={0} />
+      </svg>
       <output data-testid="fake-diagram-selection">{selection?.kind ?? "none"}</output>
       <output data-testid="fake-diagram-view">
         {viewKey === "GLOBAL"
@@ -567,6 +677,11 @@ function FakeSchemaDiagram({
       </output>
       <output data-testid="fake-diagram-detail">{detailLevel}</output>
       <output data-testid="fake-diagram-collapse-count">{collapsedGroupKeys.size}</output>
+      <output data-testid="fake-diagram-layout-keys">
+        {Object.keys(layoutPositions ?? {})
+          .sort()
+          .join(",")}
+      </output>
       {graph.groups[0] ? (
         <button type="button" onClick={() => onToggleGroup(graph.groups[0]?.key ?? "")}>
           Toggle first fake group
@@ -594,6 +709,7 @@ function FakeSchemaDiagram({
 
 class SourceProjectApi implements ProjectApi {
   readonly saveDraftInputs: SaveDraftInput[] = [];
+  readonly getLayoutInputs: Array<{ projectId: string; viewKey: string }> = [];
   conflictOnce: ProjectState | null = null;
   nextSave: Promise<ProjectMutationResponse> | null = null;
 
@@ -623,8 +739,34 @@ class SourceProjectApi implements ProjectApi {
     return { state: this.state };
   }
 
-  async getLayout() {
-    return { layout: null, currentLayoutRevisionNo: this.state.project.layoutRevisionNo };
+  async listRevisions() {
+    return { revisions: [] };
+  }
+
+  async restoreRevision(): Promise<never> {
+    throw new Error("Revision restore is not expected in source editor tests.");
+  }
+
+  async getLayout(input: { projectId: string; viewKey: string }) {
+    this.getLayoutInputs.push(input);
+    const revisionNo = this.state.project.layoutRevisionNo;
+    return {
+      layout:
+        revisionNo === 0
+          ? null
+          : {
+              projectId: input.projectId,
+              viewKey: input.viewKey,
+              positions: { 'table:["public","server_state"]': { x: 320, y: 180 } },
+              collapsedGroupKeys: [],
+              hiddenElementKeys: [],
+              viewport: { x: 12, y: 24, zoom: 1.25 },
+              detailLevel: "FULL" as const,
+              baseSchemaHash: sha256(SERVER_SOURCE),
+              revisionNo,
+            },
+      currentLayoutRevisionNo: revisionNo,
+    };
   }
 
   applyVisualCommand: ProjectApi["applyVisualCommand"] = async () => {
@@ -848,10 +990,10 @@ class FakeMonacoRuntime {
   });
   readonly setModelMarkers = vi.fn();
   readonly editor = {
-    saveCommand: undefined as (() => void) | undefined,
-    addCommand: vi.fn((_keybinding: number, command: () => void) => {
-      this.editor.saveCommand = command;
-      return "save-command";
+    commands: new Map<number, () => void>(),
+    addCommand: vi.fn((keybinding: number, command: () => void) => {
+      this.editor.commands.set(keybinding, command);
+      return `command-${keybinding}`;
     }),
     setSelection: vi.fn(),
     revealRangeInCenter: vi.fn(),
@@ -872,8 +1014,8 @@ class FakeMonacoRuntime {
   };
   readonly createEditor = vi.fn((_container: HTMLElement, _options: unknown) => this.editor);
   readonly value = {
-    KeyMod: { CtrlCmd: 2_048 },
-    KeyCode: { KeyS: 49 },
+    KeyMod: { CtrlCmd: 2_048, Shift: 1_024 },
+    KeyCode: { KeyS: 49, KeyZ: 56, KeyY: 55 },
     MarkerSeverity: { Error: 8, Warning: 4, Info: 2 },
     Uri: { parse: (value: string) => ({ value }) },
     languages: {
@@ -891,6 +1033,11 @@ class FakeMonacoRuntime {
 
   constructor() {
     this.model.listenerDisposable = { dispose: this.changeListenerDispose };
+  }
+
+  keybinding(key: "KeyS" | "KeyZ" | "KeyY", shift = false): number {
+    const keyCode = { KeyS: 49, KeyZ: 56, KeyY: 55 }[key];
+    return 2_048 | (shift ? 1_024 : 0) | keyCode;
   }
 }
 

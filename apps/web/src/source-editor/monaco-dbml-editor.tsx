@@ -28,6 +28,8 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
       diagnostics,
       onChange,
       onSave,
+      onUndo,
+      onRedo,
       onCursorPositionChange,
       readOnly = false,
       loadRuntime = loadMonacoRuntime,
@@ -43,6 +45,8 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
     const diagnosticsRef = useRef(diagnostics);
     const onChangeRef = useRef(onChange);
     const onSaveRef = useRef(onSave);
+    const onUndoRef = useRef(onUndo);
+    const onRedoRef = useRef(onRedo);
     const onCursorPositionChangeRef = useRef(onCursorPositionChange);
     const suppressChangeRef = useRef(false);
     const [loadState, setLoadState] = useState<"LOADING" | "READY" | "ERROR">("LOADING");
@@ -50,6 +54,8 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
     diagnosticsRef.current = diagnostics;
     onChangeRef.current = onChange;
     onSaveRef.current = onSave;
+    onUndoRef.current = onUndo;
+    onRedoRef.current = onRedo;
     onCursorPositionChangeRef.current = onCursorPositionChange;
     readOnlyRef.current = readOnly;
 
@@ -128,6 +134,18 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
           });
           activeEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
             onSaveRef.current();
+          });
+          activeEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyZ, () => {
+            onUndoRef.current?.();
+          });
+          activeEditor.addCommand(
+            monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyZ,
+            () => {
+              onRedoRef.current?.();
+            },
+          );
+          activeEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyY, () => {
+            onRedoRef.current?.();
           });
           changeListener = model.onDidChangeContent(() => {
             if (!suppressChangeRef.current && model) onChangeRef.current(model.getValue());

@@ -72,6 +72,7 @@ docs/
 - [ADR 0003: SQLite persistence](docs/adr/0003-sqlite-persistence.md)
 - [ADR 0004: Fastify adapter 교체 경계](docs/adr/0004-fastify-adapter-boundary.md)
 - [ADR 0005: SQL capability target과 observed evidence](docs/adr/0005-sql-capability-matrix.md)
+- [ADR 0006: Revision 단위 session history와 durable restore](docs/adr/0006-session-history-and-durable-restore.md)
 
 ## License
 

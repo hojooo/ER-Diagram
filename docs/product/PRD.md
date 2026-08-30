@@ -1,7 +1,7 @@
 # DBML·SQL ERD Studio PRD
 
-- 문서 버전: `v0.5`
-- 작성일: 2026-08-26
+- 문서 버전: `v0.6`
+- 작성일: 2026-08-30
 - 문서 상태: `Product Canonical — P0 Implementation Baseline`
 - 제품 표시명: `DBML·SQL ERD Studio`
 - 문서 정본: 이 파일이 이 저장소의 제품 요구사항 정본이다.
@@ -70,6 +70,7 @@ P0에서는 PostgreSQL 또는 MySQL DDL을 DBML로 가져오고, DBML 정본에�
 | `DEC-013` | remote access | `CONFIRMED` | P0는 localhost/private network를 기본으로 하며 remote 노출은 reverse proxy authentication을 운영자 책임으로 둔다. |
 | `DEC-014` | dialect baseline | `CONFIRMED` | P0 검증 기준은 PostgreSQL 14 이상과 MySQL 8.0 이상이다. parser가 version 차이를 판별하지 못하면 warning을 표시한다. |
 | `DEC-015` | 배포 모델 | `CONFIRMED` | source repository와 release image를 open source로 공개한다. 공개 release는 source tag·commit과 대응해야 한다. |
+| `DEC-016` | history와 restore | `CONFIRMED` | Undo·redo는 project별 100단계 browser session history이고 새 `SOURCE_EDIT` revision으로 저장한다. 명시적 revision restore만 pruning되지 않는 `RESTORE` checkpoint를 만들며 layout은 복구하지 않는다. |
 | `LICENSE-DEC-001` | 정확한 SPDX license | `CONFIRMED` | project source와 자체 산출물은 `Apache-2.0`으로 배포한다. third-party dependency는 각자의 license와 notice 의무를 유지한다. |
 
 24장은 위 결정을 적용한 범위와 open-source release packaging 조건을 기록한다.
@@ -166,6 +167,8 @@ P0에서는 PostgreSQL 또는 MySQL DDL을 DBML로 가져오고, DBML 정본에�
 | `Normalized Schema Graph` | DBML compiler 결과를 UI와 검증에 맞게 정규화한 파생 model |
 | `Layout Sidecar` | node 위치·viewport·collapse·hide 등을 저장하는 DBML 외부 데이터 |
 | `Visual Command` | diagram에서 table·column·ref·index·constraint를 변경하는 typed command |
+| `Session History` | 실제 schema source를 변경한 source·visual·manual restore를 project별 최대 100단계로 보관하는 reload-ephemeral undo/redo stack |
+| `Durable Revision Restore` | source-free history summary에서 revision을 선택해 새 `RESTORE` checkpoint로 현재 source를 복구하는 작업 |
 | `Conversion Report` | SQL import/export 과정의 exact·normalized·partial·unsupported·error 진단 집합 |
 | `Primary Dialect` | project의 SQL type과 DDL import/export validation 기준인 `POSTGRESQL` 또는 `MYSQL` |
 | `DiagramView` | DBML이 정의한 visible entity projection |
@@ -300,6 +303,8 @@ project나 artifact를 만들지 않는다. Replace는 이미 저장된 current 
 9. 저장되지 않은 buffer로 workspace를 떠나려 하면 pending save를 먼저 flush한다. 저장 완료 시 원래
    navigation을 계속하고, 실패 또는 명시적 이탈 시에는 `Stay`를 기본 action으로 둔 확인 UI와
    `beforeunload` 경고로 아직 전송되지 않은 edit가 사라질 수 있음을 알린다.
+10. Debounce batch가 실제 `SOURCE_EDIT` revision을 만든 경우에만 session history의 한 단계로 기록한다.
+    Invalid source save도 같은 단위로 기록하며 last-valid pointer는 유지한다.
 
 ### 10.4 Diagram 위치 편집
 
@@ -316,7 +321,9 @@ project나 artifact를 만들지 않는다. Replace는 이미 저장된 current 
 3. source map을 사용해 최소 `TextEdit` 집합을 생성한다.
 4. edit를 memory에 적용한 뒤 전체 DBML을 재파싱한다.
 5. normalized graph의 semantic diff가 command 의도와 일치하는지 검증한다.
-6. 성공하면 source·graph·revision·undo stack을 원자적으로 갱신한다.
+6. 성공하면 server가 반환한 authoritative source·graph·revision을 채택한 뒤 실제 revision을 만든 command만
+   session history의 한 단계로 기록한다. Semantic no-op과 이미 history에 반영된 receipt replay는 기록하지
+   않으며, 최초 response 유실 뒤 receipt가 실제 적용을 증명하면 원래 step을 한 번만 복구한다.
 7. 실패하면 source를 변경하지 않고 원인과 source 편집 fallback을 제시한다.
 
 ### 10.6 SQL DDL 내보내기
@@ -329,6 +336,26 @@ project나 artifact를 만들지 않는다. Replace는 이미 저장된 current 
 6. fatal error가 있으면 SQL download를 차단하되 report JSON은 제공한다.
 7. `PARTIAL` 또는 `UNSUPPORTED`가 있으면 사용자가 확인한 뒤 SQL을 download할 수 있다.
 8. SQL과 report JSON은 별도 파일로 제공한다.
+
+### 10.7 Undo·redo와 revision restore
+
+1. Undo 또는 redo를 시작하면 workspace와 visual inspector의 schema interaction을 잠근다.
+2. Dirty source를 먼저 flush해 현재 autosave batch를 필요한 경우 하나의 committed session step으로 만든다.
+3. 모든 hydrated layout write를 flush하고 layout error 또는 conflict이면 schema history write를 시작하지
+   않는다.
+4. Undo는 top step의 before source, redo는 after source를 current schema revision 위에 새 command ID로
+   draft-save한다. Visual command나 기존 receipt를 다시 실행하지 않는다.
+5. Authoritative response의 source, hash, validity, parser provenance와 revision을 검증한 뒤 Monaco, parser
+   session과 project cache에 적용하고 commit이 확인된 경우에만 history cursor를 이동한다.
+6. 새 source edit, visual command 또는 manual restore를 commit하면 redo stack을 비운다. Layout-only write는
+   redo를 변경하지 않는다.
+7. Durable History는 source를 제외한 revision summary를 최신순으로 표시한다. Current revision은 restore할
+   수 없고, invalid revision은 last-valid diagram 유지와 layout 미복구를 확인한 뒤 restore할 수 있다.
+8. Manual restore는 새 `RESTORE` checkpoint다. Source가 바뀌면 session의 undo 가능한 forward step이며,
+   source가 같은 과거 revision이면 checkpoint만 만들고 undo step은 만들지 않는다. 두 경우 모두 redo를
+   비우며 reload 후에는 session undo/redo만 초기화된다.
+9. Commit 여부를 알 수 없는 failure는 exact request를 보존한 `Retry safely`에서만 재전송한다. External
+   `409`가 확인되면 latest state를 채택하고 session stack을 초기화한 뒤 durable History에서 재검토한다.
 
 ## 11. 기능 요구사항
 
@@ -686,11 +713,25 @@ semantic diff가 authoritative하게 검증한다. Contract parse 성공만으�
 
 | ID | 우선순위 | 요구사항 | 수용 기준 |
 | --- | --- | --- | --- |
-| `HIS-001` | P0 | source·visual command에 통합 undo/redo를 제공한다. | redo stack의 invalidation 규칙이 editor와 diagram에서 동일하다. |
+| `HIS-001` | P0 | source·visual command에 revision 단위 통합 undo/redo를 제공한다. | 실제 revision을 만든 autosave batch 또는 visual command가 project별 최대 100단계 session stack의 한 단계이며 reload 후 stack은 비어 있다. |
 | `HIS-002` | P0 | import replace, parser migration, bulk auto-layout 전 durable revision을 만든다. | 작업 실패나 취소 후 이전 상태로 복구된다. |
-| `HIS-003` | P0 | layout revision과 schema revision을 별도로 추적한다. | 위치 이동만으로 schema revision이 증가하지 않는다. |
+| `HIS-003` | P0 | layout revision과 schema revision을 별도로 추적한다. | 위치 이동만으로 schema revision이 증가하거나 schema redo가 무효화되지 않으며 schema restore는 과거 layout을 복구하지 않는다. |
 | `HIS-004` | P0 | rename 시 layout key를 migration한다. | visual rename 후 node 위치와 view 상태가 유지된다. |
 | `HIS-005` | P0 | source에서 직접 rename한 경우 semantic matching을 시도하고 불확실하면 새 node로 취급한다. | heuristic 결과를 숨기지 않고 layout recovery 안내를 표시한다. |
+| `HIS-006` | P0 | source-free durable revision History와 명시적 restore를 제공한다. | summary는 revision, validity, origin, timestamp, parser version, diagnostic count와 hash만 표시하고 restore는 새 `RESTORE` checkpoint를 만든다. |
+| `HIS-007` | P0 | session history의 unknown outcome과 external conflict를 fail-closed 처리한다. | exact retry로 commit을 확인할 수 없는 `409`에서는 latest state를 채택하고 session stack을 초기화한다. |
+| `HIS-008` | P0 | invalid source를 undo·redo·manual restore할 수 있다. | invalid target source와 기존 last-valid pointer를 함께 보존하고 diagram·visual command 제한을 일관되게 표시한다. |
+
+Undo·redo가 성공하면 기존 draft-save 경계가 새 `SOURCE_EDIT` revision을 만든다. 이 revision은 다른
+non-checkpoint source edit와 같은 pruning 정책을 사용한다. Original visual command, inverse command 또는
+command receipt를 redo에 재사용하지 않는다. Manual restore만 기존 revision restore endpoint를 사용해
+pruning되지 않는 `RESTORE` checkpoint를 만든다. Source가 바뀌면 session forward step으로 기록하고,
+동일-source checkpoint는 step 없이 redo만 비운다.
+
+Workspace header는 Undo·Redo button, stack depth, 진행·오류 상태와 `aria-live` announcement를 제공한다.
+Monaco와 diagram에서는 `Ctrl/Cmd+Z`, `Ctrl/Cmd+Shift+Z`, `Ctrl+Y`를 revision 단위 history에 연결한다.
+Visual inspector와 dialog의 `input`, `textarea`, `contenteditable` focus에서는 native field undo를 유지한다.
+Restore confirmation의 초기 focus는 Cancel이며 invalid revision restore와 layout 미복구를 명시한다.
 
 ### 11.8 P1 Query lineage
 
@@ -897,6 +938,37 @@ rollback한다. `baseSchemaHash`가 rename 전 hash와 일치하는 row만 renam
 유지한다. 변경된 row는 하나의 새 project-global layout revision을 공유하고 project layout revision은
 command당 최대 한 번만 증가한다.
 
+### 13.5 Session history와 durable restore
+
+`SchemaHistorySession`은 Web memory에만 있는 project별 선형 history다. 각 step은 before/after의 source,
+source hash, revision number, validity와 origin을 저장한다. Source save와 visual command의 commit observer가
+실제 revision 생성 여부를 전달하며 history controller가 source를 채택하는 동안에는 observer가 같은 작업을
+다시 기록하지 않는다. Semantic no-op, 이미 반영된 receipt replay와 layout mutation은 step을 만들지 않는다.
+최초 response가 유실된 visual command는 same-ID receipt replay가 original before에서 `expected + 1` 적용을
+증명할 때 원래 step을 정확히 한 번 기록한다.
+
+Undo·redo는 dirty source와 hydrated layout을 순서대로 flush한 뒤 목표 snapshot을 current expected revision
+위에 draft-save한다. Response가 요청한 target source/hash와 정확히 일치하고 revision이 전진했을 때만
+authoritative state를 적용하고 past/future cursor를 이동한다. 이 write는 `SOURCE_EDIT` origin을 가지므로
+retention 대상이다. 새 forward commit은 future stack을 비운다.
+
+Manual restore는 source-free revision summary의 identity를 기존 restore endpoint에 전달한다. Response의
+source·hash·validity와 `RESTORE` origin을 확인한다. Source가 바뀌면 현재 before state와 restore after
+state를 새 session step으로 기록한다. 현재 source와 같은 과거 revision도 durable checkpoint로 restore할
+수 있지만 schema snapshot 변화가 없으므로 session undo step은 만들지 않고 redo만 비운다. Restore 대상이
+invalid이면 current draft는 invalid가 되고 기존 last-valid pointer는 유지된다. 어느 history operation도
+layout revision이나 row를 과거 상태로 되돌리지 않는다.
+
+Transport failure처럼 commit outcome이 unknown이면 command ID, expected revision과 target을 바꾸지 않고
+explicit safe retry에서만 재전송한다. Retry `409` 뒤 latest state가 `expected + 1`, target source hash와
+예상 origin에 모두 일치하면 앞선 commit의 성공으로 채택한다. 그 밖의 external write, stale refetch 또는
+linear ordering을 증명할 수 없는 visual receipt replay는 latest project를 채택하고 session history를
+초기화한다.
+
+Mounted workspace는 focus 또는 network reconnect만으로 detail query를 수동 재채택하지 않는다. External
+write는 source·layout·visual history write의 optimistic conflict에서 latest state를 명시적으로 읽고 source,
+layout revision과 session stack을 함께 전환해 header와 editor가 서로 다른 revision을 표시하지 않게 한다.
+
 ## 14. 논리 데이터 모델
 
 ### 14.1 `Project`
@@ -1055,6 +1127,8 @@ P0 대표 fixture는 약 200 KB, 143 tables, 573 refs, 15 groups, 7 views다.
 - process crash 중에도 마지막 committed revision은 복구돼야 한다.
 - invalid draft와 last-valid revision을 함께 잃지 않는다.
 - import replace, restore, parser migration은 idempotency key 또는 expected revision을 사용한다.
+- Undo·redo와 restore의 unknown outcome retry는 동일 command ID, expected revision과 target payload를
+  유지한다. External schema write와 구분할 수 없으면 latest state를 채택하고 session history를 초기화한다.
 - background parse 결과는 요청한 draft hash와 일치할 때만 UI에 반영한다.
 - auto layout 실패는 source와 기존 layout을 변경하지 않는다.
 
@@ -1065,6 +1139,10 @@ P0 대표 fixture는 약 200 KB, 143 tables, 573 refs, 15 groups, 7 views다.
 - color만으로 PK/FK, error, group을 구분하지 않는다.
 - diagnostics와 form control은 label·focus order를 제공한다.
 - destructive visual command는 대상과 영향 ref를 확인한 뒤 실행한다.
+- Undo·redo button은 disabled state, stack depth와 진행·오류 상태를 보조 기술에 전달하고 결과를
+  `aria-live`로 알린다.
+- Editor·diagram shortcut은 revision history를 사용하되 inspector의 form field와 restore dialog에서는
+  native text undo와 안전한 Cancel-first focus를 보존한다.
 
 ### 16.4 호환성
 
@@ -1211,6 +1289,10 @@ P0는 public growth metric보다 정확성과 개인 workflow 완성을 우선�
 7. visual column 추가는 해당 table block만 변경한다.
 8. PostgreSQL export가 재파싱되고 conversion report가 생성된다.
 9. project bundle을 새 volume에 restore하면 source·view layout·history가 복구된다.
+10. Source edit와 visual edit를 undo 두 번, redo 두 번 실행하면 각 목표 source가 새 revision으로 저장된다.
+11. Undo 뒤 새 source 또는 visual edit는 redo를 비우지만 layout-only edit는 redo를 유지한다.
+12. Invalid revision restore는 last-valid diagram을 유지하고 manual restore는 `RESTORE` checkpoint를 만든다.
+13. Reload 뒤 session undo·redo는 비어 있고 source-free durable History와 restore는 유지된다.
 
 ### 21.5 배포 검증
 
@@ -1305,7 +1387,9 @@ P0 release는 다음 조건을 모두 충족해야 한다.
 - table·column·ref·basic index/constraint command
 - minimal source transform
 - semantic diff gate
-- undo/redo와 conflict handling
+- source·visual revision 단위 session undo/redo
+- source-free durable History와 manual `RESTORE` checkpoint
+- external conflict reset과 layout 비복구
 
 종료 조건: visual command contract suite 통과.
 
@@ -1367,6 +1451,21 @@ P0가 완료되기 전에 P1 parser dependency나 UI를 production path에 추�
 - 결정: source repository와 release image를 open source로 공개한다.
 - 영향: public release는 source tag·commit·OCI image digest를 추적할 수 있어야 하며 build·self-host 설정도 source repository에 포함한다.
 - 경계: dependency는 각자의 license를 유지하고 project license로 재라이선스하지 않는다.
+
+### `DEC-016` — Session history와 durable restore — `CONFIRMED`
+
+- 결정: project별 최대 100단계 undo·redo cursor는 browser session memory에만 저장하고 reload에서
+  초기화한다. Undo·redo는 목표 source snapshot을 새 pruning 대상 `SOURCE_EDIT` revision으로 저장한다.
+- Durable 경계: 사용자가 History에서 명시적으로 선택한 restore만 pruning되지 않는 `RESTORE` checkpoint를
+  만든다. Revision list는 source preview 없이 provenance summary만 제공한다.
+- Redo 정책: 새 source edit, 실제 visual command와 manual restore는 redo를 비우고 no-op, 이미 반영된 receipt
+  replay와 layout-only mutation은 redo를 변경하지 않는다. 동일-source manual restore는 durable checkpoint만
+  만들고 session step은 만들지 않으며 redo는 비운다. Response 유실 뒤 최초 적용이 증명된 replay는 원래
+  visual step으로 취급한다.
+- Conflict 정책: exact safe retry로 commit을 확인하지 못한 external `409`에서는 latest state를 채택하고
+  session stack을 초기화한다.
+- Layout·invalid 경계: schema undo·redo·restore는 layout을 복구하지 않는다. Invalid source도 대상이지만
+  기존 last-valid pointer와 diagram 제한을 유지한다.
 
 ### `LICENSE-DEC-001` — 정확한 SPDX license — `CONFIRMED`
 

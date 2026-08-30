@@ -1,41 +1,45 @@
 import {
   correlationIdSchema,
   createProjectRequestSchema,
-  deleteProjectRequestSchema,
+  type Diagnostic,
   type DiagramLayoutValue,
+  deleteProjectRequestSchema,
   diagramViewKeySchema,
   errorResponseSchema,
   type LayoutMutationResponse,
-  layoutMutationResponseSchema,
   type LayoutResponse,
+  layoutMutationResponseSchema,
   layoutResponseSchema,
+  type OriginalSqlRetentionMode,
   type PrimaryDialect,
   type ProjectMutationResponse,
   type ProjectResponse,
+  type ProjectRevisionsResponse,
   type ProjectsResponse,
   projectIdSchema,
   projectMutationResponseSchema,
   projectResponseSchema,
+  projectRevisionsResponseSchema,
   projectsResponseSchema,
   renameProjectRequestSchema,
-  saveLayoutRequestSchema,
-  saveDraftRequestSchema,
+  restoreRevisionRequestSchema,
+  revisionParamsSchema,
   type SqlDataStatementHandling,
-  type SqlImportApplyResponse,
-  sqlImportApplyRequestSchema,
-  sqlImportApplyResponseSchema,
-  type SqlImportPreviewResponse,
-  sqlImportPreviewRequestSchema,
-  sqlImportPreviewResponseSchema,
-  type SqlImportStandalonePreviewResponse,
-  sqlImportStandalonePreviewRequestSchema,
-  sqlImportStandalonePreviewResponseSchema,
   type SqlExportResponse,
+  type SqlExportSourceSelection,
+  type SqlImportApplyResponse,
+  type SqlImportPreviewResponse,
+  type SqlImportStandalonePreviewResponse,
+  saveDraftRequestSchema,
+  saveLayoutRequestSchema,
   sqlExportRequestSchema,
   sqlExportResponseSchema,
-  type SqlExportSourceSelection,
-  type OriginalSqlRetentionMode,
-  type Diagnostic,
+  sqlImportApplyRequestSchema,
+  sqlImportApplyResponseSchema,
+  sqlImportPreviewRequestSchema,
+  sqlImportPreviewResponseSchema,
+  sqlImportStandalonePreviewRequestSchema,
+  sqlImportStandalonePreviewResponseSchema,
   type VisualCommand,
   type VisualCommandMutationResponse,
   type VisualCommandPartialImpact,
@@ -70,6 +74,14 @@ export interface SaveDraftInput {
   readonly projectId: string;
   readonly source: string;
   readonly expectedSchemaRevisionNo: number;
+  readonly commandId?: string;
+}
+
+export interface RestoreRevisionInput {
+  readonly projectId: string;
+  readonly revisionNo: number;
+  readonly expectedSchemaRevisionNo: number;
+  readonly commandId?: string;
 }
 
 export interface GetLayoutInput {
@@ -125,10 +137,12 @@ export interface ApplyVisualCommandInput {
 export interface ProjectApi {
   listProjects(): Promise<ProjectsResponse>;
   getProject(projectId: string): Promise<ProjectResponse>;
+  listRevisions(projectId: string): Promise<ProjectRevisionsResponse>;
   createProject(input: CreateProjectInput): Promise<ProjectMutationResponse>;
   renameProject(input: RenameProjectInput): Promise<ProjectResponse>;
   duplicateProject(input: DuplicateProjectInput): Promise<ProjectMutationResponse>;
   saveDraft(input: SaveDraftInput): Promise<ProjectMutationResponse>;
+  restoreRevision(input: RestoreRevisionInput): Promise<ProjectMutationResponse>;
   getLayout(input: GetLayoutInput): Promise<LayoutResponse>;
   saveLayout(input: SaveLayoutInput): Promise<LayoutMutationResponse>;
   deleteProject(input: DeleteProjectInput): Promise<void>;
@@ -219,6 +233,15 @@ export function createHttpProjectApi(options: HttpProjectApiOptions = {}): Proje
         responseSchema: projectResponseSchema,
       });
     },
+    listRevisions: (projectId) => {
+      const parsedProjectId = parseClientInput(projectIdSchema, projectId);
+      return request(fetcher, basePath, {
+        method: "GET",
+        path: `/projects/${encodeURIComponent(parsedProjectId)}/revisions`,
+        expectedStatus: 200,
+        responseSchema: projectRevisionsResponseSchema,
+      });
+    },
     createProject: (input) => {
       const commandId = generateCommandId();
       const body = parseClientInput(createProjectRequestSchema, {
@@ -274,7 +297,7 @@ export function createHttpProjectApi(options: HttpProjectApiOptions = {}): Proje
     },
     saveDraft: (input) => {
       const projectId = parseClientInput(projectIdSchema, input.projectId);
-      const commandId = generateCommandId();
+      const commandId = input.commandId ?? generateCommandId();
       const body = parseClientInput(saveDraftRequestSchema, {
         commandId,
         source: input.source,
@@ -283,6 +306,25 @@ export function createHttpProjectApi(options: HttpProjectApiOptions = {}): Proje
       return request(fetcher, basePath, {
         method: "PUT",
         path: `/projects/${encodeURIComponent(projectId)}/draft`,
+        expectedStatus: 200,
+        responseSchema: projectMutationResponseSchema,
+        body,
+        commandId,
+      });
+    },
+    restoreRevision: (input) => {
+      const { projectId, revisionNo } = parseClientInput(revisionParamsSchema, {
+        projectId: input.projectId,
+        revisionNo: input.revisionNo,
+      });
+      const commandId = input.commandId ?? generateCommandId();
+      const body = parseClientInput(restoreRevisionRequestSchema, {
+        commandId,
+        expectedSchemaRevisionNo: input.expectedSchemaRevisionNo,
+      });
+      return request(fetcher, basePath, {
+        method: "POST",
+        path: `/projects/${encodeURIComponent(projectId)}/revisions/${revisionNo}/restore`,
         expectedStatus: 200,
         responseSchema: projectMutationResponseSchema,
         body,

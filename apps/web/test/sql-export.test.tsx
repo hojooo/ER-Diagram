@@ -127,10 +127,12 @@ function fakeApi(state: ProjectState, exported: SqlExportResponse): ProjectApi {
   return {
     listProjects: vi.fn(async () => ({ projects: [] })),
     getProject: vi.fn(async () => ({ state })),
+    listRevisions: vi.fn(async () => ({ revisions: [] })),
     createProject: vi.fn(),
     renameProject: vi.fn(),
     duplicateProject: vi.fn(),
     saveDraft: vi.fn(),
+    restoreRevision: vi.fn(),
     getLayout: vi.fn(),
     saveLayout: vi.fn(),
     applyVisualCommand: vi.fn(),
