@@ -67,7 +67,7 @@ export async function runVerifiedVisualTransform<Command extends VisualCommand>(
   const preflight = hooks.preflight(before.graph, typedCommand);
   if (!preflight.ok) return editPlanFailure(source, preflight);
   if (hooks.isSemanticNoOp(before.graph, typedCommand)) {
-    return noOp(source, before.graph.schemaHash);
+    return noOp(source, before.graph.schemaHash, before.graph.diagnostics);
   }
 
   let plan: EditPlan;
@@ -92,7 +92,9 @@ export async function runVerifiedVisualTransform<Command extends VisualCommand>(
 
   const applied = applyTextEdits(source, edits);
   if (!applied.ok) return { ok: false, source, diagnostics: applied.diagnostics };
-  if (applied.source === source) return noOp(source, before.graph.schemaHash);
+  if (applied.source === source) {
+    return noOp(source, before.graph.schemaHash, before.graph.diagnostics);
+  }
 
   const after = await parseDbmlV2(applied.source, filepath);
   if (!after.ok) {
@@ -130,6 +132,7 @@ export async function runVerifiedVisualTransform<Command extends VisualCommand>(
     beforeSchemaHash: before.graph.schemaHash,
     afterSchemaHash: after.graph.schemaHash,
     semanticDiff,
+    diagnostics: after.graph.diagnostics.map((diagnostic) => ({ ...diagnostic })),
   };
 }
 
@@ -192,7 +195,11 @@ function uniqueSortedEdits(edits: readonly TextEdit[]): TextEdit[] | null {
   return sorted;
 }
 
-function noOp(source: string, schemaHash: string): VisualSourceTransformSuccess {
+function noOp(
+  source: string,
+  schemaHash: string,
+  diagnostics: VisualSourceTransformSuccess["diagnostics"],
+): VisualSourceTransformSuccess {
   return {
     ok: true,
     changed: false,
@@ -201,6 +208,7 @@ function noOp(source: string, schemaHash: string): VisualSourceTransformSuccess 
     beforeSchemaHash: schemaHash,
     afterSchemaHash: schemaHash,
     semanticDiff: { changes: [], renameCandidates: [] },
+    diagnostics: diagnostics.map((diagnostic) => ({ ...diagnostic })),
   };
 }
 

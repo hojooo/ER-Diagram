@@ -1,3 +1,4 @@
+import type { Diagnostic } from "@er-diagram/contracts";
 import type { SchemaElementKey, SchemaGraphDiff } from "@er-diagram/core";
 
 export interface TextEdit {
@@ -45,6 +46,7 @@ export interface VisualSourceTransformSuccess {
   beforeSchemaHash: string;
   afterSchemaHash: string;
   semanticDiff: SchemaGraphDiff;
+  diagnostics: Diagnostic[];
 }
 
 export interface VisualSourceTransformFailure {
