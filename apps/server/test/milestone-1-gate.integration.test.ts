@@ -12,6 +12,7 @@ import {
   parseDbmlV2,
   type SqlExportApplication,
   type SqlImportApplication,
+  type VisualCommandApplication,
 } from "@er-diagram/core";
 import {
   createSqliteLayoutRepository,
@@ -59,6 +60,7 @@ function createFixture(filename = temporaryDatabasePath()) {
     }),
     sqlImportApplication: {} as SqlImportApplication,
     sqlExportApplication: {} as SqlExportApplication,
+    visualCommandApplication: {} as VisualCommandApplication,
   });
   openServers.add(server);
   return { filename, server, storage };

@@ -5,6 +5,7 @@ import type {
   ProjectApplication,
   SqlExportApplication,
   SqlImportApplication,
+  VisualCommandApplication,
 } from "@er-diagram/core";
 import Fastify, { type FastifyInstance } from "fastify";
 
@@ -13,12 +14,14 @@ import { registerLayoutRoutes } from "./layout-routes.js";
 import { registerProjectRoutes } from "./project-routes.js";
 import { registerSqlImportRoutes } from "./sql-import-routes.js";
 import { registerSqlExportRoutes } from "./sql-export-routes.js";
+import { registerVisualCommandRoutes } from "./visual-command-routes.js";
 
 export interface CreateServerOptions {
   readonly projectApplication: ProjectApplication;
   readonly layoutApplication: LayoutApplication;
   readonly sqlImportApplication: SqlImportApplication;
   readonly sqlExportApplication: SqlExportApplication;
+  readonly visualCommandApplication: VisualCommandApplication;
   readonly generateCorrelationId?: () => string;
 }
 
@@ -41,6 +44,7 @@ export function createServer(options: CreateServerOptions): FastifyInstance {
   registerLayoutRoutes(server, options.layoutApplication);
   registerSqlImportRoutes(server, options.sqlImportApplication);
   registerSqlExportRoutes(server, options.sqlExportApplication);
+  registerVisualCommandRoutes(server, options.visualCommandApplication);
 
   return server;
 }

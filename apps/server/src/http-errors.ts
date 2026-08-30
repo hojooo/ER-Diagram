@@ -1,9 +1,17 @@
-import { type ErrorResponse, errorResponseSchema } from "@er-diagram/contracts";
+import {
+  type Diagnostic,
+  type ErrorResponse,
+  errorResponseSchema,
+  type VisualCommandPartialImpact,
+} from "@er-diagram/contracts";
 import type {
   LayoutApplicationError,
   ProjectApplicationError,
   SqlExportApplicationError,
   SqlImportApplicationError,
+  VisualCommandApplicationError,
+  VisualCommandPartialImpact as CoreVisualCommandPartialImpact,
+  VisualCommandTransformDiagnostic,
 } from "@er-diagram/core";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
@@ -157,6 +165,43 @@ export function sendSqlExportApplicationError(
   return assertNever(error);
 }
 
+export function sendVisualCommandApplicationError(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  error: VisualCommandApplicationError,
+): FastifyReply {
+  switch (error.code) {
+    case "VISUAL_COMMAND_PROJECT_NOT_FOUND":
+      return sendError(request, reply, 404, error.code, error.message);
+    case "VISUAL_COMMAND_SCHEMA_REVISION_CONFLICT":
+      return sendError(request, reply, 409, error.code, error.message, {
+        currentRevisionNo: error.currentSchemaRevisionNo,
+      });
+    case "VISUAL_COMMAND_IDEMPOTENCY_CONFLICT":
+    case "VISUAL_COMMAND_LAYOUT_MIGRATION_CONFLICT":
+      return sendError(request, reply, 409, error.code, error.message);
+    case "VISUAL_COMMAND_INVALID":
+    case "VISUAL_COMMAND_DRAFT_INVALID":
+      return sendError(request, reply, 422, error.code, error.message);
+    case "VISUAL_COMMAND_TRANSFORM_FAILED":
+      return sendError(request, reply, 422, error.code, error.message, {
+        diagnostics: error.diagnostics.map(toPublicVisualDiagnostic),
+        ...(error.partialImpact
+          ? { partialImpact: toPublicPartialImpact(error.partialImpact) }
+          : {}),
+      });
+    case "VISUAL_COMMAND_STORAGE_INVARIANT_VIOLATION":
+      return sendError(
+        request,
+        reply,
+        500,
+        error.code,
+        "Stored visual command data failed an integrity check.",
+      );
+  }
+  return assertNever(error);
+}
+
 export function registerHttpErrorHandlers(server: FastifyInstance): void {
   server.setNotFoundHandler((request, reply) =>
     sendError(request, reply, 404, "ROUTE_NOT_FOUND", "The requested route was not found."),
@@ -193,6 +238,8 @@ export function registerHttpErrorHandlers(server: FastifyInstance): void {
 
 interface ErrorResponseOptions {
   readonly currentRevisionNo?: number;
+  readonly diagnostics?: Diagnostic[];
+  readonly partialImpact?: VisualCommandPartialImpact;
 }
 
 function sendError(
@@ -208,11 +255,37 @@ function sendError(
     message,
     correlationId: request.id,
   };
-  const response =
-    options.currentRevisionNo === undefined
-      ? base
-      : { ...base, currentRevisionNo: options.currentRevisionNo };
+  const response: ErrorResponse = {
+    ...base,
+    ...(options.currentRevisionNo === undefined
+      ? {}
+      : { currentRevisionNo: options.currentRevisionNo }),
+    ...(options.diagnostics === undefined ? {} : { diagnostics: options.diagnostics }),
+    ...(options.partialImpact === undefined ? {} : { partialImpact: options.partialImpact }),
+  };
   return reply.code(statusCode).send(errorResponseSchema.parse(response));
+}
+
+function toPublicVisualDiagnostic(diagnostic: VisualCommandTransformDiagnostic): Diagnostic {
+  return {
+    code: diagnostic.code,
+    message: diagnostic.message,
+    severity: diagnostic.severity,
+    ...(diagnostic.range ? { range: { ...diagnostic.range, filepath: "/main.dbml" } } : {}),
+  };
+}
+
+function toPublicPartialImpact(impact: CoreVisualCommandPartialImpact): VisualCommandPartialImpact {
+  return {
+    partialKey: impact.partialKey,
+    partialName: impact.partialName,
+    partialElementKey: impact.partialElementKey,
+    definitionRange: { ...impact.definitionRange, filepath: "/main.dbml" },
+    affectedTables: impact.affectedTables.map((affectedTable) => ({
+      tableKey: affectedTable.tableKey,
+      injectionRange: { ...affectedTable.injectionRange, filepath: "/main.dbml" },
+    })),
+  };
 }
 
 function isBodyTooLarge(error: unknown): boolean {

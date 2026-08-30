@@ -16,6 +16,7 @@
     "fastify": "5.12.1"
   },
   "devDependencies": {
+    "@er-diagram/source-transform": "workspace:*",
     "@er-diagram/test-fixtures": "workspace:*",
     "typescript": "7.0.2",
     "vitest": "4.1.11"

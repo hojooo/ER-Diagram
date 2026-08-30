@@ -3,6 +3,7 @@ import type {
   ProjectApplication,
   SqlExportApplication,
   SqlImportApplication,
+  VisualCommandApplication,
 } from "@er-diagram/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { createServer } from "../src/index.js";
@@ -12,6 +13,7 @@ const unusedProjectApplication = {} as ProjectApplication;
 const unusedLayoutApplication = {} as LayoutApplication;
 const unusedSqlImportApplication = {} as SqlImportApplication;
 const unusedSqlExportApplication = {} as SqlExportApplication;
+const unusedVisualCommandApplication = {} as VisualCommandApplication;
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.close()));
@@ -24,6 +26,7 @@ describe("Fastify adapter bootstrap", () => {
       layoutApplication: unusedLayoutApplication,
       sqlImportApplication: unusedSqlImportApplication,
       sqlExportApplication: unusedSqlExportApplication,
+      visualCommandApplication: unusedVisualCommandApplication,
     });
     servers.push(server);
 
