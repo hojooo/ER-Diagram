@@ -183,6 +183,24 @@ Raw importer는 오류를 반환하지 않았으므로 관찰 사실과 다르�
 - Report occurrence navigation은 선택된 revision의 read-only source에 적용한다. Last-valid range를 current
   invalid Monaco model에 적용하지 않는다.
 
+### M2-GATE same-dialect interchange acceptance
+
+- `silent loss 0`은 모든 입력 construct가 `EXACT`여야 한다는 뜻이 아니다. `PARTIAL`·`UNSUPPORTED` 결과는
+  stable code와 source range로 설명되어야 하며, 설명되지 않은 physical semantic diff는 candidate를
+  차단해야 한다.
+- Versioned PostgreSQL·MySQL gate fixture는 SQL source, import report, candidate DBML/schema hash, export
+  report, generated SQL/exportable hash와 DML sentinel 제외를 함께 고정한다. Pinned parser 결과가 바뀌면
+  fixture version과 golden evidence를 같은 변경에서 검토한다.
+- Core gate는 45개 atomic capability fixture와 representative multi-statement fixture를
+  `SQL A → DBML graph B → same-dialect SQL → graph C`로 검증한다. PostgreSQL schema-qualified enum array처럼
+  공개 재-import가 실패하는 known gap은 명시적 `PARTIAL` evidence와 fail-closed result가 모두 있어야 한다.
+- Fastify integration은 실제 Core application과 file-backed SQLite를 닫고 다시 연 뒤 import checkpoint,
+  layout 불변, original SQL 폐기와 export semantic hash를 확인한다. Browser acceptance는 actual Core
+  conversion evidence를 사용하는 controlled HTTP boundary에서 loss/data acknowledgement와 download를
+  검증한다.
+- Browser에서 Fastify static serving과 SQLite까지 연결되는 production packaging은 이 gate의 증명 범위가
+  아니며 M4-005·M4-006에서 검증한다.
+
 ## Verification
 
 - `pnpm --filter @er-diagram/test-fixtures test test/sql-capability-fixtures.test.ts`
@@ -201,3 +219,4 @@ Raw importer는 오류를 반환하지 않았으므로 관찰 사실과 다르�
 - `pnpm --filter @er-diagram/core test test/sql-export.test.ts`
 - `pnpm --filter @er-diagram/server test:integration sql-export`
 - `pnpm test:e2e sql-export`
+- `pnpm test:m2-gate`

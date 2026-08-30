@@ -34,6 +34,12 @@ export {
   SQL_IMPORT_REPORT_FIXTURE_VERSION,
   sqlImportReportFixtures,
 } from "./sql-import-report-fixtures.js";
+export type { SqlInterchangeGateFixture } from "./sql-interchange-gate-fixtures.js";
+export {
+  SQL_INTERCHANGE_GATE_FIXTURE_SET_HASH,
+  SQL_INTERCHANGE_GATE_FIXTURE_VERSION,
+  sqlInterchangeGateFixtures,
+} from "./sql-interchange-gate-fixtures.js";
 export type {
   SqlExportFixture,
   SqlExportFixtureStatus,
