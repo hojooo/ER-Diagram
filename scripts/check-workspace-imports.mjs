@@ -70,7 +70,7 @@ try {
   try {
     assert.deepEqual(
       storage.database.get("SELECT value FROM app_metadata WHERE key = 'storage_schema_version'"),
-      { value: "1" },
+      { value: String(storagePackageExports.SQLITE_STORAGE_SCHEMA_VERSION) },
       "built storage package must resolve and apply its bundled migration",
     );
   } finally {

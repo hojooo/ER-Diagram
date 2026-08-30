@@ -19,6 +19,7 @@ import {
   SqliteStorageError,
   schemaRevisions,
   toUtcIsoTimestamp,
+  visualCommandReceipts,
 } from "../src/index.js";
 import { initializeSqliteStorage } from "../src/sqlite-storage.js";
 import { encodeUuidV7 } from "../src/uuid-v7.js";
@@ -29,6 +30,7 @@ const PRODUCT_TABLE_NAMES = [
   "import_artifacts",
   "projects",
   "schema_revisions",
+  "visual_command_receipts",
 ] as const;
 const FIXED_NOW = "2026-08-27T01:02:03.004Z";
 const HASH = "a".repeat(64);
@@ -81,6 +83,18 @@ const EXPECTED_COLUMNS = {
     "origin",
     "parser_version",
     "diagnostic_summary_json",
+    "created_at",
+  ],
+  visual_command_receipts: [
+    "project_id",
+    "command_id",
+    "command_kind",
+    "command_hash",
+    "expected_schema_revision_no",
+    "applied_schema_revision_no",
+    "applied_layout_revision_no",
+    "revision_created",
+    "layout_migrated",
     "created_at",
   ],
 } as const;
@@ -160,7 +174,7 @@ afterEach(() => {
 });
 
 describe("SQLite migration and connection", () => {
-  it("migrates the five strict product tables and records schema version once", () => {
+  it("migrates the six strict product tables and records both schema migrations once", () => {
     const filename = temporaryDatabasePath();
     const first = trackedOpen(filename);
 
@@ -208,17 +222,19 @@ describe("SQLite migration and connection", () => {
     expect(
       first.database.get<{ count: number }>("SELECT count(*) AS count FROM __drizzle_migrations")
         .count,
-    ).toBe(1);
+    ).toBe(2);
     const migrationsFolder = path.resolve(import.meta.dirname, "../drizzle");
-    const expectedMigration = readMigrationFiles({ migrationsFolder })[0];
+    const expectedMigrations = readMigrationFiles({ migrationsFolder });
     expect(
-      first.database.get<{ hash: string; created_at: number }>(
-        "SELECT hash, created_at FROM __drizzle_migrations",
+      first.database.all<{ hash: string; created_at: number }>(
+        "SELECT hash, created_at FROM __drizzle_migrations ORDER BY created_at",
       ),
-    ).toEqual({
-      hash: expectedMigration?.hash,
-      created_at: expectedMigration?.folderMillis,
-    });
+    ).toEqual(
+      expectedMigrations.map((migration) => ({
+        hash: migration.hash,
+        created_at: migration.folderMillis,
+      })),
+    );
     expect(
       first.database
         .select()
@@ -232,7 +248,7 @@ describe("SQLite migration and connection", () => {
     expect(
       reopened.database.get<{ count: number }>("SELECT count(*) AS count FROM __drizzle_migrations")
         .count,
-    ).toBe(1);
+    ).toBe(2);
   });
 
   it("sets and reads back foreign keys, WAL, busy timeout, and database integrity", () => {
@@ -249,6 +265,93 @@ describe("SQLite migration and connection", () => {
       "ok",
     );
     expect(storage.database.all("PRAGMA foreign_key_check")).toEqual([]);
+  });
+
+  it("upgrades a version 1 database without changing existing product data", () => {
+    const filename = temporaryDatabasePath();
+    const storage = trackedOpen(filename);
+    const projectId = fixtureUuid(40);
+    const revisionId = fixtureUuid(41);
+    const artifactId = fixtureUuid(42);
+    storage.transaction((tx) => {
+      tx.insert(projects).values(projectFixture(projectId)).run();
+      tx.insert(schemaRevisions)
+        .values({
+          id: revisionId,
+          projectId,
+          revisionNo: 1,
+          source: "Table users { id int [pk] }",
+          sourceHash: HASH,
+          validity: "VALID",
+          origin: "SOURCE_EDIT",
+          parserVersion: "9.1.1",
+          diagnosticSummary: { errors: 0, warnings: 0, infos: 0, parserVersion: "9.1.1" },
+          createdAt: FIXED_NOW,
+        })
+        .run();
+      tx.update(projects)
+        .set({ lastValidRevisionId: revisionId, schemaRevisionNo: 1, layoutRevisionNo: 1 })
+        .where(eq(projects.id, projectId))
+        .run();
+      tx.insert(diagramLayouts)
+        .values({
+          projectId,
+          viewKey: "GLOBAL",
+          positions: { table: { x: 1, y: 2 } },
+          collapsedGroupKeys: [],
+          hiddenElementKeys: [],
+          viewport: { x: 0, y: 0, zoom: 1 },
+          detailLevel: "FULL",
+          baseSchemaHash: HASH,
+          revisionNo: 1,
+        })
+        .run();
+      tx.insert(importArtifacts)
+        .values({
+          id: artifactId,
+          projectId,
+          dialect: "POSTGRESQL",
+          originalSql: null,
+          originalHash: HASH,
+          generatedDbml: null,
+          parserVersion: "9.1.1",
+          report: { version: 1 },
+          status: "FAILED",
+          createdAt: FIXED_NOW,
+          appliedAt: null,
+        })
+        .run();
+    });
+    trackedClose(storage);
+
+    const versionOne = new BetterSqlite3(filename);
+    versionOne.pragma("foreign_keys = ON");
+    versionOne.exec("DROP TABLE visual_command_receipts");
+    versionOne
+      .prepare("UPDATE app_metadata SET value = '1' WHERE key = ?")
+      .run(APP_METADATA_STORAGE_SCHEMA_VERSION_KEY);
+    versionOne.exec(
+      "DELETE FROM __drizzle_migrations WHERE created_at = (SELECT max(created_at) FROM __drizzle_migrations)",
+    );
+    versionOne.close();
+
+    const upgraded = trackedOpen(filename);
+    expect(
+      upgraded.database
+        .select()
+        .from(appMetadata)
+        .where(eq(appMetadata.key, APP_METADATA_STORAGE_SCHEMA_VERSION_KEY))
+        .get()?.value,
+    ).toBe("2");
+    expect(upgraded.database.select().from(projects).all()).toHaveLength(1);
+    expect(upgraded.database.select().from(schemaRevisions).all()).toHaveLength(1);
+    expect(upgraded.database.select().from(diagramLayouts).all()).toHaveLength(1);
+    expect(upgraded.database.select().from(importArtifacts).all()).toHaveLength(1);
+    expect(upgraded.database.select().from(visualCommandReceipts).all()).toEqual([]);
+    expect(
+      upgraded.database.get<{ count: number }>("SELECT count(*) AS count FROM __drizzle_migrations")
+        .count,
+    ).toBe(2);
   });
 
   it.each(["", "   ", ":memory:", "file::memory:", "file:memory?mode=memory"])(
@@ -359,6 +462,20 @@ describe("SQLite schema invariants", () => {
           appliedAt: null,
         })
         .run();
+      tx.insert(visualCommandReceipts)
+        .values({
+          projectId,
+          commandId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          commandKind: "CREATE_COLUMN",
+          commandHash: HASH,
+          expectedSchemaRevisionNo: 1,
+          appliedSchemaRevisionNo: 1,
+          appliedLayoutRevisionNo: 0,
+          revisionCreated: false,
+          layoutMigrated: false,
+          createdAt: FIXED_NOW,
+        })
+        .run();
     });
 
     expect(() =>
@@ -392,6 +509,13 @@ describe("SQLite schema invariants", () => {
         .select()
         .from(importArtifacts)
         .where(eq(importArtifacts.projectId, projectId))
+        .all(),
+    ).toEqual([]);
+    expect(
+      storage.database
+        .select()
+        .from(visualCommandReceipts)
+        .where(eq(visualCommandReceipts.projectId, projectId))
         .all(),
     ).toEqual([]);
   });

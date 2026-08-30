@@ -5,7 +5,7 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 
 import { sqliteSchema } from "./schema.js";
 
-export const SQLITE_STORAGE_SCHEMA_VERSION = 1;
+export const SQLITE_STORAGE_SCHEMA_VERSION = 2;
 export const APP_METADATA_STORAGE_SCHEMA_VERSION_KEY = "storage_schema_version";
 export const SQLITE_BUSY_TIMEOUT_MS = 5_000;
 

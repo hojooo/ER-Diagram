@@ -2,9 +2,9 @@ import {
   type DiagramLayout,
   type DiagramPosition,
   type DiagramViewport,
+  LayoutPersistenceInvariantError,
   type LayoutPersistencePort,
   type LayoutPersistenceTransaction,
-  LayoutPersistenceInvariantError,
 } from "@er-diagram/core";
 import { and, eq } from "drizzle-orm";
 
@@ -32,7 +32,7 @@ class SqliteLayoutReader<TDatabase extends LayoutDatabase> {
       .from(diagramLayouts)
       .where(and(eq(diagramLayouts.projectId, projectId), eq(diagramLayouts.viewKey, viewKey)))
       .get();
-    return row ? mapLayout(row) : null;
+    return row ? mapStoredLayout(row) : null;
   }
 }
 
@@ -95,7 +95,7 @@ export function createSqliteLayoutRepository(storage: SqliteStorage): LayoutPers
   return new SqliteLayoutRepository(storage);
 }
 
-function mapLayout(row: StoredLayout): DiagramLayout {
+export function mapStoredLayout(row: StoredLayout): DiagramLayout {
   return {
     projectId: row.projectId,
     viewKey: row.viewKey,
@@ -109,7 +109,7 @@ function mapLayout(row: StoredLayout): DiagramLayout {
   };
 }
 
-function toStoredLayout(layout: DiagramLayout): typeof diagramLayouts.$inferInsert {
+export function toStoredLayout(layout: DiagramLayout): typeof diagramLayouts.$inferInsert {
   return {
     projectId: layout.projectId,
     viewKey: layout.viewKey,
