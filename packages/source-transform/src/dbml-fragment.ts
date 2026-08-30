@@ -30,6 +30,13 @@ export interface ParsedTableHeader {
   settings: ParsedSettingsBlock | null;
 }
 
+export interface ParsedDirectChildBlock {
+  keywordStart: number;
+  openBraceOffset: number;
+  closeBraceOffset: number;
+  endOffset: number;
+}
+
 export interface ExistingSettingMutation {
   create: string;
   update: (entry: ParsedSetting) => string | null;
@@ -99,7 +106,7 @@ export function rewriteSettings(
   const existingKeys = new Set<string>();
   const rewrittenEntries: Array<{ originalIndex: number; raw: string }> = [];
   for (const [originalIndex, entry] of block.entries.entries()) {
-    if (seen.has(entry.key)) return null;
+    if (seen.has(entry.key) && normalizedMutations.has(entry.key)) return null;
     seen.add(entry.key);
     existingKeys.add(entry.key);
     const mutation = normalizedMutations.get(entry.key);
@@ -154,6 +161,95 @@ export function rewriteSettings(
   }
   const newInner = `${leading}${content.join("")}${trailing}`;
   return `${fragment.slice(0, block.startOffset + 1)}${newInner}${fragment.slice(block.endOffset - 1)}`;
+}
+
+export function rewriteSettingOccurrence(
+  fragment: string,
+  block: ParsedSettingsBlock,
+  targetEntryIndex: number,
+  replacement: string | null,
+): string | null {
+  const target = block.entries[targetEntryIndex];
+  if (!target) return null;
+  if (replacement !== null) {
+    return `${fragment.slice(0, target.contentStart)}${replacement}${fragment.slice(target.contentEnd)}`;
+  }
+  if (block.entries.length === 1) {
+    let removalStart = block.startOffset;
+    while (removalStart > 0 && /[\t ]/u.test(fragment[removalStart - 1] ?? "")) removalStart -= 1;
+    return `${fragment.slice(0, removalStart)}${fragment.slice(block.endOffset)}`;
+  }
+  const next = block.entries[targetEntryIndex + 1];
+  if (next) {
+    return `${fragment.slice(0, target.contentStart)}${fragment.slice(next.contentStart)}`;
+  }
+  const previous = block.entries[targetEntryIndex - 1];
+  if (!previous) return null;
+  return `${fragment.slice(0, previous.contentEnd)}${fragment.slice(target.contentEnd)}`;
+}
+
+export function parseSettingsBlockAt(
+  fragment: string,
+  startOffset: number,
+): ParsedSettingsBlock | null {
+  return parseSettingsBlock(fragment, startOffset);
+}
+
+export function findDirectChildBlock(
+  fragment: string,
+  keyword: string,
+): ParsedDirectChildBlock | null {
+  const tableOpen = findTopLevelCharacter(fragment, 0, "{");
+  if (tableOpen === null) return null;
+  let cursor = tableOpen + 1;
+  let depth = 1;
+  while (cursor < fragment.length) {
+    const skipped = skipQuotedOrComment(fragment, cursor, fragment.length);
+    if (skipped !== null) {
+      cursor = skipped;
+      continue;
+    }
+    const character = fragment[cursor] ?? "";
+    if (character === "{") {
+      depth += 1;
+      cursor += 1;
+      continue;
+    }
+    if (character === "}") {
+      depth -= 1;
+      if (depth === 0) return null;
+      cursor += 1;
+      continue;
+    }
+    if (depth === 1 && isIdentifierCharacter(character)) {
+      const start = cursor;
+      cursor += 1;
+      while (cursor < fragment.length && isIdentifierCharacter(fragment[cursor] ?? "")) {
+        cursor += 1;
+      }
+      if (fragment.slice(start, cursor).toLowerCase() !== keyword.toLowerCase()) continue;
+      const openBraceOffset = skipWhitespace(fragment, cursor);
+      if (fragment[openBraceOffset] !== "{") continue;
+      const endOffset = findMatchingDelimiter(fragment, openBraceOffset, "{", "}");
+      if (endOffset === null) return null;
+      return {
+        keywordStart: start,
+        openBraceOffset,
+        closeBraceOffset: endOffset - 1,
+        endOffset,
+      };
+    }
+    cursor += 1;
+  }
+  return null;
+}
+
+export function findTopLevelCharacterAt(
+  source: string,
+  startOffset: number,
+  target: string,
+): number | null {
+  return findTopLevelCharacter(source, startOffset, target);
 }
 
 export function renderIdentifier(name: string, preserveQuoted = false): string {
