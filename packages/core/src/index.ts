@@ -8,6 +8,8 @@ export * from "./application/sql-import.js";
 export * from "./application/sql-import-application.js";
 export * from "./application/sql-export.js";
 export * from "./application/sql-export-application.js";
+export * from "./application/visual-command.js";
+export * from "./application/visual-command-application.js";
 export {
   DBML_PARSE_MODE,
   parseDbmlProjectV2,

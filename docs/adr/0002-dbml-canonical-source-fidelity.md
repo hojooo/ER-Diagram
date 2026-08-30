@@ -151,6 +151,12 @@ member, leading comment, note, color와 metadata는 그대로 둔다.
 반환한다. 누락되거나 서로 다른 injection range를 하나로 추정하지 않으며, 이러한 불일치는 source range
 오류로 fail-closed 처리한다. Partial definition 자체는 canonical source editor에서만 변경한다.
 
+Explicit table/column visual rename의 exact HIGH candidate는 모든 stored view layout에 같은 schema
+transaction으로 적용한다. Old position과 hidden key는 recovery를 위해 남기고 new key에 값을 복사한다.
+New key에 다른 position이 이미 있으면 임의 overwrite하지 않고 source revision과 receipt까지 전부
+rollback한다. Rename 전 `baseSchemaHash`와 일치하는 row만 rename 후 hash로 전진시키며 이미 stale한
+provenance는 유지한다. 여러 row가 바뀌어도 하나의 project-global layout revision만 사용한다.
+
 M0에서는 `CreateColumn` 한 종류로 이 경계를 증명한다. 대상 block 밖의 comment, partial, view와 formatting은 byte-identical이어야 하며 full-model DBML regeneration은 canonical source 갱신 경로로 사용하지 않는다.
 
 ## Alternatives considered

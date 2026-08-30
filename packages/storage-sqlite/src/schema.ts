@@ -21,6 +21,28 @@ export const REVISION_ORIGINS = [
 ] as const;
 export const DETAIL_LEVELS = ["NAME_ONLY", "KEYS_ONLY", "FULL"] as const;
 export const IMPORT_STATUSES = ["PREVIEWED", "APPLIED", "CANCELLED", "FAILED"] as const;
+export const VISUAL_COMMAND_KINDS = [
+  "CREATE_TABLE",
+  "UPDATE_TABLE",
+  "RENAME_TABLE",
+  "DELETE_TABLE",
+  "CREATE_COLUMN",
+  "UPDATE_COLUMN",
+  "RENAME_COLUMN",
+  "REORDER_COLUMN",
+  "DELETE_COLUMN",
+  "CREATE_REFERENCE",
+  "UPDATE_REFERENCE",
+  "DELETE_REFERENCE",
+  "CREATE_INDEX",
+  "UPDATE_INDEX",
+  "DELETE_INDEX",
+  "CREATE_CHECK",
+  "UPDATE_CHECK",
+  "DELETE_CHECK",
+  "UPDATE_GROUP_MEMBERSHIP",
+  "UPDATE_DIAGRAM_VIEW",
+] as const;
 
 export interface DiagramPosition {
   readonly x: number;
@@ -43,6 +65,19 @@ function uuidV7Text(column: AnySQLiteColumn): SQL {
     AND length(replace(${column}, '-', '')) = 32
     AND replace(${column}, '-', '') NOT GLOB '*[^0-9a-f]*'
     AND substr(${column}, 15, 1) = '7'
+    AND substr(${column}, 20, 1) IN ('8', '9', 'a', 'b')`;
+}
+
+function uuidText(column: AnySQLiteColumn): SQL {
+  return sql`length(${column}) = 36
+    AND ${column} = lower(${column})
+    AND substr(${column}, 9, 1) = '-'
+    AND substr(${column}, 14, 1) = '-'
+    AND substr(${column}, 19, 1) = '-'
+    AND substr(${column}, 24, 1) = '-'
+    AND length(replace(${column}, '-', '')) = 32
+    AND replace(${column}, '-', '') NOT GLOB '*[^0-9a-f]*'
+    AND substr(${column}, 15, 1) IN ('1', '2', '3', '4', '5', '6', '7', '8')
     AND substr(${column}, 20, 1) IN ('8', '9', 'a', 'b')`;
 }
 
@@ -208,6 +243,58 @@ export const importArtifacts = sqliteTable(
   ],
 );
 
+export const visualCommandReceipts = sqliteTable(
+  "visual_command_receipts",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    commandId: text("command_id").notNull(),
+    commandKind: text("command_kind", { enum: VISUAL_COMMAND_KINDS }).notNull(),
+    commandHash: text("command_hash").notNull(),
+    expectedSchemaRevisionNo: integer("expected_schema_revision_no").notNull(),
+    appliedSchemaRevisionNo: integer("applied_schema_revision_no").notNull(),
+    appliedLayoutRevisionNo: integer("applied_layout_revision_no").notNull(),
+    revisionCreated: integer("revision_created", { mode: "boolean" }).notNull(),
+    layoutMigrated: integer("layout_migrated", { mode: "boolean" }).notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.commandId] }),
+    check("visual_command_receipts_command_id_uuid", uuidText(table.commandId)),
+    check(
+      "visual_command_receipts_command_kind",
+      sql`${table.commandKind} IN ('CREATE_TABLE', 'UPDATE_TABLE', 'RENAME_TABLE', 'DELETE_TABLE', 'CREATE_COLUMN', 'UPDATE_COLUMN', 'RENAME_COLUMN', 'REORDER_COLUMN', 'DELETE_COLUMN', 'CREATE_REFERENCE', 'UPDATE_REFERENCE', 'DELETE_REFERENCE', 'CREATE_INDEX', 'UPDATE_INDEX', 'DELETE_INDEX', 'CREATE_CHECK', 'UPDATE_CHECK', 'DELETE_CHECK', 'UPDATE_GROUP_MEMBERSHIP', 'UPDATE_DIAGRAM_VIEW')`,
+    ),
+    check(
+      "visual_command_receipts_command_hash",
+      sql`length(${table.commandHash}) = 64
+        AND ${table.commandHash} = lower(${table.commandHash})
+        AND ${table.commandHash} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check(
+      "visual_command_receipts_expected_schema_revision_no",
+      sql`${table.expectedSchemaRevisionNo} > 0`,
+    ),
+    check(
+      "visual_command_receipts_applied_schema_revision_no",
+      sql`${table.appliedSchemaRevisionNo} > 0`,
+    ),
+    check(
+      "visual_command_receipts_applied_layout_revision_no",
+      sql`${table.appliedLayoutRevisionNo} >= 0`,
+    ),
+    check("visual_command_receipts_revision_created", sql`${table.revisionCreated} IN (0, 1)`),
+    check("visual_command_receipts_layout_migrated", sql`${table.layoutMigrated} IN (0, 1)`),
+    check(
+      "visual_command_receipts_schema_revision_transition",
+      sql`(${table.revisionCreated} = 1 AND ${table.appliedSchemaRevisionNo} = ${table.expectedSchemaRevisionNo} + 1)
+        OR (${table.revisionCreated} = 0 AND ${table.appliedSchemaRevisionNo} = ${table.expectedSchemaRevisionNo})`,
+    ),
+    check("visual_command_receipts_created_at_utc", utcIsoTimestamp(table.createdAt)),
+  ],
+);
+
 export const appMetadata = sqliteTable("app_metadata", {
   key: text("key").primaryKey().notNull(),
   value: text("value").notNull(),
@@ -219,4 +306,5 @@ export const sqliteSchema = {
   importArtifacts,
   projects,
   schemaRevisions,
+  visualCommandReceipts,
 } as const;

@@ -693,7 +693,13 @@ Table public.events {
         changes: { expression: "id > 0" },
       }),
     );
-    expect(noOp).toMatchObject({ changed: false, edits: [], semanticDiff: { changes: [] } });
+    expect(noOp).toMatchObject({
+      changed: false,
+      edits: [],
+      semanticDiff: { changes: [] },
+    });
+    expect(noOp.diagnostics.length).toBeGreaterThan(0);
+    expect(noOp.diagnostics.every((diagnostic) => diagnostic.severity !== "ERROR")).toBe(true);
     expect(structuredClone(JSON.parse(JSON.stringify(noOp)))).toEqual(noOp);
 
     const failure = await expectFailure(

@@ -625,6 +625,17 @@ patch로 fallback한다. 어느 경로든 full DBML v2 reparse 후 target view�
 range와 해당 partial을 주입한 모든 table의 stable key·injection range를 반환한다. Provenance나 range가
 불완전하면 일부 영향 목록을 추정하지 않고 source-range 오류로 실패한다.
 
+Visual command idempotency는 project-scoped lowercase `commandId` receipt로 보장한다. Receipt hash는
+`commandId`를 제외하고 `kind`, `expectedSchemaRevisionNo`와 전체 variant payload를 canonical JSON으로
+직렬화해 계산한다. 같은 project의 같은 command ID와 payload는 current state와 최초 적용 schema/layout
+revision 정보를 replay하며 stale revision 검사나 source transform을 다시 실행하지 않는다. 같은 command
+ID의 payload가 다르면 idempotency conflict로 차단한다.
+
+Semantic no-op도 receipt를 저장하지만 schema/layout revision과 project `updatedAt`은 변경하지 않는다.
+실제 변경은 `VALID + VISUAL_COMMAND` revision, project draft·last-valid pointer, optional rename layout
+migration, receipt와 retention pruning을 하나의 transaction에서 commit한다. 어느 단계든 실패하면 receipt를
+포함한 전체 mutation을 rollback한다. Receipt는 revision pruning과 독립적으로 project 삭제 전까지 유지한다.
+
 Pinned DBML v2 parser는 column이 없는 `Table` block을 유효한 schema로 받지 않는다. 따라서
 `CREATE_TABLE`은 이름이 서로 다른 초기 column을 한 개 이상 함께 받아 table과 column을 하나의
 검증 단위로 생성한다. 제품이 임의의 `id` column을 만들지는 않는다. 생성 payload의 note, color와
@@ -780,9 +791,14 @@ INVALID_DRAFT
 7. memory copy에 edit 적용
 8. DBML v2 전체 reparse
 9. expected semantic diff 검증
-10. source·last-valid graph·revision·undo record 원자 저장
+10. source·last-valid graph·revision·command receipt 원자 저장
 
 8~10 중 하나라도 실패하면 source는 변경하지 않는다.
+
+동일 project의 기존 command receipt 조회는 expected revision 검사보다 앞선다. 같은 payload replay는 최초
+command가 만든 revision이 retention으로 제거된 이후에도 새 revision을 만들지 않으며, 다른 payload의 ID
+재사용은 차단한다. Transformer는 transaction 밖에서 실행하지만 receipt와 expected revision을
+`BEGIN IMMEDIATE` transaction 안에서 다시 확인한다.
 
 ### 13.3 Source fidelity
 
@@ -840,6 +856,12 @@ identity와 `TablePartial`에서 주입된 reference/index/check는 source edito
 - source 직접 편집의 rename은 semantic diff로 추론하되 확신할 수 없으면 delete+create로 처리한다.
 - stale layout entry는 바로 삭제하지 않고 recovery 가능 기간 동안 보존한다.
 - `schemaHash`는 layout 적용 가능성을 확인하는 provenance이지 위치를 매번 초기화하는 key가 아니다.
+
+Explicit table/column rename은 모든 저장된 view row에서 old position과 hidden state를 new key로 복사하고
+old key를 recovery용으로 보존한다. New key에 다른 position이 이미 있으면 schema write까지 모두
+rollback한다. `baseSchemaHash`가 rename 전 hash와 일치하는 row만 rename 후 hash로 갱신하며 stale provenance는
+유지한다. 변경된 row는 하나의 새 project-global layout revision을 공유하고 project layout revision은
+command당 최대 한 번만 증가한다.
 
 ## 14. 논리 데이터 모델
 
@@ -915,7 +937,21 @@ Preview conversion 실패도 `FAILED` row로 보존한다. 성공 Apply에서만
 이 lifecycle은 project-bound Replace preview에 적용한다. 새 project의 stateless preview는 row를 만들지
 않으며 성공 Apply transaction에서 `CREATE_PROJECT` envelope의 `APPLIED` row를 직접 생성한다.
 
-### 14.5 파생 데이터
+### 14.5 `VisualCommandReceipt`
+
+| 필드 | 의미 |
+| --- | --- |
+| `projectId`, `commandId` | project-scoped idempotency identity |
+| `commandKind`, `commandHash` | canonical payload evidence. source나 payload 본문은 저장하지 않음 |
+| `expectedSchemaRevisionNo` | 최초 요청의 optimistic version |
+| `appliedSchemaRevisionNo`, `appliedLayoutRevisionNo` | 최초 적용 결과 revision |
+| `revisionCreated`, `layoutMigrated` | 최초 적용 결과 flag |
+| `createdAt` | receipt 생성 시각 |
+
+Receipt는 schema revision FK를 두지 않아 retention 후에도 replay할 수 있고 project 삭제 시 cascade된다.
+Diagnostic, DBML source와 command payload 본문은 receipt에 중복 저장하지 않는다.
+
+### 14.6 파생 데이터
 
 다음은 언제든 DBML source에서 재구축하며 별도 정본으로 취급하지 않는다.
 
@@ -931,7 +967,7 @@ Preview conversion 실패도 `FAILED` row로 보존한다. 성공 Apply에서만
 
 ```text
 project_store
-  ├─ Project / SchemaRevision / DiagramLayout / ImportArtifact
+  ├─ Project / SchemaRevision / DiagramLayout / ImportArtifact / VisualCommandReceipt
   └─ atomic save / backup / restore
 
 schema_compiler
