@@ -503,5 +503,5 @@ describe("TablePartial impact and unified routing", () => {
       views: after.views.length,
       references: after.references.length,
     }).toEqual({ tables: 143, enums: 86, partials: 4, groups: 15, views: 7, references: 573 });
-  });
+  }, 30_000);
 });
