@@ -3,8 +3,8 @@ import type {
   DiagramPosition,
   DiagramViewport,
   ProjectResponse,
-  ProjectsResponse,
   ProjectState,
+  ProjectsResponse,
   VisualCommand,
 } from "@er-diagram/contracts";
 import { diffSchemaGraphs, recoverLayoutStableKeys, type SchemaGraph } from "@er-diagram/core";
@@ -49,14 +49,20 @@ import type {
   DiagramVisibility,
 } from "../diagram/types.js";
 import { resolveDiagramViewKey } from "../diagram/view-session-state.js";
+import { SchemaHistoryControls } from "../history/history-controls.js";
+import {
+  createSchemaHistorySession,
+  type SchemaHistorySessionController,
+  type SchemaHistorySessionSnapshot,
+} from "../history/history-session.js";
 import type { ProjectApi } from "../projects/project-api.js";
 import { projectQueryKeys } from "../projects/project-queries.js";
-import { VisualSchemaInspector } from "../visual-editor/visual-schema-inspector.js";
 import {
   createVisualCommandSession,
   type VisualCommandSessionController,
   type VisualCommandSessionSnapshot,
 } from "../visual-editor/visual-command-session.js";
+import { VisualSchemaInspector } from "../visual-editor/visual-schema-inspector.js";
 import type { SourceEditorComponent, SourceEditorHandle } from "./editor-contract.js";
 import {
   createDbmlParserWorkerClient,
@@ -107,6 +113,9 @@ export function ProjectSourceWorkspace({
     useState<VisualCommandSessionController | null>(null);
   const [visualCommandSnapshot, setVisualCommandSnapshot] =
     useState<VisualCommandSessionSnapshot | null>(null);
+  const [historySession, setHistorySession] = useState<SchemaHistorySessionController | null>(null);
+  const [historySnapshot, setHistorySnapshot] = useState<SchemaHistorySessionSnapshot | null>(null);
+  const historySessionRef = useRef<SchemaHistorySessionController | null>(null);
   const editorRef = useRef<SourceEditorHandle>(null);
   const lastCursorPositionRef = useRef<SourceCursorPosition | null>(null);
   const flushedBlockedNavigationRef = useRef(false);
@@ -116,6 +125,7 @@ export function ProjectSourceWorkspace({
   const previousGraphRef = useRef<SchemaGraph | null>(null);
   const skipNextClientRenameRecoveryRef = useRef(false);
   const lastAppliedVisualCommandRef = useRef<VisualCommand | null>(null);
+  const lastExternalHistoryRevisionRef = useRef<number | null>(null);
   const renderedLayoutRef = useRef<{
     readonly viewKey: DiagramViewKey;
     readonly positions: Readonly<Record<string, DiagramPosition>>;
@@ -175,11 +185,12 @@ export function ProjectSourceWorkspace({
     () => (activeGraph ? createDiagramNavigationIndex(activeGraph) : null),
     [activeGraph],
   );
-  const visualWorkspaceLocked =
+  const visualCommandWorkspaceLocked =
     visualCommandSnapshot?.status === "FLUSHING_SOURCE" ||
     visualCommandSnapshot?.status === "FLUSHING_LAYOUT" ||
     visualCommandSnapshot?.status === "SUBMITTING" ||
     visualCommandSnapshot?.status === "UNKNOWN_OUTCOME";
+  const visualWorkspaceLocked = visualCommandWorkspaceLocked || historySnapshot?.locked === true;
   const layoutInteractionLocked =
     layoutRequest !== null ||
     visualWorkspaceLocked ||
@@ -300,6 +311,22 @@ export function ProjectSourceWorkspace({
     setHiddenSourceSelection(null);
   }, [hiddenSourceSelection, selectionStore]);
 
+  const handleHistoryUndo = useCallback(() => {
+    if (visualCommandWorkspaceLocked) return;
+    void historySessionRef.current?.undo();
+  }, [visualCommandWorkspaceLocked]);
+
+  const handleHistoryRedo = useCallback(() => {
+    if (visualCommandWorkspaceLocked) return;
+    void historySessionRef.current?.redo();
+  }, [visualCommandWorkspaceLocked]);
+
+  const loadHistoryRevisions = useCallback(async () => {
+    const response = await api.listRevisions(projectId);
+    queryClient.setQueryData(projectQueryKeys.revisions(projectId), response);
+    return response;
+  }, [api, projectId, queryClient]);
+
   useEffect(() => {
     const currentSelection = selectionStore.getState().selection;
     if (
@@ -395,6 +422,7 @@ export function ProjectSourceWorkspace({
     previousGraphRef.current = null;
     renderedLayoutRef.current = null;
     lastCursorPositionRef.current = null;
+    lastExternalHistoryRevisionRef.current = null;
   }, [projectId]);
 
   useEffect(() => {
@@ -440,6 +468,13 @@ export function ProjectSourceWorkspace({
         queryClient.setQueryData(projectQueryKeys.detail(projectId), response);
         return response.state;
       },
+      onDraftCommitted: (beforeState, response) => {
+        historySessionRef.current?.recordCommitted({
+          kind: "SOURCE_EDIT",
+          before: beforeState,
+          response,
+        });
+      },
       onAdoptCommittedSource: (source) => editorRef.current?.replaceSource(source),
       onServerState: (state) => {
         queryClient.setQueryData<ProjectResponse>(
@@ -478,6 +513,89 @@ export function ProjectSourceWorkspace({
     const sourceSession = sessionRef.current;
     const layoutSession = layoutSessionRef.current;
     if (!sourceSession || !layoutSession) return;
+
+    const session = createSchemaHistorySession({
+      projectId,
+      initialState: sourceSession.getSnapshot().serverState,
+      flushSource: async () => {
+        const flushed = await sourceSession.flushAndWait();
+        if (flushed.persistence !== "SAVED") {
+          throw historyWorkspaceError(
+            "CLIENT_HISTORY_SOURCE_NOT_SAVED",
+            "The current DBML source must be saved before changing schema history.",
+          );
+        }
+        return flushed.serverState;
+      },
+      flushLayout: async () => {
+        await layoutSession.flush();
+        const flushed = layoutSession.getSnapshot();
+        const failedView = [...flushed.views.values()].find(
+          (view) => view.hydrated && (view.status === "ERROR" || view.status === "CONFLICT"),
+        );
+        if (flushed.hasUnsavedChanges || failedView) {
+          throw historyWorkspaceError(
+            "CLIENT_HISTORY_LAYOUT_NOT_SAVED",
+            "Every loaded diagram layout must be saved before changing schema history.",
+          );
+        }
+      },
+      saveDraft: (input) => api.saveDraft(input),
+      restoreRevision: (input) => api.restoreRevision(input),
+      adoptAuthoritativeState: async (state, diagnostics) => {
+        const adopted = await sourceSession.adoptCommittedState(state, diagnostics);
+        if (
+          adopted.persistence !== "SAVED" ||
+          adopted.serverState.project.schemaRevisionNo !== state.project.schemaRevisionNo ||
+          adopted.source !== state.project.draftSource ||
+          adopted.sourceHash !== state.project.draftHash
+        ) {
+          throw historyWorkspaceError(
+            "CLIENT_HISTORY_STATE_ADOPTION_FAILED",
+            "The committed history state could not be adopted.",
+          );
+        }
+        await layoutSession.adoptCommittedRevision(state.project.layoutRevisionNo, false);
+        queryClient.setQueryData<ProjectResponse>(projectQueryKeys.detail(projectId), { state });
+        void queryClient.invalidateQueries({ queryKey: projectQueryKeys.list });
+        void queryClient.invalidateQueries({ queryKey: projectQueryKeys.revisions(projectId) });
+      },
+      loadCurrentState: async () => {
+        const response = await api.getProject(projectId);
+        queryClient.setQueryData(projectQueryKeys.detail(projectId), response);
+        return response.state;
+      },
+    });
+    historySessionRef.current = session;
+    setHistorySession(session);
+    setHistorySnapshot(session.getSnapshot());
+    const unsubscribe = session.subscribe(() => setHistorySnapshot(session.getSnapshot()));
+    return () => {
+      unsubscribe();
+      session.dispose();
+      if (historySessionRef.current === session) historySessionRef.current = null;
+      setHistorySession(null);
+      setHistorySnapshot(null);
+    };
+  }, [api, projectId, queryClient, visualSessionsReady]);
+
+  useEffect(() => {
+    if (!historySession || sessionSnapshot?.persistence !== "CONFLICT") return;
+    const externalState = sessionSnapshot.conflictState;
+    if (!externalState) {
+      historySession.reset();
+      return;
+    }
+    if (lastExternalHistoryRevisionRef.current === externalState.project.schemaRevisionNo) return;
+    lastExternalHistoryRevisionRef.current = externalState.project.schemaRevisionNo;
+    historySession.adoptExternalState(externalState);
+  }, [historySession, sessionSnapshot]);
+
+  useEffect(() => {
+    if (!visualSessionsReady) return;
+    const sourceSession = sessionRef.current;
+    const layoutSession = layoutSessionRef.current;
+    if (!sourceSession || !layoutSession) return;
     const commandSession = createVisualCommandSession({
       projectId,
       sourceSession,
@@ -496,6 +614,18 @@ export function ProjectSourceWorkspace({
       onCommittedState: (state) => {
         queryClient.setQueryData<ProjectResponse>(projectQueryKeys.detail(projectId), { state });
         void queryClient.invalidateQueries({ queryKey: projectQueryKeys.list });
+      },
+      onCommittedMutation: (beforeState, state, mutation) => {
+        historySessionRef.current?.recordCommitted({
+          kind: "VISUAL_COMMAND",
+          before: beforeState,
+          response: { state, revisionCreated: mutation.revisionCreated },
+          replayed: mutation.replayed,
+          appliedSchemaRevisionNo: mutation.appliedSchemaRevisionNo,
+        });
+      },
+      onExternalStateAdopted: (state) => {
+        historySessionRef.current?.adoptExternalState(state);
       },
     });
     setVisualCommandSession(commandSession);
@@ -727,6 +857,31 @@ export function ProjectSourceWorkspace({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedWorkspace]);
 
+  useEffect(() => {
+    const handleHistoryShortcut = (event: KeyboardEvent) => {
+      if (
+        !(event.metaKey || event.ctrlKey) ||
+        event.altKey ||
+        !isDiagramHistoryShortcutTarget(event.target)
+      ) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key === "z" && event.shiftKey) {
+        event.preventDefault();
+        handleHistoryRedo();
+        return;
+      }
+      if (key === "y" || (key === "z" && !event.shiftKey)) {
+        event.preventDefault();
+        if (key === "y") handleHistoryRedo();
+        else handleHistoryUndo();
+      }
+    };
+    window.addEventListener("keydown", handleHistoryShortcut);
+    return () => window.removeEventListener("keydown", handleHistoryShortcut);
+  }, [handleHistoryRedo, handleHistoryUndo]);
+
   if (!sessionSnapshot) {
     return (
       <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 text-slate-300">
@@ -739,6 +894,13 @@ export function ProjectSourceWorkspace({
   return (
     <>
       <div className="mt-8 space-y-5">
+        {historySession && historySnapshot ? (
+          <SchemaHistoryControls
+            session={historySession}
+            loadRevisions={loadHistoryRevisions}
+            interactionDisabled={visualCommandWorkspaceLocked}
+          />
+        ) : null}
         <div className="grid gap-5 xl:grid-cols-2">
           <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
             <div className="flex flex-col gap-3 border-b border-slate-700 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -783,6 +945,8 @@ export function ProjectSourceWorkspace({
                 diagnostics={sessionSnapshot.diagnostics}
                 onChange={(source) => sessionRef.current?.edit(source)}
                 onSave={() => sessionRef.current?.flush()}
+                onUndo={handleHistoryUndo}
+                onRedo={handleHistoryRedo}
                 onCursorPositionChange={handleCursorPositionChange}
                 readOnly={visualWorkspaceLocked}
               />
@@ -1843,6 +2007,15 @@ function updateCachedLayoutRevision(
         }
       : current,
   );
+}
+
+function historyWorkspaceError(code: string, message: string): Error {
+  return Object.assign(new Error(message), { code });
+}
+
+function isDiagramHistoryShortcutTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return target.closest('[aria-label="ER diagram canvas"]') !== null;
 }
 
 const secondaryButtonClass =

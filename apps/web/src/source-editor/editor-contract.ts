@@ -16,6 +16,8 @@ export interface SourceEditorProps extends RefAttributes<SourceEditorHandle> {
   readonly diagnostics: Diagnostic[];
   readonly onChange: (source: string) => void;
   readonly onSave: () => void;
+  readonly onUndo?: () => void;
+  readonly onRedo?: () => void;
   readonly onCursorPositionChange?: (position: SourceCursorPosition) => void;
   readonly readOnly?: boolean;
 }

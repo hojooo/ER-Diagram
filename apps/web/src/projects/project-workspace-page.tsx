@@ -25,6 +25,8 @@ export function ProjectWorkspacePage({
     queryKey: projectQueryKeys.detail(projectId ?? "invalid-project-id"),
     queryFn: () => api.getProject(projectId ?? ""),
     enabled: projectId !== undefined,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   if (!projectId || isNotFound(projectQuery.error)) {
