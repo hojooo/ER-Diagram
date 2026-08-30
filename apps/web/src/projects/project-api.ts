@@ -35,6 +35,12 @@ import {
   sqlExportResponseSchema,
   type SqlExportSourceSelection,
   type OriginalSqlRetentionMode,
+  type Diagnostic,
+  type VisualCommand,
+  type VisualCommandMutationResponse,
+  type VisualCommandPartialImpact,
+  visualCommandMutationResponseSchema,
+  visualCommandRequestSchema,
 } from "@er-diagram/contracts";
 
 export interface CreateProjectInput {
@@ -111,6 +117,11 @@ export interface ExportProjectSqlInput {
   readonly sourceSelection: SqlExportSourceSelection;
 }
 
+export interface ApplyVisualCommandInput {
+  readonly projectId: string;
+  readonly command: VisualCommand;
+}
+
 export interface ProjectApi {
   listProjects(): Promise<ProjectsResponse>;
   getProject(projectId: string): Promise<ProjectResponse>;
@@ -130,6 +141,7 @@ export interface ProjectApi {
   previewProjectSqlImport(input: PreviewProjectSqlImportInput): Promise<SqlImportPreviewResponse>;
   applyProjectSqlImport(input: ApplyProjectSqlImportInput): Promise<SqlImportApplyResponse>;
   exportProjectSql(input: ExportProjectSqlInput): Promise<SqlExportResponse>;
+  applyVisualCommand(input: ApplyVisualCommandInput): Promise<VisualCommandMutationResponse>;
 }
 
 export class ProjectApiError extends Error {
@@ -137,6 +149,8 @@ export class ProjectApiError extends Error {
   readonly code: string;
   readonly correlationId: string | undefined;
   readonly currentRevisionNo: number | undefined;
+  readonly diagnostics: Diagnostic[] | undefined;
+  readonly partialImpact: VisualCommandPartialImpact | undefined;
 
   constructor(
     message: string,
@@ -145,6 +159,8 @@ export class ProjectApiError extends Error {
       readonly code: string;
       readonly correlationId?: string;
       readonly currentRevisionNo?: number;
+      readonly diagnostics?: Diagnostic[];
+      readonly partialImpact?: VisualCommandPartialImpact;
     },
   ) {
     super(message);
@@ -153,6 +169,8 @@ export class ProjectApiError extends Error {
     this.code = options.code;
     this.correlationId = options.correlationId;
     this.currentRevisionNo = options.currentRevisionNo;
+    this.diagnostics = options.diagnostics;
+    this.partialImpact = options.partialImpact;
   }
 }
 
@@ -415,6 +433,18 @@ export function createHttpProjectApi(options: HttpProjectApiOptions = {}): Proje
         body,
       });
     },
+    applyVisualCommand: (input) => {
+      const projectId = parseClientInput(projectIdSchema, input.projectId);
+      const body = parseClientInput(visualCommandRequestSchema, input.command);
+      return request(fetcher, basePath, {
+        method: "POST",
+        path: `/projects/${encodeURIComponent(projectId)}/visual-commands`,
+        expectedStatus: 200,
+        responseSchema: visualCommandMutationResponseSchema,
+        body,
+        commandId: body.commandId,
+      });
+    },
   };
 }
 
@@ -476,6 +506,10 @@ async function toPublicApiError(response: Response): Promise<ProjectApiError> {
       ...(parsed.data.currentRevisionNo === undefined
         ? {}
         : { currentRevisionNo: parsed.data.currentRevisionNo }),
+      ...(parsed.data.diagnostics === undefined ? {} : { diagnostics: parsed.data.diagnostics }),
+      ...(parsed.data.partialImpact === undefined
+        ? {}
+        : { partialImpact: parsed.data.partialImpact }),
     });
   }
   return new ProjectApiError("The server could not complete the request.", {

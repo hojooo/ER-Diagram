@@ -44,6 +44,10 @@ export interface LayoutSessionController {
   retrySave(): Promise<void>;
   retryLocalLayout(): Promise<void>;
   loadServerLayout(): Promise<void>;
+  adoptCommittedRevision(
+    revisionNo: number,
+    refreshHydratedViews: boolean,
+  ): Promise<{ readonly refreshFailed: boolean }>;
   retainViews(viewKeys: ReadonlySet<string>): void;
   dispose(): void;
 }
@@ -300,6 +304,50 @@ export function createLayoutSession(options: CreateLayoutSessionOptions): Layout
     await drain();
   }
 
+  async function adoptCommittedRevision(
+    revisionNo: number,
+    refreshHydratedViews: boolean,
+  ): Promise<{ readonly refreshFailed: boolean }> {
+    if (!Number.isSafeInteger(revisionNo) || revisionNo < currentLayoutRevisionNo) {
+      throw new RangeError("Committed layout revision must not move backwards.");
+    }
+    if (conflict || [...views.values()].some((view) => view.dirty || view.status === "SAVING")) {
+      throw new Error("Committed layout state cannot be adopted while local layout writes exist.");
+    }
+    updateRevision(revisionNo);
+    if (!refreshHydratedViews) {
+      notify();
+      return { refreshFailed: false };
+    }
+
+    let refreshFailed = false;
+    const hydratedViews = [...views.values()]
+      .filter((view) => view.hydrated)
+      .sort((left, right) => compareStrings(left.viewKey, right.viewKey));
+    for (const view of hydratedViews) {
+      view.status = "LOADING";
+      view.error = null;
+      notify();
+      try {
+        const response = await options.loadLayout(view.viewKey);
+        if (disposed) return { refreshFailed };
+        updateRevision(response.currentLayoutRevisionNo);
+        view.layout = response.layout ? stripIdentity(response.layout) : cloneLayout(view.fallback);
+        view.persistedLayout = response.layout ? stripIdentity(response.layout) : null;
+        view.persistedRevisionNo = response.layout?.revisionNo ?? null;
+        view.dirty = false;
+        view.status = "SAVED";
+      } catch (error) {
+        if (disposed) return { refreshFailed: true };
+        refreshFailed = true;
+        view.status = "ERROR";
+        view.error = publicError(error);
+      }
+      notify();
+    }
+    return { refreshFailed };
+  }
+
   function retainViews(viewKeys: ReadonlySet<string>): void {
     let changed = false;
     for (const viewKey of views.keys()) {
@@ -333,6 +381,7 @@ export function createLayoutSession(options: CreateLayoutSessionOptions): Layout
     retrySave,
     retryLocalLayout,
     loadServerLayout,
+    adoptCommittedRevision,
     retainViews,
     dispose() {
       disposed = true;

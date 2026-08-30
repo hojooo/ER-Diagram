@@ -33,6 +33,54 @@ function response(
 }
 
 describe("layout session", () => {
+  it("adopts a visual-command layout revision and reloads only hydrated views", async () => {
+    const loadLayout = vi.fn(async (viewKey: string) =>
+      response(3, viewKey, layout({ positions: { [`table:${viewKey}`]: { x: 30, y: 40 } } })),
+    );
+    const revisions: number[] = [];
+    const session = createLayoutSession({
+      projectId: PROJECT_ID,
+      initialLayoutRevisionNo: 1,
+      loadLayout,
+      saveLayout: vi.fn(),
+      onLayoutRevision: (revisionNo) => revisions.push(revisionNo),
+    });
+    await session.hydrate("GLOBAL", layout());
+    loadLayout.mockClear();
+
+    await expect(session.adoptCommittedRevision(3, true)).resolves.toEqual({
+      refreshFailed: false,
+    });
+    expect(loadLayout).toHaveBeenCalledOnce();
+    expect(loadLayout).toHaveBeenCalledWith("GLOBAL");
+    expect(session.getSnapshot()).toMatchObject({ currentLayoutRevisionNo: 3 });
+    expect(session.getSnapshot().views.get("GLOBAL")?.layout.positions).toEqual({
+      "table:GLOBAL": { x: 30, y: 40 },
+    });
+    expect(revisions.at(-1)).toBe(3);
+  });
+
+  it("fails closed when an authoritative layout refresh fails after a schema commit", async () => {
+    let fail = false;
+    const session = createLayoutSession({
+      projectId: PROJECT_ID,
+      initialLayoutRevisionNo: 0,
+      loadLayout: async (viewKey) => {
+        if (fail) throw new Error("private layout failure");
+        return response(0, viewKey, null);
+      },
+      saveLayout: vi.fn(),
+    });
+    await session.hydrate("GLOBAL", layout());
+    fail = true;
+
+    await expect(session.adoptCommittedRevision(1, true)).resolves.toEqual({
+      refreshFailed: true,
+    });
+    expect(session.getSnapshot().views.get("GLOBAL")?.status).toBe("ERROR");
+    expect(session.getSnapshot().hasUnsavedChanges).toBe(false);
+  });
+
   it("hydrates views independently and autosaves after exactly 500 ms", async () => {
     vi.useFakeTimers();
     const saveLayout = vi.fn(async (input) => ({

@@ -133,6 +133,7 @@ function fakeApi(state: ProjectState, exported: SqlExportResponse): ProjectApi {
     saveDraft: vi.fn(),
     getLayout: vi.fn(),
     saveLayout: vi.fn(),
+    applyVisualCommand: vi.fn(),
     deleteProject: vi.fn(),
     previewStandaloneSqlImport: vi.fn(),
     createProjectFromSqlImport: vi.fn(),

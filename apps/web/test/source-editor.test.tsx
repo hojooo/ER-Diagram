@@ -627,6 +627,10 @@ class SourceProjectApi implements ProjectApi {
     return { layout: null, currentLayoutRevisionNo: this.state.project.layoutRevisionNo };
   }
 
+  applyVisualCommand: ProjectApi["applyVisualCommand"] = async () => {
+    throw new Error("Visual commands are not expected in source editor tests.");
+  };
+
   async saveLayout(input: SaveLayoutInput) {
     const revisionNo = input.expectedLayoutRevisionNo + 1;
     this.state = {

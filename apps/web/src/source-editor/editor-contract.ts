@@ -17,6 +17,7 @@ export interface SourceEditorProps extends RefAttributes<SourceEditorHandle> {
   readonly onChange: (source: string) => void;
   readonly onSave: () => void;
   readonly onCursorPositionChange?: (position: SourceCursorPosition) => void;
+  readonly readOnly?: boolean;
 }
 
 export type SourceEditorComponent = ComponentType<SourceEditorProps>;

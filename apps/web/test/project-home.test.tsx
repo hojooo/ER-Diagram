@@ -122,6 +122,10 @@ class FakeProjectApi implements ProjectApi {
     return { layout: null, currentLayoutRevisionNo: 0 };
   }
 
+  applyVisualCommand: ProjectApi["applyVisualCommand"] = async () => {
+    throw new Error("Not used.");
+  };
+
   async saveLayout(input: SaveLayoutInput) {
     return {
       state: {

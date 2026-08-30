@@ -137,6 +137,7 @@ function fakeApi() {
     saveDraft: vi.fn(),
     getLayout: vi.fn(),
     saveLayout: vi.fn(),
+    applyVisualCommand: vi.fn(),
     deleteProject: vi.fn(),
     previewStandaloneSqlImport: vi.fn(async () => preview()),
     createProjectFromSqlImport: vi.fn(async () => ({
