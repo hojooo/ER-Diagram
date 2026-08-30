@@ -10,6 +10,7 @@ import { applyTextEdits } from "./text-edits.js";
 import type {
   SourceTransformDiagnostic,
   TextEdit,
+  VisualPartialImpact,
   VisualSourceTransformFailure,
   VisualSourceTransformResult,
   VisualSourceTransformSuccess,
@@ -17,7 +18,11 @@ import type {
 
 export type EditPlan =
   | { ok: true; edits: TextEdit[] }
-  | { ok: false; diagnostic: SourceTransformDiagnostic };
+  | {
+      ok: false;
+      diagnostic: SourceTransformDiagnostic;
+      partialImpact?: VisualPartialImpact;
+    };
 
 interface VerifiedVisualTransformHooks<Command extends VisualCommand> {
   supportedKinds: ReadonlySet<VisualCommand["kind"]>;
@@ -60,7 +65,7 @@ export async function runVerifiedVisualTransform<Command extends VisualCommand>(
   }
 
   const preflight = hooks.preflight(before.graph, typedCommand);
-  if (!preflight.ok) return { ok: false, source, diagnostics: [preflight.diagnostic] };
+  if (!preflight.ok) return editPlanFailure(source, preflight);
   if (hooks.isSemanticNoOp(before.graph, typedCommand)) {
     return noOp(source, before.graph.schemaHash);
   }
@@ -75,7 +80,7 @@ export async function runVerifiedVisualTransform<Command extends VisualCommand>(
       "The requested source element could not be resolved safely.",
     );
   }
-  if (!plan.ok) return { ok: false, source, diagnostics: [plan.diagnostic] };
+  if (!plan.ok) return editPlanFailure(source, plan);
   const edits = uniqueSortedEdits(plan.edits);
   if (!edits) {
     return failure(
@@ -128,8 +133,16 @@ export async function runVerifiedVisualTransform<Command extends VisualCommand>(
   };
 }
 
-export function planFailure(code: string, message: string): Extract<EditPlan, { ok: false }> {
-  return { ok: false, diagnostic: error(code, message) };
+export function planFailure(
+  code: string,
+  message: string,
+  partialImpact?: VisualPartialImpact,
+): Extract<EditPlan, { ok: false }> {
+  return {
+    ok: false,
+    diagnostic: error(code, message),
+    ...(partialImpact ? { partialImpact } : {}),
+  };
 }
 
 export function invalidRange(message: string): EditPlan {
@@ -212,6 +225,18 @@ function diagnosticCodeCounts(graph: SchemaGraph): Map<string, number> {
 
 function failure(source: string, code: string, message: string): VisualSourceTransformFailure {
   return { ok: false, source, diagnostics: [error(code, message)] };
+}
+
+function editPlanFailure(
+  source: string,
+  plan: Extract<EditPlan, { ok: false }>,
+): VisualSourceTransformFailure {
+  return {
+    ok: false,
+    source,
+    diagnostics: [plan.diagnostic],
+    ...(plan.partialImpact ? { partialImpact: plan.partialImpact } : {}),
+  };
 }
 
 function copyParserDiagnostics(
