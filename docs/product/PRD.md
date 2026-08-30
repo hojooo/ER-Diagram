@@ -636,6 +636,19 @@ Semantic no-op도 receipt를 저장하지만 schema/layout revision과 project `
 migration, receipt와 retention pruning을 하나의 transaction에서 commit한다. 어느 단계든 실패하면 receipt를
 포함한 전체 mutation을 rollback한다. Receipt는 revision pruning과 독립적으로 project 삭제 전까지 유지한다.
 
+Visual command HTTP adapter는 `POST /api/v1/projects/:projectId/visual-commands`에서 strict
+`VisualCommand` 자체를 body로 받는다. 성공, semantic no-op과 durable replay는 모두 `200`이며 현재
+`ProjectState`와 최초 receipt의 `revisionCreated`, `layoutMigrated`, applied schema/layout revision을
+반환한다. 따라서 최초 적용 이후 다른 revision이 생성된 뒤 replay하면 current state revision과 applied
+revision이 다를 수 있다. 정상적으로 검증된 command의 `commandId`는 `x-command-id`로 반환한다.
+
+Project 부재는 `404`, stale schema revision·command ID 재사용·layout rename migration 충돌은 `409`,
+invalid application command·invalid draft·source transform 실패는 `422`로 구분한다. Schema revision
+conflict만 `currentRevisionNo`를 포함한다. Transform 실패는 public diagnostic과 선택적인 partial impact를
+반환하며 source-transform의 위치에는 `/main.dbml` filepath를 결합한다. Error response에는 canonical DBML
+source, command payload, SQLite 원인, `TextEdit` 또는 semantic diff를 포함하지 않으며 persisted invariant와
+예상하지 못한 오류는 redacted `500`으로 처리한다.
+
 Pinned DBML v2 parser는 column이 없는 `Table` block을 유효한 schema로 받지 않는다. 따라서
 `CREATE_TABLE`은 이름이 서로 다른 초기 column을 한 개 이상 함께 받아 table과 column을 하나의
 검증 단위로 생성한다. 제품이 임의의 `id` column을 만들지는 않는다. 생성 payload의 note, color와

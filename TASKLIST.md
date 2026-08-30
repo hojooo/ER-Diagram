@@ -266,7 +266,8 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - project-scoped receipt는 동일 command replay를 stale 검사보다 먼저 처리하고 payload mismatch를 차단한다.
   - semantic no-op은 receipt만 저장하며 explicit table/column rename은 모든 view layout key를 같은 transaction에서 migration한다.
   - 검증: `pnpm --filter @er-diagram/core test test/application/visual-command.test.ts`
-- [ ] `M3-006` thin Fastify visual-command API, 409/422, source redaction
+- [x] `M3-006` thin Fastify visual-command API, 409/422, source redaction
+  - strict command/path validation, durable replay response, partial impact transport와 redacted error mapping을 제공한다.
   - 검증: `pnpm --filter @er-diagram/server test:integration visual-commands`
 - [ ] `M3-007` accessible visual inspector/form과 source fallback
   - 검증: `pnpm --filter @er-diagram/web test visual-editor`
