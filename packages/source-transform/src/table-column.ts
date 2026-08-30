@@ -1,14 +1,8 @@
 import { renameTable } from "@dbml/core";
-import {
-  type VisualColumnDefault,
-  type VisualCommand,
-  visualCommandSchema,
-} from "@er-diagram/contracts";
+import type { VisualColumnDefault, VisualCommand } from "@er-diagram/contracts";
 import {
   type ColumnDefaultNode,
   type ColumnNode,
-  diffSchemaGraphs,
-  parseDbmlV2,
   qualifiedElementKey,
   type ReferenceEdge,
   type SchemaElementChange,
@@ -45,7 +39,21 @@ import {
   settingValueSource,
 } from "./dbml-fragment.js";
 import { applyTextEdits } from "./text-edits.js";
-import type { SourceTransformDiagnostic, TextEdit } from "./types.js";
+import type {
+  SourceTransformDiagnostic,
+  TextEdit,
+  VisualSourceTransformFailure,
+  VisualSourceTransformResult,
+  VisualSourceTransformSuccess,
+} from "./types.js";
+import {
+  type EditPlan,
+  invalidRange,
+  planFailure,
+  runVerifiedVisualTransform,
+  unsafeTransform,
+  withoutFilepath,
+} from "./verified-transform.js";
 
 const TABLE_COLUMN_COMMAND_KINDS = new Set<VisualCommand["kind"]>([
   "CREATE_TABLE",
@@ -72,122 +80,23 @@ type TableColumnCommandKind =
 
 export type TableColumnVisualCommand = Extract<VisualCommand, { kind: TableColumnCommandKind }>;
 
-export interface TableColumnTransformSuccess {
-  ok: true;
-  changed: boolean;
-  source: string;
-  edits: TextEdit[];
-  beforeSchemaHash: string;
-  afterSchemaHash: string;
-  semanticDiff: SchemaGraphDiff;
-}
-
-export interface TableColumnTransformFailure {
-  ok: false;
-  source: string;
-  diagnostics: SourceTransformDiagnostic[];
-}
-
-export type TableColumnTransformResult = TableColumnTransformSuccess | TableColumnTransformFailure;
-
-type EditPlan =
-  | { ok: true; edits: TextEdit[] }
-  | { ok: false; diagnostic: SourceTransformDiagnostic };
+export type TableColumnTransformSuccess = VisualSourceTransformSuccess;
+export type TableColumnTransformFailure = VisualSourceTransformFailure;
+export type TableColumnTransformResult = VisualSourceTransformResult;
 
 export async function transformTableColumnCommand(
   source: string,
   command: TableColumnVisualCommand,
   filepath = "/main.dbml",
 ): Promise<TableColumnTransformResult> {
-  const parsedCommand = visualCommandSchema.safeParse(command);
-  if (!parsedCommand.success) {
-    return failure(source, "VISUAL_COMMAND_INVALID", "The visual command payload is invalid.");
-  }
-  if (!TABLE_COLUMN_COMMAND_KINDS.has(parsedCommand.data.kind)) {
-    return failure(
-      source,
-      "VISUAL_COMMAND_KIND_UNSUPPORTED",
-      "This source transformer only supports table and column commands.",
-    );
-  }
-  const typedCommand = parsedCommand.data as TableColumnVisualCommand;
-  const before = await parseDbmlV2(source, filepath);
-  if (!before.ok) {
-    return {
-      ok: false,
-      source,
-      diagnostics: [
-        error("VISUAL_SOURCE_INVALID", "Visual commands require a valid DBML v2 source."),
-        ...copyParserDiagnostics(before.diagnostics),
-      ],
-    };
-  }
-
-  const preflight = preflightCommand(before.graph, typedCommand);
-  if (!preflight.ok) return { ok: false, source, diagnostics: [preflight.diagnostic] };
-  if (isSemanticNoOp(before.graph, typedCommand)) return noOp(source, before.graph.schemaHash);
-
-  let plan: EditPlan;
-  try {
-    plan = planCommandEdits(source, before.graph, typedCommand);
-  } catch {
-    return failure(
-      source,
-      "VISUAL_SOURCE_RANGE_INVALID",
-      "The requested source element could not be resolved safely.",
-    );
-  }
-  if (!plan.ok) return { ok: false, source, diagnostics: [plan.diagnostic] };
-  const edits = uniqueSortedEdits(plan.edits);
-  if (!edits) {
-    return failure(
-      source,
-      "VISUAL_SOURCE_RANGE_INVALID",
-      "The generated source edits overlap or conflict.",
-    );
-  }
-
-  const applied = applyTextEdits(source, edits);
-  if (!applied.ok) return { ok: false, source, diagnostics: applied.diagnostics };
-  if (applied.source === source) return noOp(source, before.graph.schemaHash);
-
-  const after = await parseDbmlV2(applied.source, filepath);
-  if (!after.ok) {
-    return {
-      ok: false,
-      source,
-      diagnostics: [
-        error("VISUAL_REPARSE_FAILED", "The generated source edits did not produce valid DBML v2."),
-        ...copyParserDiagnostics(after.diagnostics),
-      ],
-    };
-  }
-  if (!diagnosticProfileIsSafe(before.graph, after.graph)) {
-    return failure(
-      source,
-      "VISUAL_SEMANTIC_MISMATCH",
-      "Reparsed DBML introduced a new parser diagnostic.",
-    );
-  }
-
-  const semanticDiff = diffSchemaGraphs(before.graph, after.graph);
-  if (!verifyCommandSemantics(before.graph, after.graph, typedCommand, semanticDiff)) {
-    return failure(
-      source,
-      "VISUAL_SEMANTIC_MISMATCH",
-      "Reparsed DBML changed schema semantics beyond the requested visual command.",
-    );
-  }
-
-  return {
-    ok: true,
-    changed: true,
-    source: applied.source,
-    edits,
-    beforeSchemaHash: before.graph.schemaHash,
-    afterSchemaHash: after.graph.schemaHash,
-    semanticDiff,
-  };
+  return runVerifiedVisualTransform(source, command, filepath, {
+    supportedKinds: TABLE_COLUMN_COMMAND_KINDS,
+    unsupportedKindMessage: "This source transformer only supports table and column commands.",
+    preflight: preflightCommand,
+    isSemanticNoOp,
+    planEdits: planCommandEdits,
+    verifySemantics: verifyCommandSemantics,
+  });
 }
 
 function preflightCommand(graph: SchemaGraph, command: TableColumnVisualCommand): EditPlan {
@@ -1470,39 +1379,6 @@ function requireColumn(table: TableNode, key: string): ColumnNode {
   return column;
 }
 
-function uniqueSortedEdits(edits: readonly TextEdit[]): TextEdit[] | null {
-  const byRange = new Map<string, TextEdit>();
-  for (const edit of edits) {
-    const key = `${edit.startOffset}:${edit.endOffset}`;
-    const existing = byRange.get(key);
-    if (existing && existing.newText !== edit.newText) return null;
-    byRange.set(key, edit);
-  }
-  const sorted = [...byRange.values()].toSorted(
-    (left, right) => left.startOffset - right.startOffset || left.endOffset - right.endOffset,
-  );
-  for (let index = 1; index < sorted.length; index += 1) {
-    const previous = sorted[index - 1];
-    const current = sorted[index];
-    if (!previous || !current) continue;
-    if (current.startOffset < previous.endOffset || current.startOffset === previous.startOffset)
-      return null;
-  }
-  return sorted;
-}
-
-function noOp(source: string, schemaHash: string): TableColumnTransformSuccess {
-  return {
-    ok: true,
-    changed: false,
-    source,
-    edits: [],
-    beforeSchemaHash: schemaHash,
-    afterSchemaHash: schemaHash,
-    semanticDiff: { changes: [], renameCandidates: [] },
-  };
-}
-
 function hasChange(
   changes: readonly SchemaElementChange[],
   operation: "ADD" | "DELETE",
@@ -1543,25 +1419,6 @@ function arraysEqual<T>(left: readonly T[], right: readonly T[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-function diagnosticProfileIsSafe(before: SchemaGraph, after: SchemaGraph): boolean {
-  const beforeCounts = diagnosticCodeCounts(before);
-  const afterCounts = diagnosticCodeCounts(after);
-  for (const [identity, count] of afterCounts) {
-    if (count > (beforeCounts.get(identity) ?? 0)) return false;
-  }
-  return true;
-}
-
-function diagnosticCodeCounts(graph: SchemaGraph): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const diagnostic of graph.diagnostics) {
-    if (diagnostic.severity !== "WARNING") continue;
-    const identity = `${diagnostic.severity}:${diagnostic.code}`;
-    counts.set(identity, (counts.get(identity) ?? 0) + 1);
-  }
-  return counts;
-}
-
 function opaqueDependency(range: SourceRange): EditPlan {
   return {
     ok: false,
@@ -1573,51 +1430,4 @@ function opaqueDependency(range: SourceRange): EditPlan {
       range: withoutFilepath(range),
     },
   };
-}
-
-function withoutFilepath(range: SourceRange): NonNullable<SourceTransformDiagnostic["range"]> {
-  return {
-    startOffset: range.startOffset,
-    endOffset: range.endOffset,
-    startLine: range.startLine,
-    startColumn: range.startColumn,
-    endLine: range.endLine,
-    endColumn: range.endColumn,
-  };
-}
-
-function planFailure(code: string, message: string): Extract<EditPlan, { ok: false }> {
-  return { ok: false, diagnostic: error(code, message) };
-}
-
-function invalidRange(message: string): EditPlan {
-  return planFailure("VISUAL_SOURCE_RANGE_INVALID", message);
-}
-
-function unsafeTransform(message: string): EditPlan {
-  return planFailure("VISUAL_OFFICIAL_TRANSFORM_UNSAFE", message);
-}
-
-function failure(source: string, code: string, message: string): TableColumnTransformFailure {
-  return { ok: false, source, diagnostics: [error(code, message)] };
-}
-
-function error(code: string, message: string): SourceTransformDiagnostic {
-  return { code, message, severity: "ERROR" };
-}
-
-function copyParserDiagnostics(
-  diagnostics: ReadonlyArray<{
-    code: string;
-    message: string;
-    severity: "ERROR" | "WARNING" | "INFO";
-    range?: SourceRange | undefined;
-  }>,
-): SourceTransformDiagnostic[] {
-  return diagnostics.map((diagnostic) => ({
-    code: diagnostic.code,
-    message: diagnostic.message,
-    severity: diagnostic.severity,
-    ...(diagnostic.range ? { range: withoutFilepath(diagnostic.range) } : {}),
-  }));
 }
