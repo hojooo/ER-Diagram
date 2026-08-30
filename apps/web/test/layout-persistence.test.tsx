@@ -275,6 +275,12 @@ class LayoutProjectApi implements ProjectApi {
   async getProject() {
     return { state: this.state };
   }
+  async listRevisions() {
+    return { revisions: [] };
+  }
+  async restoreRevision(): Promise<ProjectMutationResponse> {
+    throw new Error("Revision restore is not expected in layout tests.");
+  }
   async listProjects() {
     return { projects: [] };
   }

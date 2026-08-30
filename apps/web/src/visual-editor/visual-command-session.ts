@@ -1,10 +1,10 @@
 import {
-  visualCommandSchema,
   type Diagnostic,
   type ProjectState,
   type VisualCommand,
   type VisualCommandMutationResponse,
   type VisualCommandPartialImpact,
+  visualCommandSchema,
 } from "@er-diagram/contracts";
 
 import type { LayoutSessionController } from "../diagram/layout-session.js";
@@ -79,6 +79,13 @@ export interface CreateVisualCommandSessionOptions {
     state: ProjectState,
     mutation: VisualCommandMutationResponse,
   ) => void;
+  readonly onCommittedMutation?: (
+    beforeState: ProjectState,
+    state: ProjectState,
+    mutation: VisualCommandMutationResponse,
+    command: VisualCommand,
+  ) => void;
+  readonly onExternalStateAdopted?: (state: ProjectState) => void;
 }
 
 export function createVisualCommandSession(
@@ -95,6 +102,7 @@ export function createVisualCommandSession(
     layoutRefreshFailed: false,
   };
   let running = false;
+  let pendingBeforeState: ProjectState | null = null;
 
   function publish(patch: Partial<VisualCommandSessionSnapshot>): void {
     snapshot = { ...snapshot, ...patch };
@@ -144,7 +152,8 @@ export function createVisualCommandSession(
         return;
       }
       publish({ status: "SUBMITTING", pendingCommand: parsed.data });
-      await applyCommand(parsed.data);
+      pendingBeforeState = source.serverState;
+      await applyCommand(parsed.data, source.serverState);
     } finally {
       running = false;
     }
@@ -155,13 +164,25 @@ export function createVisualCommandSession(
     running = true;
     publish({ status: "SUBMITTING", error: null });
     try {
-      await applyCommand(snapshot.pendingCommand);
+      const beforeState = pendingBeforeState;
+      if (!beforeState) {
+        publish({
+          status: "REJECTED",
+          error: clientError(
+            "CLIENT_VISUAL_RETRY_STATE_MISSING",
+            "The original visual command state is unavailable. Review the latest schema.",
+          ),
+          pendingCommand: null,
+        });
+        return;
+      }
+      await applyCommand(snapshot.pendingCommand, beforeState);
     } finally {
       running = false;
     }
   }
 
-  async function applyCommand(command: VisualCommand): Promise<void> {
+  async function applyCommand(command: VisualCommand, beforeState: ProjectState): Promise<void> {
     try {
       const mutation = await options.applyVisualCommand({ projectId: options.projectId, command });
       options.onBeforeCommittedState?.(mutation.state, mutation, command);
@@ -176,7 +197,9 @@ export function createVisualCommandSession(
         mutation.state.project.layoutRevisionNo,
         mutation.layoutMigrated,
       );
+      options.onCommittedMutation?.(beforeState, mutation.state, mutation, command);
       options.onCommittedState?.(mutation.state, mutation);
+      pendingBeforeState = null;
       publish({
         status: "SUCCEEDED",
         error: null,
@@ -192,14 +215,17 @@ export function createVisualCommandSession(
           const latest = await options.loadProject();
           await options.sourceSession.adoptCommittedState(latest);
           await options.layoutSession.adoptCommittedRevision(latest.project.layoutRevisionNo, true);
+          options.onExternalStateAdopted?.(latest);
         } catch {
           // Keep the original conflict as the actionable error. A later review can reload again.
         }
         publish({ status: "STALE_REVIEW", error: apiError, pendingCommand: null });
+        pendingBeforeState = null;
         return;
       }
       if (isDefiniteRejection(error)) {
         publish({ status: "REJECTED", error: apiError, pendingCommand: null });
+        pendingBeforeState = null;
         return;
       }
       publish({ status: "UNKNOWN_OUTCOME", error: apiError });
@@ -220,6 +246,7 @@ export function createVisualCommandSession(
     },
     reset() {
       if (running) return;
+      pendingBeforeState = null;
       publish({
         status: "IDLE",
         error: null,
@@ -311,5 +338,7 @@ function isStaleConflict(error: unknown): boolean {
 }
 
 function isDefiniteRejection(error: unknown): boolean {
-  return isProjectApiError(error) && error.status !== null && error.status < 500;
+  return (
+    isProjectApiError(error) && error.status !== null && error.status >= 400 && error.status < 500
+  );
 }

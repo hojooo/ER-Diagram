@@ -41,7 +41,10 @@ export interface SourceSessionController {
   edit(source: string): void;
   flush(): void;
   flushAndWait(): Promise<SourceSessionSnapshot>;
-  adoptCommittedState(state: ProjectState): Promise<SourceSessionSnapshot>;
+  adoptCommittedState(
+    state: ProjectState,
+    diagnostics?: readonly Diagnostic[],
+  ): Promise<SourceSessionSnapshot>;
   retrySave(): void;
   retryValidation(): void;
   retryLocalDraft(): void;
@@ -54,6 +57,10 @@ export interface CreateSourceSessionOptions {
   readonly parseSource: (source: string) => Promise<DbmlWorkerParseResult>;
   readonly saveDraft: (input: SaveDraftInput) => Promise<ProjectMutationResponse>;
   readonly loadProject: () => Promise<ProjectState>;
+  readonly onDraftCommitted?: (
+    beforeState: ProjectState,
+    response: ProjectMutationResponse,
+  ) => void;
   readonly onServerState?: (state: ProjectState) => void;
   readonly onAdoptCommittedSource?: (source: string) => void;
   readonly debounceMs?: number;
@@ -315,6 +322,7 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
         publish({ persistence: "SAVING", persistenceError: null });
       }
       const expectedSchemaRevisionNo = snapshot.expectedSchemaRevisionNo;
+      const beforeState = snapshot.serverState;
 
       try {
         const response = await options.saveDraft({
@@ -348,6 +356,7 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
               : "DIRTY",
           persistenceError: null,
         });
+        options.onDraftCommitted?.(beforeState, response);
 
         if (
           failedWorkerHashes.has(sourceHash) &&
@@ -449,7 +458,10 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
     return state.project.draftSource;
   }
 
-  async function adoptCommittedState(state: ProjectState): Promise<SourceSessionSnapshot> {
+  async function adoptCommittedState(
+    state: ProjectState,
+    diagnostics: readonly Diagnostic[] = [],
+  ): Promise<SourceSessionSnapshot> {
     assertCommittedState(state, projectId);
     if (disposed) return snapshot;
     if (activeSave || savePump || queuedSave) {
@@ -468,7 +480,7 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
     failedWorkerHashes.clear();
     serverOutcomes.set(persistedSourceHash, {
       validity: state.currentRevision.validity,
-      diagnostics: [],
+      diagnostics: [...diagnostics],
       graph: null,
     });
     snapshot = initialSnapshot(state);

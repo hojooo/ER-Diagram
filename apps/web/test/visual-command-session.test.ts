@@ -3,7 +3,7 @@ import type { SchemaGraph } from "@er-diagram/core";
 import { describe, expect, it, vi } from "vitest";
 
 import type { LayoutSessionSnapshot } from "../src/diagram/layout-session.js";
-import { ProjectApiError, type ProjectApi } from "../src/projects/project-api.js";
+import { type ProjectApi, ProjectApiError } from "../src/projects/project-api.js";
 import type { SourceSessionSnapshot } from "../src/source-editor/source-session.js";
 import {
   createVisualCommandSession,
@@ -66,6 +66,12 @@ describe("visual command session", () => {
       pendingCommand: null,
       mutation: { revisionCreated: true, replayed: false },
     });
+    expect(harness.onCommittedMutation).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ project: expect.objectContaining({ schemaRevisionNo: 1 }) }),
+      expect.objectContaining({ project: expect.objectContaining({ schemaRevisionNo: 2 }) }),
+      expect.objectContaining({ revisionCreated: true, replayed: false }),
+      expect.objectContaining({ kind: "CREATE_TABLE", commandId: COMMAND_ID }),
+    );
   });
 
   it("does not call the API for dirty, invalid, last-valid, stale, or failed layout gates", async () => {
@@ -113,6 +119,25 @@ describe("visual command session", () => {
     expect(harness.session.getSnapshot().status).toBe("SUCCEEDED");
   });
 
+  it("treats successful-but-malformed command responses as unknown outcomes", async () => {
+    for (const code of ["CLIENT_COMMAND_ID_MISMATCH", "CLIENT_CONTRACT_ERROR"]) {
+      const harness = createHarness();
+      harness.applyVisualCommand.mockRejectedValueOnce(
+        new ProjectApiError("The response could not prove the command outcome.", {
+          status: 200,
+          code,
+        }),
+      );
+
+      await harness.session.submit(createTableDraft, HASH);
+
+      expect(harness.session.getSnapshot()).toMatchObject({
+        status: "UNKNOWN_OUTCOME",
+        pendingCommand: { commandId: COMMAND_ID },
+      });
+    }
+  });
+
   it("reloads a stale 409, preserves the form outside the coordinator, and uses a new ID", async () => {
     const latest = projectState(2);
     const harness = createHarness({ commandIds: [COMMAND_ID, RETRY_ID], latest });
@@ -131,6 +156,7 @@ describe("visual command session", () => {
     expect(harness.session.getSnapshot().status).toBe("STALE_REVIEW");
     expect(harness.loadProject).toHaveBeenCalledOnce();
     expect(harness.sourceAdopt).toHaveBeenCalledWith(latest);
+    expect(harness.onExternalStateAdopted).toHaveBeenCalledExactlyOnceWith(latest);
 
     harness.session.reviewLatestSchema();
     harness.sourceSnapshot.activeGraph = graph(HASH);
@@ -194,6 +220,8 @@ function createHarness(
     return sourceSnapshot;
   });
   const loadProject = vi.fn(async () => options.latest ?? projectState(2));
+  const onCommittedMutation = vi.fn();
+  const onExternalStateAdopted = vi.fn();
   const session = createVisualCommandSession({
     projectId: PROJECT_ID,
     sourceSession: {
@@ -219,6 +247,8 @@ function createHarness(
       return applyVisualCommand(input);
     },
     loadProject,
+    onCommittedMutation,
+    onExternalStateAdopted,
     generateCommandId: () => commandIds.shift() ?? RETRY_ID,
   });
   return {
@@ -228,6 +258,8 @@ function createHarness(
     applyVisualCommand,
     sourceAdopt,
     loadProject,
+    onCommittedMutation,
+    onExternalStateAdopted,
   };
 }
 

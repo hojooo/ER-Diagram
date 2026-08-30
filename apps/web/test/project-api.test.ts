@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
 import type { VisualCommand } from "@er-diagram/contracts";
+import { describe, expect, it, vi } from "vitest";
 
 import { createHttpProjectApi, ProjectApiError } from "../src/projects/project-api.js";
 
@@ -27,6 +27,18 @@ const revision = {
   parserVersion: "9.1.1",
   diagnosticSummary,
   createdAt: CREATED_AT,
+};
+
+const revisionSummary = {
+  id: revision.id,
+  projectId: revision.projectId,
+  revisionNo: revision.revisionNo,
+  sourceHash: revision.sourceHash,
+  validity: revision.validity,
+  origin: revision.origin,
+  parserVersion: revision.parserVersion,
+  diagnosticSummary: revision.diagnosticSummary,
+  createdAt: revision.createdAt,
 };
 
 const project = {
@@ -188,6 +200,176 @@ describe("HTTP project API", () => {
       ["/api/v1/projects", "GET"],
       [`/api/v1/projects/${PROJECT_ID}`, "GET"],
     ]);
+  });
+
+  it("lists source-free revisions and restores with caller-owned or generated command IDs", async () => {
+    const generatedCommandId = "550e8400-e29b-41d4-a716-446655440001";
+    const generateCommandId = vi.fn(() => generatedCommandId);
+    const mutationResponse = { state, diagnostics: [], revisionCreated: true };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ revisions: [revisionSummary] }))
+      .mockResolvedValueOnce(
+        jsonResponse(mutationResponse, {
+          status: 200,
+          headers: { "x-command-id": COMMAND_ID },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(mutationResponse, {
+          status: 200,
+          headers: { "x-command-id": generatedCommandId },
+        }),
+      );
+    const api = createHttpProjectApi({ fetch: fetcher, generateCommandId });
+
+    await expect(api.listRevisions(PROJECT_ID)).resolves.toEqual({
+      revisions: [revisionSummary],
+    });
+    await expect(
+      api.restoreRevision({
+        projectId: PROJECT_ID,
+        revisionNo: 1,
+        expectedSchemaRevisionNo: 1,
+        commandId: COMMAND_ID,
+      }),
+    ).resolves.toEqual(mutationResponse);
+    await expect(
+      api.restoreRevision({
+        projectId: PROJECT_ID,
+        revisionNo: 1,
+        expectedSchemaRevisionNo: 1,
+      }),
+    ).resolves.toEqual(mutationResponse);
+
+    expect(generateCommandId).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls.map(([input, init]) => [input, init?.method])).toEqual([
+      [`/api/v1/projects/${PROJECT_ID}/revisions`, "GET"],
+      [`/api/v1/projects/${PROJECT_ID}/revisions/1/restore`, "POST"],
+      [`/api/v1/projects/${PROJECT_ID}/revisions/1/restore`, "POST"],
+    ]);
+    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).toEqual({
+      commandId: COMMAND_ID,
+      expectedSchemaRevisionNo: 1,
+    });
+    expect(JSON.parse(String(fetcher.mock.calls[2]?.[1]?.body))).toEqual({
+      commandId: generatedCommandId,
+      expectedSchemaRevisionNo: 1,
+    });
+  });
+
+  it("preserves a caller-owned command ID for safely retrying draft saves", async () => {
+    const generateCommandId = vi.fn(() => "550e8400-e29b-41d4-a716-446655440001");
+    const mutationResponse = { state, diagnostics: [], revisionCreated: true };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse(mutationResponse, {
+        status: 200,
+        headers: { "x-command-id": COMMAND_ID },
+      }),
+    );
+    const api = createHttpProjectApi({ fetch: fetcher, generateCommandId });
+
+    await expect(
+      api.saveDraft({
+        projectId: PROJECT_ID,
+        source: revision.source,
+        expectedSchemaRevisionNo: 1,
+        commandId: COMMAND_ID,
+      }),
+    ).resolves.toEqual(mutationResponse);
+
+    expect(generateCommandId).not.toHaveBeenCalled();
+    expect(fetcher).toHaveBeenCalledWith(
+      `/api/v1/projects/${PROJECT_ID}/draft`,
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({
+          commandId: COMMAND_ID,
+          source: revision.source,
+          expectedSchemaRevisionNo: 1,
+        }),
+      }),
+    );
+  });
+
+  it("rejects invalid revision paths before sending a request", () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const api = createHttpProjectApi({ fetch: fetcher, generateCommandId: () => COMMAND_ID });
+
+    expect(() => api.listRevisions("not-a-project-id")).toThrowError(
+      expect.objectContaining({ code: "CLIENT_REQUEST_VALIDATION_ERROR" }),
+    );
+    expect(() =>
+      api.restoreRevision({
+        projectId: PROJECT_ID,
+        revisionNo: 0,
+        expectedSchemaRevisionNo: 1,
+      }),
+    ).toThrowError(expect.objectContaining({ code: "CLIENT_REQUEST_VALIDATION_ERROR" }));
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("fails closed for malformed revision responses and restore command echoes", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ revisions: [revision] }))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { state, revisionCreated: true },
+          { status: 200, headers: { "x-command-id": COMMAND_ID } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { state, diagnostics: [], revisionCreated: true },
+          { status: 200, headers: { "x-command-id": "wrong-command" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            code: "PROJECT_SCHEMA_REVISION_CONFLICT",
+            message: "The project changed.",
+            correlationId: CORRELATION_ID,
+            currentRevisionNo: 2,
+          },
+          { status: 409 },
+        ),
+      );
+    const api = createHttpProjectApi({ fetch: fetcher, generateCommandId: () => COMMAND_ID });
+
+    await expect(api.listRevisions(PROJECT_ID)).rejects.toMatchObject({
+      code: "CLIENT_CONTRACT_ERROR",
+    });
+    await expect(
+      api.restoreRevision({
+        projectId: PROJECT_ID,
+        revisionNo: 1,
+        expectedSchemaRevisionNo: 1,
+        commandId: COMMAND_ID,
+      }),
+    ).rejects.toMatchObject({ code: "CLIENT_CONTRACT_ERROR" });
+    await expect(
+      api.restoreRevision({
+        projectId: PROJECT_ID,
+        revisionNo: 1,
+        expectedSchemaRevisionNo: 1,
+        commandId: COMMAND_ID,
+      }),
+    ).rejects.toMatchObject({ code: "CLIENT_COMMAND_ID_MISMATCH" });
+    await expect(
+      api.restoreRevision({
+        projectId: PROJECT_ID,
+        revisionNo: 1,
+        expectedSchemaRevisionNo: 1,
+        commandId: COMMAND_ID,
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "PROJECT_SCHEMA_REVISION_CONFLICT",
+      correlationId: CORRELATION_ID,
+      currentRevisionNo: 2,
+    });
   });
 
   it("sends strict write bodies and verifies the echoed command ID", async () => {
