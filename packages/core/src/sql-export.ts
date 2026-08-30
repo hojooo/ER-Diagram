@@ -20,6 +20,7 @@ import {
 } from "./sql-export-semantics.js";
 import { convertSqlModelToGraph } from "./sql-model-graph.js";
 import { analyzeSqlSource } from "./sql-source-analyzer.js";
+import { isSqlBuiltinType } from "./sql-type-catalog.js";
 
 export { SQL_EXPORT_SEMANTICS_VERSION } from "./sql-export-semantics.js";
 export type { SqlExportSemanticVerification } from "./sql-export-semantics.js";
@@ -40,114 +41,6 @@ const STATUS_RANK: Readonly<Record<ConversionStatus, number>> = {
   UNSUPPORTED: 3,
   ERROR: 4,
 };
-
-const POSTGRESQL_BUILTIN_TYPES = new Set([
-  "bigint",
-  "bigserial",
-  "bit",
-  "bit varying",
-  "bool",
-  "boolean",
-  "box",
-  "bytea",
-  "char",
-  "character",
-  "character varying",
-  "cidr",
-  "circle",
-  "date",
-  "daterange",
-  "decimal",
-  "double precision",
-  "inet",
-  "int",
-  "int2",
-  "int4",
-  "int4range",
-  "int8",
-  "int8range",
-  "integer",
-  "interval",
-  "json",
-  "jsonb",
-  "line",
-  "lseg",
-  "macaddr",
-  "macaddr8",
-  "money",
-  "numeric",
-  "numrange",
-  "oid",
-  "path",
-  "pg_lsn",
-  "point",
-  "polygon",
-  "real",
-  "serial",
-  "smallint",
-  "smallserial",
-  "text",
-  "time",
-  "time with time zone",
-  "timestamp",
-  "timestamp with time zone",
-  "timestamp without time zone",
-  "tsquery",
-  "tsrange",
-  "tstzrange",
-  "tsvector",
-  "txid_snapshot",
-  "uuid",
-  "varbit",
-  "varchar",
-  "xml",
-]);
-
-const MYSQL_BUILTIN_TYPES = new Set([
-  "bigint",
-  "binary",
-  "bit",
-  "blob",
-  "bool",
-  "boolean",
-  "char",
-  "date",
-  "datetime",
-  "decimal",
-  "double",
-  "enum",
-  "float",
-  "geometry",
-  "geometrycollection",
-  "int",
-  "integer",
-  "json",
-  "linestring",
-  "longblob",
-  "longtext",
-  "mediumblob",
-  "mediumint",
-  "mediumtext",
-  "multilinestring",
-  "multipoint",
-  "multipolygon",
-  "numeric",
-  "point",
-  "polygon",
-  "real",
-  "serial",
-  "set",
-  "smallint",
-  "text",
-  "time",
-  "timestamp",
-  "tinyblob",
-  "tinyint",
-  "tinytext",
-  "varbinary",
-  "varchar",
-  "year",
-]);
 
 export interface SqlExportConversionInput {
   readonly primaryDialect: PrimaryDialect;
@@ -660,8 +553,7 @@ function hasJunctionTableNameCollision(
 function hasBuiltinTypeCaseNormalization(column: ColumnNode, dialect: PrimaryDialect): boolean {
   const withoutArrays = stripIdentifierQuotes(column.type.name.trim().replace(/(?:\[\])+$/u, ""));
   const lowered = withoutArrays.toLowerCase();
-  const builtins = dialect === "POSTGRESQL" ? POSTGRESQL_BUILTIN_TYPES : MYSQL_BUILTIN_TYPES;
-  return withoutArrays !== lowered && builtins.has(lowered);
+  return withoutArrays !== lowered && isSqlBuiltinType(dialect, lowered);
 }
 
 function enrichmentOccurrences(graph: SchemaGraph): SqlExportOccurrence[] {
@@ -739,8 +631,7 @@ function isCustomType(
   if (columnReferencesEnum(column, tableSchemaName, enumIdentities)) {
     return false;
   }
-  const builtins = dialect === "POSTGRESQL" ? POSTGRESQL_BUILTIN_TYPES : MYSQL_BUILTIN_TYPES;
-  return !builtins.has(name);
+  return !isSqlBuiltinType(dialect, name);
 }
 
 function columnReferencesEnum(

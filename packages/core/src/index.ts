@@ -40,3 +40,4 @@ export * from "./sql-data-exclusion.js";
 export * from "./sql-export.js";
 export * from "./sql-import.js";
 export * from "./sql-smoke.js";
+export { getSqlBuiltinTypes } from "./sql-type-catalog.js";
