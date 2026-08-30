@@ -253,8 +253,10 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
 - [x] `M3-002` table/column create/update/rename/reorder/delete minimal patch
   - token-aware fragment patch, official table rename, structural column rename, dependency·partial 보호와 full reparse·semantic diff rollback을 적용한다.
   - 검증: `pnpm --filter @er-diagram/source-transform test test/table-column.test.ts`
-- [ ] `M3-003` reference/index/constraint patch와 DBML capability guard
-  - 검증: `pnpm --filter @er-diagram/source-transform test relationships-indexes`
+- [x] `M3-003` reference/index/constraint patch와 DBML capability guard
+  - standalone·inline Ref, ordered composite endpoint와 16가지 multiplicity를 source-preserving edit로 처리한다.
+  - index/check의 owner·PK·partial·anonymous identity와 pinned grammar capability를 fail-closed 검증한다.
+  - 검증: `pnpm --filter @er-diagram/source-transform test test/relationships-indexes.test.ts`
 - [ ] `M3-004` group/view patch와 `TablePartial` provenance protection
   - 검증: `pnpm --filter @er-diagram/source-transform test groups-views-partials`
 - [ ] `M3-005` idempotent command application transaction과 layout rename migration

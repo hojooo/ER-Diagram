@@ -794,6 +794,19 @@ anchor로도 사용하지 않는다. 의미가 이미 같은 update·rename·reo
 성공 no-op으로 반환한다. 모든 실제 edit는 full reparse와 command별 allowlist semantic diff를 통과해야 하며
 source range, reparse 또는 의미 검증 실패 시 원본 source를 그대로 반환한다.
 
+Relationship patch는 ordered endpoint와 16가지 multiplicity 조합을 pinned DBML operator로 표현한다.
+Anonymous single-column inline `ref`가 name·action·color·inactive 없이 계속 표현 가능한 경우에는 inline
+형태를 유지한다. 그 밖의 update는 해당 `ref` setting만 제거하고 canonical standalone `Ref`를 추가하며,
+standalone 선언을 inline으로 자동 축약하지 않는다. Pinned DBML v2가 top-level `Ref`를 `public` schema로만
+정규화하므로 다른 schema의 reference 생성은 source-only capability로 처리한다.
+
+Index는 local column 또는 안전한 backtick expression term을 순서대로 보존한다. 다만 pinned parser가 mixed
+term을 expression-first로 재배치하므로 expression 뒤에 column이 오는 순서만 visual command로 허용한다.
+논리적인 primary-key 정의는 table당 하나만 허용하고 primary index에는 local column term만 사용할 수 있다.
+Table-owned check는 `checks` block에서 편집하고 column-owned check는 이름 없는 repeated `check` setting의
+정확한 occurrence만 수정한다. 이름이 있는 column check, backtick을 포함한 expression, 중복 anonymous
+identity와 `TablePartial`에서 주입된 reference/index/check는 source editor로 돌려보낸다.
+
 ### 13.4 Layout identity
 
 표준 DBML 호환성을 위해 hidden persistent ID를 DBML에 주입하지 않는다.
