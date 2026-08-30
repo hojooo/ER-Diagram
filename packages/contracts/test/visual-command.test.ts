@@ -28,6 +28,18 @@ const validCommands = [
       name: "사용자 테이블 😀",
       note: "첫 줄\n둘째 줄",
       color: "#12AbEf",
+      columns: [
+        {
+          name: "식별자",
+          type: "bigint",
+          primaryKey: true,
+          unique: false,
+          notNull: true,
+          default: null,
+          increment: true,
+          note: "초기 컬럼",
+        },
+      ],
     },
   },
   {
@@ -331,6 +343,25 @@ describe("VisualCommand contract", () => {
         column: {
           ...createColumn.column,
           default: { type: "number", value: Number.POSITIVE_INFINITY },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("requires one or more uniquely named initial columns for CREATE_TABLE", () => {
+    const createTable = commandOfKind("CREATE_TABLE");
+    expect(
+      visualCommandSchema.safeParse({
+        ...createTable,
+        table: { ...createTable.table, columns: [] },
+      }).success,
+    ).toBe(false);
+    expect(
+      visualCommandSchema.safeParse({
+        ...createTable,
+        table: {
+          ...createTable.table,
+          columns: [createTable.table.columns[0], createTable.table.columns[0]],
         },
       }).success,
     ).toBe(false);

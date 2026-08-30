@@ -613,6 +613,12 @@ patch만 받는다. Table·column rename은 stable key가 바뀌는 효과를 �
 array(지정 항목만 표시), `null`(전체 숨김)의 tri-state를 유지한다. Table schema 이동, alias, custom
 metadata와 partial membership은 P0 visual command 범위 밖이며 source에서만 편집한다.
 
+Pinned DBML v2 parser는 column이 없는 `Table` block을 유효한 schema로 받지 않는다. 따라서
+`CREATE_TABLE`은 이름이 서로 다른 초기 column을 한 개 이상 함께 받아 table과 column을 하나의
+검증 단위로 생성한다. 제품이 임의의 `id` column을 만들지는 않는다. 생성 payload의 note, color와
+각 column의 type·constraint·default·note는 모두 명시적이며 생략된 의미 값을 source에 추론해 넣지
+않는다.
+
 Zod validation은 UUID·revision·variant shape, stable-key kind prefix, 명백히 위험한 identifier/type
 fragment와 command-local 구조만 검증한다. Target 존재 여부, owner 관계, 이름 충돌, partial provenance,
 dialect type capability와 최종 semantic validity는 current graph resolve, DBML v2 full reparse와 expected
@@ -774,6 +780,19 @@ INVALID_DRAFT
 - official `renameTable`, `syncDiagramView` 등 source transform이 있으면 우선 사용한다.
 - normalized model 전체를 `ModelExporter.export(..., 'dbml')`로 재생성해 canonical source를 덮어쓰지 않는다.
 - source 전체 formatting 기능은 별도 명시적 command로만 제공하며 실행 전 diff preview를 보여준다.
+
+Table·column patch는 quoted identifier, string, triple-quoted note, backtick expression, comment와 nested
+bracket을 구분하는 scanner로 target fragment를 해석한다. 기존 setting을 변경할 때는 해당 value token만
+교체해 key spelling, separator spacing, quote style과 unrelated metadata/check를 유지한다. 구조적 table
+rename은 official `renameTable` 결과를 허용된 declaration·Ref·TableGroup·DiagramView range의 최소 edit로
+재구성하고, column rename은 parser-resolved Ref endpoint와 column index term만 함께 바꾼다. Raw
+expression 의존성이나 외부 structural dependency를 안전하게 갱신할 수 없으면 rename/delete를 source
+editor로 돌려보내며 자동 cascade하지 않는다.
+
+`TablePartial`에서 주입된 column은 local declaration처럼 update·rename·delete·reorder하지 않으며 reorder
+anchor로도 사용하지 않는다. 의미가 이미 같은 update·rename·reorder는 source edit와 semantic diff가 없는
+성공 no-op으로 반환한다. 모든 실제 edit는 full reparse와 command별 allowlist semantic diff를 통과해야 하며
+source range, reparse 또는 의미 검증 실패 시 원본 source를 그대로 반환한다.
 
 ### 13.4 Layout identity
 

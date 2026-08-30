@@ -248,9 +248,11 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
 
 - [x] `M3-001` expected revision을 포함한 `VisualCommand` Zod union
   - 20개 command와 strict payload, typed default, stable-key kind, non-empty patch를 검증한다.
+  - pinned DBML v2의 empty-table 제약에 맞춰 `CREATE_TABLE`은 unique한 초기 column을 한 개 이상 요구한다.
   - 검증: `pnpm --filter @er-diagram/contracts test test/visual-command.test.ts`
-- [ ] `M3-002` table/column create/update/rename/reorder/delete minimal patch
-  - 검증: `pnpm --filter @er-diagram/source-transform test table-column`
+- [x] `M3-002` table/column create/update/rename/reorder/delete minimal patch
+  - token-aware fragment patch, official table rename, structural column rename, dependency·partial 보호와 full reparse·semantic diff rollback을 적용한다.
+  - 검증: `pnpm --filter @er-diagram/source-transform test test/table-column.test.ts`
 - [ ] `M3-003` reference/index/constraint patch와 DBML capability guard
   - 검증: `pnpm --filter @er-diagram/source-transform test relationships-indexes`
 - [ ] `M3-004` group/view patch와 `TablePartial` provenance protection
