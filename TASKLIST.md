@@ -135,9 +135,11 @@ diagnostics를 선택적으로 포함한다.
 - `schema_revisions`
 - `diagram_layouts`
 - `import_artifacts`
+- `visual_command_receipts`
 - `app_metadata`
 
-ID는 UUIDv7 text, 시간은 UTC ISO-8601 text로 저장한다. `foreign_keys=ON`, WAL mode,
+Project·revision·artifact ID는 UUIDv7 text, command ID는 lowercase RFC UUID text, 시간은 UTC ISO-8601
+text로 저장한다. `foreign_keys=ON`, WAL mode,
 `busy_timeout=5000`을 적용한다. 최근 non-checkpoint revision 100개를 보존하고 import·restore·
 parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용자가 선택한 경우만 저장한다.
 
@@ -193,7 +195,7 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - 검증: `pnpm --filter @er-diagram/core test test/diagnostics.test.ts`
 - [x] `M1-003` canonical semantic hash, add/update/delete diff, rename candidate
   - 검증: `pnpm --filter @er-diagram/core test test/semantic-diff.test.ts`
-- [x] `M1-004` SQLite five-table migration, WAL/FK/busy timeout, UUIDv7 adapter
+- [x] `M1-004` SQLite initial five-table migration, WAL/FK/busy timeout, UUIDv7 adapter
   - 검증: `pnpm --filter @er-diagram/storage-sqlite test test/storage-sqlite.test.ts`
 - [x] `M1-005` project/revision use cases와 transaction/retention
   - 검증: `pnpm --filter @er-diagram/core test test/application/project.test.ts`
@@ -260,8 +262,10 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
 - [x] `M3-004` group/view patch와 `TablePartial` provenance protection
   - strict membership delta, source-preserving view filter와 partial definition/affected-table impact를 구현한다.
   - 검증: `pnpm --filter @er-diagram/source-transform test test/groups-views-partials.test.ts`
-- [ ] `M3-005` idempotent command application transaction과 layout rename migration
-  - 검증: `pnpm --filter @er-diagram/core test visual-command-application`
+- [x] `M3-005` idempotent command application transaction과 layout rename migration
+  - project-scoped receipt는 동일 command replay를 stale 검사보다 먼저 처리하고 payload mismatch를 차단한다.
+  - semantic no-op은 receipt만 저장하며 explicit table/column rename은 모든 view layout key를 같은 transaction에서 migration한다.
+  - 검증: `pnpm --filter @er-diagram/core test test/application/visual-command.test.ts`
 - [ ] `M3-006` thin Fastify visual-command API, 409/422, source redaction
   - 검증: `pnpm --filter @er-diagram/server test:integration visual-commands`
 - [ ] `M3-007` accessible visual inspector/form과 source fallback

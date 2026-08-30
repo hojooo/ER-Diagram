@@ -18,6 +18,7 @@ P0 schema는 다음 table로 구성한다.
 - `schema_revisions`
 - `diagram_layouts`
 - `import_artifacts`
+- `visual_command_receipts`
 - `app_metadata`
 
 Drizzle 표준 migrator가 관리하는 `__drizzle_migrations`는 허용하되 제품 table inventory에는 포함하지
@@ -25,7 +26,8 @@ Drizzle 표준 migrator가 관리하는 `__drizzle_migrations`는 허용하되 �
 추가하지 않는다. Drizzle schema와 실제 migration의 정합성은 empty database introspection과 behavior
 test로 검증한다.
 
-ID는 lowercase UUIDv7 text, 시간은 `YYYY-MM-DDTHH:mm:ss.sssZ` UTC ISO-8601 text로 저장한다.
+Project·revision·artifact ID는 lowercase UUIDv7 text, command ID는 lowercase RFC UUID text, 시간은
+`YYYY-MM-DDTHH:mm:ss.sssZ` UTC ISO-8601 text로 저장한다.
 Connection은 durable file만 허용하고 매번 `foreign_keys=ON`, WAL mode, `busy_timeout=5000`을 설정한
 뒤 effective value를 다시 확인한다. Migration, integrity check와 rollback-only write probe가 실패하면
 connection을 닫고 startup을 실패시킨다.
@@ -92,6 +94,19 @@ insert와 invariant 검증 중 하나라도 실패하면 전체 transaction을 r
 기존 replace envelope과 create-project envelope은 versioned union으로 함께 읽되 status·hash·retention
 조합을 variant별로 fail-closed 검증한다.
 
+Storage schema version 2는 STRICT `visual_command_receipts` table을 추가한다. Composite primary key는
+`(project_id, command_id)`이고 project 삭제 시 cascade되지만 revision FK와 pruning은 적용하지 않는다.
+Receipt에는 command kind, canonical payload hash, expected/applied schema revision, applied layout revision,
+revision/layout mutation flag와 created timestamp만 저장한다. Source, payload 본문과 diagnostics는 저장하지
+않는다.
+
+Visual command는 receipt replay/idempotency conflict를 expected revision보다 먼저 판정한다. Transformer는
+transaction 밖에서 실행하고 `BEGIN IMMEDIATE` 안에서 receipt와 expected revision을 다시 확인한다.
+Semantic no-op은 receipt만 insert하고 project `updated_at`과 schema/layout revision을 유지한다. 실제 source
+변경은 `VALID + VISUAL_COMMAND` revision, project draft·last-valid pointer, 모든 view의 explicit rename layout
+migration, receipt insert와 pruning을 같은 transaction으로 묶는다. Layout new-key position 충돌이나 어느
+write 실패도 전체 transaction을 rollback한다.
+
 하나의 server process만 SQLite에 write한다. Multi-process horizontal write와 shared network filesystem database는 P0 범위가 아니다.
 
 ## Alternatives considered
@@ -119,7 +134,9 @@ Portable하게 보이지만 revision, optimistic version, multiple sidecar의 tr
 
 - Empty database migration, foreign-key violation, transaction rollback과 restart recovery를 검사한다.
 - WAL, foreign keys와 busy timeout의 effective value를 확인한다.
-- 다섯 product table과 Drizzle migration table, column/index inventory와 migration hash를 확인한다.
+- 여섯 product table과 Drizzle migration table, column/index inventory와 migration hash를 확인한다.
+- Version 1 database의 project, revision, layout과 import artifact를 보존하면서 version 2 receipt table로
+  upgrade되는지 확인한다.
 - read-only storage, unsupported schema version, invalid migration과 built package의 migration path가
   fail-closed인지 확인한다.
 - Retention과 checkpoint 예외를 fixture로 검증한다.
