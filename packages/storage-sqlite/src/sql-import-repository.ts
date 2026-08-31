@@ -90,7 +90,9 @@ export function createSqliteSqlImportRepository(storage: SqliteStorage): SqlImpo
   return new SqliteSqlImportRepository(storage);
 }
 
-function toStoredImportArtifact(artifact: SqlImportArtifact): typeof importArtifacts.$inferInsert {
+export function toStoredImportArtifact(
+  artifact: SqlImportArtifact,
+): typeof importArtifacts.$inferInsert {
   return {
     id: artifact.id,
     projectId: artifact.projectId,
@@ -106,7 +108,7 @@ function toStoredImportArtifact(artifact: SqlImportArtifact): typeof importArtif
   };
 }
 
-function mapImportArtifact(row: StoredImportArtifact): SqlImportArtifact {
+export function mapImportArtifact(row: StoredImportArtifact): SqlImportArtifact {
   const envelope = parseSqlImportArtifactEnvelope(row.projectId, row.report);
   const invalid = (message: string): never => {
     throw new SqlImportPersistenceInvariantError(row.projectId, message);
