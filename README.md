@@ -11,6 +11,7 @@ Milestone 3 visual editing integrity gate를 완료하고 Milestone 4 security·
 - PostgreSQL 14+·MySQL 8.0+ same-dialect DDL import/export
 - source, diagram layout, visual schema 편집
 - invalid draft·history·layout을 함께 옮기는 versioned portable project bundle
+- verified online snapshot과 plan-hash Apply를 사용하는 SQLite whole-volume recovery
 - single-user self-host와 SQLite mounted-volume persistence
 - 변환 손실·미지원 SQL을 숨기지 않는 진단과 report
 
@@ -78,6 +79,10 @@ docs/
 - [ADR 0007: Runtime resource budget과 worker isolation](docs/adr/0007-runtime-resource-budgets-and-worker-isolation.md)
 - [ADR 0008: Web CSP, bounded ZIP과 redacted logging](docs/adr/0008-web-and-archive-security-boundaries.md)
 - [ADR 0009: Portable project bundle v1과 atomic re-key import](docs/adr/0009-portable-project-bundle.md)
+- [ADR 0010: SQLite whole-volume snapshot과 plan-hash recovery](docs/adr/0010-sqlite-volume-recovery.md)
+
+운영 backup, restore dry-run/apply와 pre-migration 절차는
+[SQLite volume backup·restore runbook](docs/operations/backup-restore.md)을 따른다.
 
 ## License
 

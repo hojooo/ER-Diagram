@@ -292,7 +292,10 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - 검증: `pnpm test:security && pnpm test:e2e:security`
 - [x] `M4-003` portable bundle v1과 hash/version/traversal validation
   - 검증: `pnpm test:integration bundles`
-- [ ] `M4-004` backup, restore dry-run/apply와 pre-migration checksum
+- [x] `M4-004` backup, restore dry-run/apply와 pre-migration checksum
+  - SQLite online backup을 private two-file volume snapshot으로 만들고 manifest, migration prefix, full integrity와 product invariant를 검증한다.
+  - restore·migration은 deterministic plan hash, existing-target safety backup, same-filesystem atomic swap과 read-back rollback을 적용한다.
+  - operator-only CLI와 source-free JSON 결과, 민감 데이터·server-stop·manual rollback 절차를 runbook으로 제공한다.
   - 검증: `pnpm --filter @er-diagram/server test:integration backup-restore`
 - [ ] `M4-005` Node 24 non-root multi-stage image와 localhost compose
   - 검증: `docker compose config && docker compose up --build -d`
