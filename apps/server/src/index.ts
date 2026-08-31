@@ -10,6 +10,17 @@ export {
   readBoundedZipArchive,
 } from "./bounded-zip-reader.js";
 export {
+  createJsonLineOperationalLogSink,
+  type HttpCompletionOperationalLog,
+  type HttpOperation,
+  NOOP_OPERATIONAL_LOG_SINK,
+  OPERATIONAL_LOG_VERSION,
+  type OperationalLogEvent,
+  type OperationalLogSink,
+  type ResourceOperationKind,
+  type ResourceOperationOperationalLog,
+} from "./operational-logging.js";
+export {
   BoundedResourceWorkerPool,
   type CreateResourceExecutorOptions,
   createResourceExecutor,

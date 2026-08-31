@@ -15,6 +15,11 @@ import Fastify, { type FastifyInstance } from "fastify";
 
 import { registerHttpErrorHandlers } from "./http-errors.js";
 import { registerLayoutRoutes } from "./layout-routes.js";
+import {
+  NOOP_OPERATIONAL_LOG_SINK,
+  type OperationalLogSink,
+  registerOperationalLogging,
+} from "./operational-logging.js";
 import { registerProjectRoutes } from "./project-routes.js";
 import {
   DEFAULT_SERVER_RESOURCE_LIMITS,
@@ -34,6 +39,7 @@ export interface CreateServerOptions {
   readonly sqlExportApplication: SqlExportApplication;
   readonly visualCommandApplication: VisualCommandApplication;
   readonly generateCorrelationId?: () => string;
+  readonly operationalLogSink?: OperationalLogSink;
   readonly resourceLimits?: ServerResourceLimits;
 }
 
@@ -50,6 +56,7 @@ export function createServer(options: CreateServerOptions): FastifyInstance {
   });
 
   registerSecurityHeaders(server);
+  registerOperationalLogging(server, options.operationalLogSink ?? NOOP_OPERATIONAL_LOG_SINK);
 
   server.addHook("onRequest", async (request, reply) => {
     reply.header("x-correlation-id", request.id);

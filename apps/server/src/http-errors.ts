@@ -5,15 +5,16 @@ import {
   type VisualCommandPartialImpact,
 } from "@er-diagram/contracts";
 import type {
+  VisualCommandPartialImpact as CoreVisualCommandPartialImpact,
   LayoutApplicationError,
   ProjectApplicationError,
   SqlExportApplicationError,
   SqlImportApplicationError,
   VisualCommandApplicationError,
-  VisualCommandPartialImpact as CoreVisualCommandPartialImpact,
   VisualCommandTransformDiagnostic,
 } from "@er-diagram/core";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { recordOperationalError } from "./operational-logging.js";
 import { ResourceOperationError } from "./resource-errors.js";
 
 interface ContractParseSuccess<T> {
@@ -262,6 +263,7 @@ function sendError(
   message: string,
   options: ErrorResponseOptions = {},
 ): FastifyReply {
+  recordOperationalError(request, code, options.diagnostics?.length);
   const base: ErrorResponse = {
     code,
     message,
