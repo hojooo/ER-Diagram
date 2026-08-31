@@ -16,7 +16,7 @@ const secondaryButtonClass =
 const dangerButtonClass =
   "inline-flex min-h-10 items-center justify-center rounded-lg border border-red-400/60 bg-red-950/40 px-3 font-semibold text-red-100 transition hover:bg-red-900/60 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-red-300 disabled:cursor-not-allowed disabled:opacity-55";
 const inputClass =
-  "min-h-11 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-slate-100 placeholder:text-slate-500 focus:border-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-300";
+  "min-h-11 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-slate-100 placeholder:text-slate-400 focus:border-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-300";
 
 export function ProjectHomePage() {
   const api = useProjectApi();
@@ -204,7 +204,7 @@ function ProjectCard({
 function Metadata({ label, value }: { readonly label: string; readonly value: string }) {
   return (
     <div className="rounded-lg bg-slate-950/70 p-3">
-      <dt className="text-xs text-slate-500">{label}</dt>
+      <dt className="text-xs text-slate-400">{label}</dt>
       <dd className="mt-1 font-semibold text-slate-200">
         {label === "Parser" ? `Parser ${value}` : `Revision ${value}`}
       </dd>
@@ -621,7 +621,8 @@ function DeleteProjectDialog({
       >
         <div className="mt-5 rounded-lg border border-amber-400/40 bg-amber-950/40 p-4 text-sm text-amber-100">
           Existing external backups may still contain a copy. Portable project export is not
-          available in this build, so cancel if you need to preserve this project first.
+          available, so cancel and export a portable bundle if you need to preserve this project
+          first.
         </div>
         <MutationError error={formError} />
         <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">

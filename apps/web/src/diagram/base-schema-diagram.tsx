@@ -375,7 +375,9 @@ export function BaseSchemaDiagram({
           }}
           nodesDraggable={!interactionDisabled && layoutStatus === "READY"}
           nodesConnectable={false}
+          nodesFocusable={false}
           edgesReconnectable={false}
+          edgesFocusable={false}
           elementsSelectable
           deleteKeyCode={null}
           fitView={false}

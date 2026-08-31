@@ -453,9 +453,11 @@ test("core controls reflow without horizontal document overflow", async ({ page 
 
   await installWorkspaceApi(page);
   await page.goto(`/projects/${PROJECT_ID}`);
-  await expect(page.locator('section[aria-label="DBML source editor"] .monaco-editor')).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(page.locator('section[aria-label="DBML source editor"] .monaco-editor')).toBeVisible(
+    {
+      timeout: 20_000,
+    },
+  );
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
   ).toBe(true);

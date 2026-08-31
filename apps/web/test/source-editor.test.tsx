@@ -292,14 +292,16 @@ describe("DBML source workspace", () => {
     await findWorkspaceStatus("Draft valid");
 
     fireEvent.change(editor, { target: { value: SECOND_VALID_SOURCE } });
-    fireEvent.click(screen.getByRole("link", { name: "Back to projects" }));
+    const backToProjects = screen.getByRole("link", { name: "Back to projects" });
+    fireEvent.click(backToProjects);
     const dialog = await screen.findByRole("dialog", { name: "Leave schema workspace?" });
     expect(within(dialog).getByRole("button", { name: "Stay" })).toHaveFocus();
     expect(editor).toHaveValue(domValue(SECOND_VALID_SOURCE));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Stay" }));
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(backToProjects).toHaveFocus());
     expect(router.state.location.pathname).toBe(`/projects/${PROJECT_ID}`);
 
-    fireEvent.click(screen.getByRole("link", { name: "Back to projects" }));
+    fireEvent.click(backToProjects);
     await screen.findByRole("dialog", { name: "Leave schema workspace?" });
     pendingSave.resolve(mutation(SECOND_VALID_SOURCE, 2, "VALID"));
     await waitFor(() => expect(router.state.location.pathname).toBe("/"));

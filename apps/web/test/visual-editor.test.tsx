@@ -168,6 +168,29 @@ describe("visual editor command model", () => {
       graph.schemaHash,
     );
   });
+
+  it("keeps an empty string column default valid", () => {
+    const users = requiredTable("users");
+    const store = createDiagramSelectionStore();
+    store.getState().setSelection(selection("table", users.key, [users.key]));
+    const commandSession = fakeCommandSession();
+    renderInspector(store, commandSession.controller);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create column" }));
+    fireEvent.change(screen.getByLabelText("Column name"), { target: { value: "nickname" } });
+    fireEvent.change(screen.getByLabelText("Default kind"), { target: { value: "string" } });
+    const defaultInput = screen.getByLabelText("Default string");
+    expect(defaultInput).not.toBeRequired();
+    fireEvent.click(screen.getByRole("button", { name: "Apply command" }));
+
+    expect(commandSession.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "CREATE_COLUMN",
+        column: expect.objectContaining({ default: { type: "string", value: "" } }),
+      }),
+      graph.schemaHash,
+    );
+  });
 });
 
 describe("accessible visual schema inspector", () => {
@@ -216,7 +239,8 @@ describe("accessible visual schema inspector", () => {
     expect(actions[1]).toHaveAttribute("tabindex", "-1");
 
     actions[0]?.focus();
-    if (actions[1]) actions[1].disabled = true;
+    const disabledAction = actions[1] as HTMLButtonElement | undefined;
+    if (disabledAction) disabledAction.disabled = true;
     fireEvent.keyDown(toolbar, { key: "ArrowRight" });
     expect(actions[2]).toHaveFocus();
     fireEvent.keyDown(toolbar, { key: "End" });

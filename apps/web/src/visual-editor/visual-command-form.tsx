@@ -7,7 +7,7 @@ import {
 } from "@er-diagram/contracts";
 import { getSqlBuiltinTypes, type SchemaGraph, type TableNode } from "@er-diagram/core";
 import * as Dialog from "@radix-ui/react-dialog";
-import { useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import type { VisualEditorAction } from "./visual-editor-model.js";
 import { findColumn, normalizeVisualDraft } from "./visual-editor-model.js";
@@ -34,12 +34,40 @@ export function VisualCommandForm({
 }) {
   const [draft, setDraft] = useState(initialDraft);
   const [error, setError] = useState<string | null>(null);
+  const headingId = useId();
+  const errorId = useId();
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const typeSuggestions = useMemo(
     () => listTypeSuggestions(graph, primaryDialect),
     [graph, primaryDialect],
   );
   const destructive = isDeleteCommand(draft.kind);
   const structuralBlockers = destructive ? deleteStructuralBlockers(graph, draft) : [];
+
+  useEffect(() => {
+    const form = formRef.current;
+    if (!form || !error) return;
+    const invalidControl = [...form.elements].find(
+      (element): element is HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement =>
+        (element instanceof HTMLInputElement ||
+          element instanceof HTMLSelectElement ||
+          element instanceof HTMLTextAreaElement) &&
+        !element.disabled &&
+        !element.checkValidity(),
+    );
+    if (!invalidControl) {
+      errorRef.current?.focus();
+      return;
+    }
+    invalidControl.setAttribute("aria-invalid", "true");
+    invalidControl.setAttribute("aria-errormessage", errorId);
+    invalidControl.focus();
+    return () => {
+      invalidControl.removeAttribute("aria-invalid");
+      invalidControl.removeAttribute("aria-errormessage");
+    };
+  }, [error, errorId]);
 
   const submit = () => {
     const normalized = normalizeVisualDraft(graph, draft);
@@ -62,12 +90,18 @@ export function VisualCommandForm({
 
   return (
     <section className="mt-4 rounded-xl border border-cyan-400/30 bg-slate-950/70 p-4">
-      <h3 className="font-semibold text-white">{action.label}</h3>
+      <h3 id={headingId} className="font-semibold text-white">
+        {action.label}
+      </h3>
       <p className="mt-1 text-xs text-slate-400">
         Source and layout writes are flushed before this command is sent.
       </p>
       <form
+        ref={formRef}
         className="mt-4 space-y-4"
+        aria-labelledby={headingId}
+        aria-describedby={error ? errorId : undefined}
+        noValidate
         onSubmit={(event) => {
           event.preventDefault();
           if (!destructive) submit();
@@ -77,12 +111,18 @@ export function VisualCommandForm({
           draft={draft}
           graph={graph}
           typeSuggestions={typeSuggestions}
-          onChange={setDraft}
+          onChange={(nextDraft) => {
+            setDraft(nextDraft);
+            setError(null);
+          }}
         />
         {error ? (
           <p
+            id={errorId}
+            ref={errorRef}
             className="rounded-lg border border-red-400/40 bg-red-950/40 p-3 text-sm text-red-100"
             role="alert"
+            tabIndex={-1}
           >
             {error}
           </p>
@@ -449,6 +489,7 @@ function ColumnValueFields({
           aria-label="DBML column type"
           className={inputClass}
           list="visual-column-types"
+          required
           value={actual.type}
           onChange={(event) => onChange({ ...actual, type: event.target.value })}
         />
@@ -536,6 +577,7 @@ function DefaultField({
       ) : value?.type === "string" || value?.type === "expression" ? (
         <TextField
           label={value.type === "string" ? "Default string" : "Default expression"}
+          required={value.type === "expression"}
           value={value.value}
           onChange={(next) => onChange({ type: value.type, value: next })}
         />
@@ -1115,10 +1157,12 @@ function ActionField({
 function TextField({
   label,
   value,
+  required = true,
   onChange,
 }: {
   readonly label: string;
   readonly value: string;
+  readonly required?: boolean;
   readonly onChange: (value: string) => void;
 }) {
   return (
@@ -1126,6 +1170,7 @@ function TextField({
       {label}
       <input
         className={inputClass}
+        required={required}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />

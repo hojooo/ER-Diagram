@@ -34,12 +34,14 @@ export function ProjectWorkspacePage({
   }
   if (projectQuery.isPending) {
     return (
-      <p
-        className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-slate-300"
-        aria-live="polite"
-      >
-        Loading project…
-      </p>
+      <section className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-slate-300">
+        <h1 data-route-loading="true" className="font-semibold text-slate-100">
+          Loading project
+        </h1>
+        <p className="mt-2" aria-live="polite">
+          Loading project…
+        </p>
+      </section>
     );
   }
   if (projectQuery.isError) {
