@@ -119,7 +119,7 @@ function selectReceipt(
       ),
     )
     .get();
-  return row ? mapReceipt(row) : null;
+  return row ? mapStoredVisualCommandReceipt(row) : null;
 }
 
 function selectLayouts(database: ProjectDatabase, projectId: string): readonly DiagramLayout[] {
@@ -139,7 +139,7 @@ function selectLayouts(database: ProjectDatabase, projectId: string): readonly D
   }
 }
 
-function mapReceipt(row: StoredReceipt): VisualCommandReceipt {
+export function mapStoredVisualCommandReceipt(row: StoredReceipt): VisualCommandReceipt {
   if (
     !isCanonicalUuid(row.commandId) ||
     !VISUAL_COMMAND_KINDS.includes(row.commandKind) ||

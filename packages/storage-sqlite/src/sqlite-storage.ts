@@ -9,7 +9,9 @@ export const SQLITE_STORAGE_SCHEMA_VERSION = 2;
 export const APP_METADATA_STORAGE_SCHEMA_VERSION_KEY = "storage_schema_version";
 export const SQLITE_BUSY_TIMEOUT_MS = 5_000;
 
-const DEFAULT_MIGRATIONS_FOLDER = fileURLToPath(new URL("../drizzle", import.meta.url));
+export const DEFAULT_SQLITE_MIGRATIONS_FOLDER = fileURLToPath(
+  new URL("../drizzle", import.meta.url),
+);
 const WRITE_PROBE_KEY = "__er_diagram_write_probe__";
 
 export type SqliteStorageErrorCode =
@@ -201,7 +203,7 @@ export function initializeSqliteStorage(
     const database = drizzle({ client, schema: sqliteSchema });
     try {
       migrate(database, {
-        migrationsFolder: options.migrationsFolder ?? DEFAULT_MIGRATIONS_FOLDER,
+        migrationsFolder: options.migrationsFolder ?? DEFAULT_SQLITE_MIGRATIONS_FOLDER,
       });
     } catch (error) {
       throw storageError("SQLITE_MIGRATION_FAILED", "Failed to migrate SQLite database", error);

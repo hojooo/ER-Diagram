@@ -164,7 +164,7 @@ export function createSqliteProjectRepository(storage: SqliteStorage): ProjectPe
   return new SqliteProjectRepository(storage);
 }
 
-function mapProject(row: StoredProject): Project {
+export function mapProject(row: StoredProject): Project {
   return {
     id: row.id,
     name: row.name,
@@ -180,7 +180,7 @@ function mapProject(row: StoredProject): Project {
   };
 }
 
-function mapRevision(row: StoredRevision): SchemaRevision {
+export function mapRevision(row: StoredRevision): SchemaRevision {
   return {
     id: row.id,
     projectId: row.projectId,
