@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./test-fixture.js";
 import {
   computeSqlImportCreatePreviewHash,
   computeSqlImportPreviewHash,
@@ -171,6 +171,10 @@ async function installMilestoneTwoApi(page: Page, initial: ControlledState | nul
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
     const method = request.method();
+    if (method === "GET" && pathname === "/api/v1/runtime-config") {
+      await route.fallback();
+      return;
+    }
     const body = request.postDataJSON() as Record<string, unknown> | null;
     const commandId = typeof body?.commandId === "string" ? body.commandId : undefined;
     const headers = {

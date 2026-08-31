@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./test-fixture.js";
 
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-0123456789ab";
 const VALID_REVISION_ID = "019d3f4e-7b6c-7def-9abc-0123456789ab";
@@ -63,6 +63,10 @@ async function installExportApi(page: Page, dialect: "POSTGRESQL" | "MYSQL", inv
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
+    if (request.method() === "GET" && pathname === "/api/v1/runtime-config") {
+      await route.fallback();
+      return;
+    }
     const headers = {
       "content-type": "application/json",
       "x-correlation-id": "123e4567-e89b-42d3-a456-426614174000",

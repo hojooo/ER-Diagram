@@ -1,3 +1,4 @@
+import { DEFAULT_RUNTIME_RESOURCE_LIMITS } from "@er-diagram/contracts";
 import { sha256Utf8 } from "@er-diagram/core";
 import { describe, expect, it } from "vitest";
 
@@ -72,6 +73,7 @@ describe("DBML parser worker handler", () => {
         filepath: "/main.dbml",
         source: "Table users { id int }",
         sourceHash: "a".repeat(64),
+        limits: workerLimits(),
       }),
     ).rejects.toMatchObject({ code: "PARSER_WORKER_REQUEST_HASH_MISMATCH" });
   });
@@ -84,5 +86,15 @@ async function parse(source: string) {
     filepath: "/main.dbml",
     source,
     sourceHash: await sha256Utf8(source),
+    limits: workerLimits(),
   });
+}
+
+function workerLimits() {
+  return {
+    maxSourceBytes: DEFAULT_RUNTIME_RESOURCE_LIMITS.maxSourceBytes,
+    maxTables: DEFAULT_RUNTIME_RESOURCE_LIMITS.maxTables,
+    maxReferences: DEFAULT_RUNTIME_RESOURCE_LIMITS.maxReferences,
+    maxSchemaElements: DEFAULT_RUNTIME_RESOURCE_LIMITS.maxSchemaElements,
+  };
 }

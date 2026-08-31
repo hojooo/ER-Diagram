@@ -533,11 +533,11 @@ describe("project Fastify API", () => {
         commandId: COMMAND_ID,
         name: "Too large",
         primaryDialect: "POSTGRESQL",
-        source: "x".repeat(1_100_000),
+        source: "x".repeat(5 * 1024 * 1024 + 1),
       },
     });
     expect(oversized.statusCode).toBe(413);
-    expectError(oversized, "REQUEST_BODY_TOO_LARGE");
+    expectError(oversized, "RESOURCE_SOURCE_TOO_LARGE");
   });
 
   it("redacts unexpected application failures from the public error response", async () => {

@@ -496,10 +496,10 @@ describe("SQL import Fastify API", () => {
         commandId: COMMAND_ID,
         expectedSchemaRevisionNo: 1,
         dialect: "POSTGRESQL",
-        source: "x".repeat(1_100_000),
+        source: "x".repeat(5 * 1024 * 1024 + 1),
       },
     });
     expect(tooLarge.statusCode).toBe(413);
-    expect(errorResponseSchema.parse(tooLarge.json()).code).toBe("REQUEST_BODY_TOO_LARGE");
+    expect(errorResponseSchema.parse(tooLarge.json()).code).toBe("RESOURCE_SOURCE_TOO_LARGE");
   });
 });

@@ -3,12 +3,13 @@
 import "@testing-library/jest-dom/vitest";
 
 import { createHash } from "node:crypto";
-import type {
-  DiagramLayout,
-  DiagramLayoutValue,
-  LayoutResponse,
-  ProjectMutationResponse,
-  ProjectState,
+import {
+  DEFAULT_RUNTIME_RESOURCE_LIMITS,
+  type DiagramLayout,
+  type DiagramLayoutValue,
+  type LayoutResponse,
+  type ProjectMutationResponse,
+  type ProjectState,
 } from "@er-diagram/contracts";
 import { parseDbmlV2 } from "@er-diagram/core";
 import { QueryClient } from "@tanstack/react-query";
@@ -28,6 +29,7 @@ import type {
   DbmlWorkerParseResult,
 } from "../src/source-editor/parser-worker-client.js";
 import { ProjectSourceWorkspace } from "../src/source-editor/project-source-workspace.js";
+import { RuntimeConfigProvider } from "../src/runtime-config.js";
 
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-0123456789ab";
 const REVISION_ID = "019d3f4e-7b6c-7abd-8def-0123456789ab";
@@ -240,6 +242,10 @@ class LayoutProjectApi implements ProjectApi {
     this.currentLayoutRevisionNo = state.project.layoutRevisionNo;
   }
 
+  async getRuntimeConfig() {
+    return { configVersion: 1 as const, resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS };
+  }
+
   async getLayout(input: { projectId: string; viewKey: string }): Promise<LayoutResponse> {
     return {
       layout: this.layouts.get(input.viewKey) ?? null,
@@ -342,7 +348,18 @@ function renderWorkspace(api: LayoutProjectApi) {
     ],
     { initialEntries: [`/projects/${PROJECT_ID}`] },
   );
-  return { ...render(<RouterProvider router={router} />), parserClient, router, queryClient };
+  return {
+    ...render(
+      <RuntimeConfigProvider
+        config={{ configVersion: 1, resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS }}
+      >
+        <RouterProvider router={router} />
+      </RuntimeConfigProvider>,
+    ),
+    parserClient,
+    router,
+    queryClient,
+  };
 }
 
 function projectState(layoutRevisionNo: number): ProjectState {

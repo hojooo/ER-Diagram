@@ -2,7 +2,11 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import type { ProjectState, SqlImportStandalonePreviewResponse } from "@er-diagram/contracts";
+import {
+  DEFAULT_RUNTIME_RESOURCE_LIMITS,
+  type ProjectState,
+  type SqlImportStandalonePreviewResponse,
+} from "@er-diagram/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -10,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ProjectApi } from "../src/projects/project-api.js";
 import { ProjectApiProvider } from "../src/projects/project-api-context.js";
+import { RuntimeConfigProvider } from "../src/runtime-config.js";
 import { NewSqlImportPage, type SqlImportPageAdapters } from "../src/sql-import/sql-import-page.js";
 
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-0123456789ab";
@@ -129,6 +134,10 @@ function preview(): SqlImportStandalonePreviewResponse {
 function fakeApi() {
   const state = projectState();
   const api = {
+    getRuntimeConfig: vi.fn(async () => ({
+      configVersion: 1 as const,
+      resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS,
+    })),
     listProjects: vi.fn(async () => ({ projects: [] })),
     getProject: vi.fn(async () => ({ state })),
     listRevisions: vi.fn(async () => ({ revisions: [] })),
@@ -186,11 +195,15 @@ function renderNewImport(api: ProjectApi) {
     { initialEntries: ["/sql-import/new"] },
   );
   return render(
-    <ProjectApiProvider api={api}>
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
-    </ProjectApiProvider>,
+    <RuntimeConfigProvider
+      config={{ configVersion: 1, resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS }}
+    >
+      <ProjectApiProvider api={api}>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </ProjectApiProvider>
+    </RuntimeConfigProvider>,
   );
 }
 

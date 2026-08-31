@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./test-fixture.js";
 
 import { createControlledLayoutApi } from "./controlled-layout-api.js";
 

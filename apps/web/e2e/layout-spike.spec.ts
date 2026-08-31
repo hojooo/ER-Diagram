@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test-fixture.js";
 
 test("renders and updates the compound graph prototype", async ({ page }) => {
   test.setTimeout(60_000);

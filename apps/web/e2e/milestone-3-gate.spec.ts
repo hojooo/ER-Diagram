@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { type Diagnostic, type VisualCommand, visualCommandSchema } from "@er-diagram/contracts";
 import { parseDbmlV2 } from "@er-diagram/core";
 import { transformVisualCommand } from "@er-diagram/source-transform";
-import { expect, type Page, type Route, test } from "@playwright/test";
+import { expect, type Page, type Route, test } from "./test-fixture.js";
 
 import { createControlledLayoutApi } from "./controlled-layout-api.js";
 
