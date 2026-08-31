@@ -43,3 +43,4 @@ export {
   type CreateSqliteServerOptions,
   createSqliteServer,
 } from "./sqlite-server.js";
+export { runVolumeRecoveryCli } from "./volume-recovery-cli.js";
