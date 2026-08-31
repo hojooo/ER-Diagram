@@ -1182,8 +1182,9 @@ P0 대표 fixture는 약 200 KB, 143 tables, 573 refs, 15 groups, 7 views다.
 
 Fastify는 모든 success·error response에 enforced CSP를 적용한다. Script, worker와 connection은 same-origin만
 허용하며 inline script, script attribute, eval, object, frame과 외부 embedding은 차단한다. Monaco와 React
-Flow의 runtime style injection을 위해 style에만 `unsafe-inline`을 허용한다. HSTS는 TLS와 reverse proxy를
-조립하는 M4-006에서 결정한다. Production source는 HTML insertion API, `document.write`, `srcdoc`, `eval`과
+Flow의 runtime style injection을 위해 style에만 `unsafe-inline`을 허용한다. M4-005 production container는
+Fastify가 Web과 API를 same-origin으로 제공하며 static HTML·asset·API·error에 같은 policy를 적용한다. HSTS는 TLS와
+reverse proxy를 조립하는 M4-006에서 결정한다. Production source는 HTML insertion API, `document.write`, `srcdoc`, `eval`과
 `Function`을 사용하지 않는다. DBML·SQL과 사용자 text는 변형하지 않고 text DOM, Monaco, textarea 또는
 download bytes로만 다룬다. Shared Zod contract는 schema 생성 전에 `jitless` mode를 적용해 strict CSP에서
 `Function` constructor probe 없이 경계 데이터를 검증한다.
@@ -1268,6 +1269,23 @@ Decoded source 초과와 raw body 초과는 각각 `RESOURCE_SOURCE_TOO_LARGE`, 
 | `OPS-010` | release image에 dependency version inventory와 SBOM을 제공하고 parser·renderer license를 검토한다. |
 | `OPS-011` | public release tag·source commit·OCI image digest를 서로 추적할 수 있게 한다. |
 | `OPS-012` | repository root에 project `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES`와 dependency source·license 안내를 제공한다. |
+
+### 18.1 P0 container profile
+
+P0 image는 exact digest의 official Node 24.14.0 bookworm-slim build/runtime stage를 사용한다. Frozen pnpm 10.32.1
+workspace build 뒤 production dependency closure, compiled Web, SQLite migration과 license file만 runtime stage로
+옮긴다. Application file은 root-owned read-only이며 process는 built-in `node` UID/GID 1000으로 실행하고 `/data`만
+write 가능하게 둔다. `better-sqlite3` native module과 Node resource worker는 final image에서 실제 실행해 검증한다.
+
+Fastify는 container 내부 `0.0.0.0:8080`에서 SPA와 API를 same-origin으로 제공한다. HTML navigation의 GET/HEAD만
+SPA fallback을 사용하고 `/api`, `/health`, non-GET과 asset miss는 JSON 404 경계를 유지한다. HTML은 `no-store`, Vite
+hashed asset만 immutable cache를 사용하며 static root 밖 path와 dotfile을 차단한다. Existing SQLite volume은 exact
+current schema와 migration history만 열고 older/future/divergent database는 M4-004 migration runbook을 요구한다.
+
+Default Compose는 host `127.0.0.1:8080`, named `/data` volume, memory 2 GiB, PID 128, capability drop과
+`no-new-privileges`를 사용한다. Host bind mount는 UID 1000 ownership과 backup 책임을 명시한 opt-in override다.
+Readiness, healthcheck, strict environment override, process lock, graceful shutdown, HSTS/proxy와 outbound-disabled
+acceptance는 M4-006에서 완성한다.
 
 ## 19. 관측성과 오류 모델
 

@@ -77,8 +77,9 @@ Serializer 누락 하나로 source나 native error가 기록될 수 있다. Prod
 - ZIP metadata와 content는 bounded stream으로 읽고 filesystem extraction surface를 만들지 않는다.
 - CRC는 bundle content integrity의 근거로 사용하지 않는다. M4-003 manifest SHA-256이 이를 검증한다.
 - Production log는 즉시 운영 가능하지만 level, environment override, listen과 graceful flush는 M4-006에 남는다.
-- Production Browser→Fastify static serving은 M4-006에서 별도 검증한다. 이번 browser harness는 built Web
-  assets와 동일 CSP의 호환성만 증명한다.
+- Production Browser→Fastify static serving은 M4-005 container acceptance에서 same-origin SPA/API, asset cache와
+  실제 Monaco/parser/layout worker까지 검증한다. M4-002 browser harness는 built Web assets와 동일 CSP의 호환성을
+  먼저 증명한 경계로 유지한다.
 
 ## Verification
 
