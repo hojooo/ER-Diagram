@@ -16,15 +16,16 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { registerHttpErrorHandlers } from "./http-errors.js";
 import { registerLayoutRoutes } from "./layout-routes.js";
 import { registerProjectRoutes } from "./project-routes.js";
-import { registerSqlImportRoutes } from "./sql-import-routes.js";
-import { registerSqlExportRoutes } from "./sql-export-routes.js";
-import { registerVisualCommandRoutes } from "./visual-command-routes.js";
 import {
   DEFAULT_SERVER_RESOURCE_LIMITS,
   parseServerResourceLimits,
   type ServerResourceLimits,
   toRuntimeResourceLimits,
 } from "./resource-limits.js";
+import { registerSecurityHeaders } from "./security-headers.js";
+import { registerSqlExportRoutes } from "./sql-export-routes.js";
+import { registerSqlImportRoutes } from "./sql-import-routes.js";
+import { registerVisualCommandRoutes } from "./visual-command-routes.js";
 
 export interface CreateServerOptions {
   readonly projectApplication: ProjectApplication;
@@ -47,6 +48,8 @@ export function createServer(options: CreateServerOptions): FastifyInstance {
     requestIdHeader: false,
     genReqId: () => correlationIdSchema.parse(generateCorrelationId()),
   });
+
+  registerSecurityHeaders(server);
 
   server.addHook("onRequest", async (request, reply) => {
     reply.header("x-correlation-id", request.id);
