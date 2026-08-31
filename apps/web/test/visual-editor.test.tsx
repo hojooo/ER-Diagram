@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 
+import "@testing-library/jest-dom/vitest";
+
 import { type VisualCommand, visualCommandSchema } from "@er-diagram/contracts";
 import { parseDbmlV2, type SchemaGraph } from "@er-diagram/core";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { createDiagramSelectionStore } from "../src/diagram/selection-store.js";
@@ -169,6 +171,79 @@ describe("visual editor command model", () => {
 });
 
 describe("accessible visual schema inspector", () => {
+  it("labels every control in all 20 VisualCommand forms", () => {
+    const actions = visualActionContexts();
+    expect(actions.size).toBe(20);
+
+    for (const { action, currentSelection } of actions.values()) {
+      cleanup();
+      const store = createDiagramSelectionStore();
+      if (currentSelection) store.getState().setSelection(currentSelection);
+      const commandSession = fakeCommandSession();
+      renderInspector(store, commandSession.controller);
+
+      fireEvent.click(screen.getByRole("button", { name: action.label }));
+      const form = screen.getByRole("form", { name: action.label });
+      for (const control of form.querySelectorAll<
+        HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+      >("input, select, textarea")) {
+        const labelText = [...(control.labels ?? [])]
+          .map((label) => label.textContent?.trim() ?? "")
+          .join(" ");
+        expect(
+          control.getAttribute("aria-label")?.trim() || labelText,
+          `${action.kind} control must have an accessible name`,
+        ).not.toBe("");
+      }
+      for (const fieldset of form.querySelectorAll("fieldset")) {
+        expect(
+          fieldset.querySelector(":scope > legend")?.textContent?.trim(),
+          `${action.kind} fieldset must have a legend`,
+        ).toBeTruthy();
+      }
+    }
+  });
+
+  it("uses a roving tab stop for the visual action toolbar", () => {
+    const store = createDiagramSelectionStore();
+    const commandSession = fakeCommandSession();
+    renderInspector(store, commandSession.controller);
+
+    const toolbar = screen.getByRole("toolbar", { name: "Visual schema actions" });
+    const actions = within(toolbar).getAllByRole("button");
+    expect(actions.length).toBeGreaterThan(1);
+    expect(actions[0]).toHaveAttribute("tabindex", "0");
+    expect(actions[1]).toHaveAttribute("tabindex", "-1");
+
+    actions[0]?.focus();
+    if (actions[1]) actions[1].disabled = true;
+    fireEvent.keyDown(toolbar, { key: "ArrowRight" });
+    expect(actions[2]).toHaveFocus();
+    fireEvent.keyDown(toolbar, { key: "End" });
+    expect(actions.at(-1)).toHaveFocus();
+    fireEvent.keyDown(toolbar, { key: "Home" });
+    expect(actions[0]).toHaveFocus();
+  });
+
+  it("focuses and describes the first invalid field while preserving form input", () => {
+    const store = createDiagramSelectionStore();
+    const commandSession = fakeCommandSession();
+    renderInspector(store, commandSession.controller);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create table" }));
+    const tableName = screen.getByLabelText("Table name");
+    fireEvent.change(tableName, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply command" }));
+
+    const summary = screen.getByRole("alert");
+    expect(tableName).toHaveFocus();
+    expect(tableName).toHaveAttribute("aria-invalid", "true");
+    expect(tableName).toHaveAttribute("aria-errormessage", summary.id);
+    expect(screen.getByRole("form")).toHaveAttribute("aria-describedby", summary.id);
+    expect(tableName).toHaveValue("");
+    expect(commandSession.submit).not.toHaveBeenCalled();
+  });
+
   it("follows selection, exposes typed table actions, and uses a cancel-first delete dialog", () => {
     const posts = requiredTable("posts");
     const store = createDiagramSelectionStore();
@@ -420,6 +495,45 @@ function requiredColumn(table: ReturnType<typeof requiredTable>, name: string) {
   const column = table.columns.find((candidate) => candidate.name === name);
   if (!column) throw new Error(`Missing column ${name}.`);
   return column;
+}
+
+function visualActionContexts() {
+  const users = requiredTable("users");
+  const userId = requiredColumn(users, "id");
+  const reference = graph.references[0];
+  const group = graph.groups[0];
+  const view = graph.views[0];
+  if (!reference || !group || !view) throw new Error("Missing visual fixture elements.");
+  const contexts: Array<{ currentSelection: DiagramSelection | null; viewKey: string }> = [
+    { currentSelection: null, viewKey: view.key },
+    {
+      currentSelection: selection("table", users.key, [users.key]),
+      viewKey: view.key,
+    },
+    {
+      currentSelection: selection("column", userId.key, [users.key]),
+      viewKey: view.key,
+    },
+    {
+      currentSelection: selection(
+        "reference",
+        reference.key,
+        reference.endpoints.map((endpoint) => endpoint.tableKey),
+      ),
+      viewKey: view.key,
+    },
+    {
+      currentSelection: selection("group", group.key, group.tableKeys),
+      viewKey: view.key,
+    },
+  ];
+  return new Map(
+    contexts.flatMap(({ currentSelection, viewKey }) =>
+      listVisualEditorActions(graph, currentSelection, viewKey).map(
+        (action) => [action.kind, { action, currentSelection }] as const,
+      ),
+    ),
+  );
 }
 
 function selection(

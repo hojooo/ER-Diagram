@@ -2,6 +2,12 @@
   "schemaVersion": 1,
   "packages": [
     {
+      "name": "@axe-core/playwright",
+      "version": "4.13.0",
+      "licenseExpression": "MPL-2.0",
+      "source": "https://github.com/dequelabs/axe-core-npm/tree/develop/packages/playwright"
+    },
+    {
       "name": "@biomejs/biome",
       "version": "2.5.10",
       "licenseExpression": "MIT OR Apache-2.0",

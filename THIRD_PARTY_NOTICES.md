@@ -10,6 +10,7 @@ effect and must be retained when that package is redistributed.
 
 | Package | Version | Declared SPDX expression | Distribution choice | Source |
 | --- | --- | --- | --- | --- |
+| `@axe-core/playwright` | `4.13.0` | `MPL-2.0` | `MPL-2.0` | [source](https://github.com/dequelabs/axe-core-npm/tree/develop/packages/playwright) |
 | `@biomejs/biome` | `2.5.10` | `MIT OR Apache-2.0` | `Apache-2.0` | [source](https://github.com/biomejs/biome) |
 | `@dbml/core` | `9.1.1` | `Apache-2.0` | `Apache-2.0` | [source](https://github.com/holistics/dbml/tree/master/packages/dbml-core) |
 | `@dbml/parse` | `9.1.1` | `Apache-2.0` | `Apache-2.0` | [source](https://github.com/holistics/dbml/tree/master/packages/dbml-parse) |
@@ -63,6 +64,11 @@ These packages are development tools and are not intended to be copied into
 the production image. If a future distribution includes them, copy their
 complete upstream notice files into that distribution rather than relying on
 the summaries above.
+
+`@axe-core/playwright@4.13.0` is an unmodified development-only accessibility
+test adapter under MPL-2.0. It is not part of the production dependency closure;
+its package license text and upstream source remain available with the installed
+development dependency.
 
 ## ELK.js source availability
 
