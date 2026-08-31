@@ -1505,6 +1505,295 @@ export const sqlImportArtifactEnvelopeSchema = z.union([
 ]);
 export type SqlImportArtifactEnvelope = z.infer<typeof sqlImportArtifactEnvelopeSchema>;
 
+export const PROJECT_BUNDLE_SCHEMA_VERSION = 1 as const;
+
+export const projectBundleReportModeSchema = z.enum(["REDACTED", "INCLUDE_RETAINED_SQL", "OMIT"]);
+export type ProjectBundleReportMode = z.infer<typeof projectBundleReportModeSchema>;
+
+const projectBundleEntryBase = {
+  path: z.string().min(1),
+  bytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  sha256: sha256HexSchema,
+};
+
+export const projectBundleCurrentDbmlEntryDescriptorSchema = z
+  .object({
+    kind: z.literal("CURRENT_DBML"),
+    ...projectBundleEntryBase,
+  })
+  .strict();
+
+export const projectBundleRevisionEntryDescriptorSchema = z
+  .object({
+    kind: z.literal("SCHEMA_REVISION"),
+    ...projectBundleEntryBase,
+    revisionNo: schemaRevisionNoSchema,
+    validity: draftValiditySchema,
+    origin: schemaRevisionOriginSchema,
+    parserVersion: z.string().min(1),
+    diagnosticSummary: diagnosticSummarySchema,
+    createdAt: utcIsoTimestampSchema,
+  })
+  .strict();
+export type ProjectBundleRevisionEntryDescriptor = z.infer<
+  typeof projectBundleRevisionEntryDescriptorSchema
+>;
+
+export const projectBundleLayoutEntryDescriptorSchema = z
+  .object({
+    kind: z.literal("DIAGRAM_LAYOUT"),
+    ...projectBundleEntryBase,
+    viewKey: diagramViewKeySchema,
+    revisionNo: layoutRevisionNoSchema,
+  })
+  .strict();
+export type ProjectBundleLayoutEntryDescriptor = z.infer<
+  typeof projectBundleLayoutEntryDescriptorSchema
+>;
+
+export const projectBundleImportArtifactEntryDescriptorSchema = z
+  .object({
+    kind: z.literal("SQL_IMPORT_ARTIFACT"),
+    ...projectBundleEntryBase,
+    status: z.enum(["PREVIEWED", "APPLIED", "CANCELLED", "FAILED"]),
+    originalSqlRetention: originalSqlRetentionModeSchema,
+    createdAt: utcIsoTimestampSchema,
+    appliedAt: utcIsoTimestampSchema.nullable(),
+  })
+  .strict();
+export type ProjectBundleImportArtifactEntryDescriptor = z.infer<
+  typeof projectBundleImportArtifactEntryDescriptorSchema
+>;
+
+export const projectBundleEntryDescriptorSchema = z.discriminatedUnion("kind", [
+  projectBundleCurrentDbmlEntryDescriptorSchema,
+  projectBundleRevisionEntryDescriptorSchema,
+  projectBundleLayoutEntryDescriptorSchema,
+  projectBundleImportArtifactEntryDescriptorSchema,
+]);
+export type ProjectBundleEntryDescriptor = z.infer<typeof projectBundleEntryDescriptorSchema>;
+
+const projectBundleEntryPathRules = {
+  CURRENT_DBML: /^schema\/main\.dbml$/u,
+  SCHEMA_REVISION: /^history\/[0-9]{10}\.dbml$/u,
+  DIAGRAM_LAYOUT: /^layouts\/[0-9]{4}\.json$/u,
+  SQL_IMPORT_ARTIFACT: /^reports\/import\/[0-9]{4}\.json$/u,
+} as const;
+
+export const projectBundleManifestV1Schema = z
+  .object({
+    format: z.literal("ER_DIAGRAM_PROJECT_BUNDLE"),
+    bundleSchemaVersion: z.literal(PROJECT_BUNDLE_SCHEMA_VERSION),
+    bundleHash: sha256HexSchema,
+    createdAt: utcIsoTimestampSchema,
+    producer: z.object({ parserVersion: z.string().min(1) }).strict(),
+    sourceProjectId: projectIdSchema,
+    project: z
+      .object({
+        name: z
+          .string()
+          .min(1)
+          .refine((value) => value.trim() === value, "Project names must already be normalized."),
+        primaryDialect: primaryDialectSchema,
+        parserVersion: z.string().min(1),
+        schemaRevisionNo: schemaRevisionNoSchema,
+        layoutRevisionNo: layoutRevisionNoSchema,
+        currentRevisionNo: schemaRevisionNoSchema,
+        lastValidRevisionNo: schemaRevisionNoSchema.nullable(),
+        createdAt: utcIsoTimestampSchema,
+        updatedAt: utcIsoTimestampSchema,
+      })
+      .strict(),
+    reportMode: projectBundleReportModeSchema,
+    entries: z.array(projectBundleEntryDescriptorSchema),
+  })
+  .strict()
+  .superRefine((manifest, context) => {
+    if (manifest.project.currentRevisionNo !== manifest.project.schemaRevisionNo) {
+      context.addIssue({
+        code: "custom",
+        message: "The current revision must match the project schema revision.",
+        path: ["project", "currentRevisionNo"],
+      });
+    }
+    if (
+      manifest.project.lastValidRevisionNo !== null &&
+      manifest.project.lastValidRevisionNo > manifest.project.currentRevisionNo
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "The last-valid revision cannot be newer than the current revision.",
+        path: ["project", "lastValidRevisionNo"],
+      });
+    }
+
+    const seenPaths = new Set<string>();
+    const seenRevisions = new Set<number>();
+    const seenViews = new Set<string>();
+    const layoutPaths: string[] = [];
+    const reportPaths: string[] = [];
+    let previousPath: string | undefined;
+    let currentDbmlCount = 0;
+    for (const [index, entry] of manifest.entries.entries()) {
+      if (seenPaths.has(entry.path)) {
+        context.addIssue({
+          code: "custom",
+          message: "Bundle entry paths must be unique.",
+          path: ["entries", index, "path"],
+        });
+      }
+      seenPaths.add(entry.path);
+      if (previousPath !== undefined && previousPath >= entry.path) {
+        context.addIssue({
+          code: "custom",
+          message: "Bundle entries must be sorted by path.",
+          path: ["entries", index, "path"],
+        });
+      }
+      previousPath = entry.path;
+      if (!projectBundleEntryPathRules[entry.kind].test(entry.path)) {
+        context.addIssue({
+          code: "custom",
+          message: "Bundle entry path does not match its kind.",
+          path: ["entries", index, "path"],
+        });
+      }
+      if (entry.kind === "CURRENT_DBML") currentDbmlCount += 1;
+      if (entry.kind === "SCHEMA_REVISION") {
+        if (seenRevisions.has(entry.revisionNo)) {
+          context.addIssue({
+            code: "custom",
+            message: "Bundle revision entries must be unique.",
+            path: ["entries", index, "revisionNo"],
+          });
+        }
+        seenRevisions.add(entry.revisionNo);
+        if (entry.revisionNo > manifest.project.currentRevisionNo) {
+          context.addIssue({
+            code: "custom",
+            message: "A retained revision cannot be newer than the current revision.",
+            path: ["entries", index, "revisionNo"],
+          });
+        }
+        const expectedPath = `history/${String(entry.revisionNo).padStart(10, "0")}.dbml`;
+        if (entry.path !== expectedPath) {
+          context.addIssue({
+            code: "custom",
+            message: "Bundle revision path must encode its revision number.",
+            path: ["entries", index, "path"],
+          });
+        }
+      }
+      if (entry.kind === "DIAGRAM_LAYOUT") {
+        if (seenViews.has(entry.viewKey)) {
+          context.addIssue({
+            code: "custom",
+            message: "Bundle layout views must be unique.",
+            path: ["entries", index, "viewKey"],
+          });
+        }
+        seenViews.add(entry.viewKey);
+        layoutPaths.push(entry.path);
+      }
+      if (entry.kind === "SQL_IMPORT_ARTIFACT") reportPaths.push(entry.path);
+    }
+    if (currentDbmlCount !== 1) {
+      context.addIssue({
+        code: "custom",
+        message: "A bundle must contain exactly one current DBML entry.",
+        path: ["entries"],
+      });
+    }
+    if (!seenRevisions.has(manifest.project.currentRevisionNo)) {
+      context.addIssue({
+        code: "custom",
+        message: "The current schema revision must be retained in bundle history.",
+        path: ["entries"],
+      });
+    }
+    if (
+      manifest.project.lastValidRevisionNo !== null &&
+      !seenRevisions.has(manifest.project.lastValidRevisionNo)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "The last-valid schema revision must be retained in bundle history.",
+        path: ["entries"],
+      });
+    }
+    for (const [index, entryPath] of layoutPaths.entries()) {
+      if (entryPath !== `layouts/${String(index).padStart(4, "0")}.json`) {
+        context.addIssue({
+          code: "custom",
+          message: "Bundle layout paths must use contiguous deterministic indexes.",
+          path: ["entries"],
+        });
+      }
+    }
+    for (const [index, entryPath] of reportPaths.entries()) {
+      if (entryPath !== `reports/import/${String(index).padStart(4, "0")}.json`) {
+        context.addIssue({
+          code: "custom",
+          message: "Bundle report paths must use contiguous deterministic indexes.",
+          path: ["entries"],
+        });
+      }
+    }
+  });
+export type ProjectBundleManifestV1 = z.infer<typeof projectBundleManifestV1Schema>;
+
+export const projectBundleLayoutEntryV1Schema = diagramLayoutValueSchema
+  .extend({
+    viewKey: diagramViewKeySchema,
+    revisionNo: layoutRevisionNoSchema,
+  })
+  .strict();
+export type ProjectBundleLayoutEntryV1 = z.infer<typeof projectBundleLayoutEntryV1Schema>;
+
+export const projectBundleSqlImportArtifactEntryV1Schema = z
+  .object({
+    sourceArtifactId: projectIdSchema,
+    dialect: primaryDialectSchema,
+    originalSql: z.string().nullable(),
+    originalHash: sha256HexSchema,
+    generatedDbml: z.string().nullable(),
+    parserVersion: z.string().min(1),
+    envelope: sqlImportArtifactEnvelopeSchema,
+    status: z.enum(["PREVIEWED", "APPLIED", "CANCELLED", "FAILED"]),
+    createdAt: utcIsoTimestampSchema,
+    appliedAt: utcIsoTimestampSchema.nullable(),
+  })
+  .strict();
+export type ProjectBundleSqlImportArtifactEntryV1 = z.infer<
+  typeof projectBundleSqlImportArtifactEntryV1Schema
+>;
+
+export const projectBundleExportRequestSchema = z
+  .object({
+    expectedSchemaRevisionNo: schemaRevisionNoSchema,
+    expectedLayoutRevisionNo: layoutRevisionNoSchema,
+    reportMode: projectBundleReportModeSchema.optional(),
+  })
+  .strict();
+export type ProjectBundleExportRequest = z.infer<typeof projectBundleExportRequestSchema>;
+
+export const projectBundleImportResponseSchema = z
+  .object({
+    bundleSchemaVersion: z.literal(PROJECT_BUNDLE_SCHEMA_VERSION),
+    bundleHash: sha256HexSchema,
+    state: projectStateSchema,
+    diagnostics: z.array(diagnosticSchema),
+    imported: z
+      .object({
+        revisionCount: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+        layoutCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+        reportCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+      })
+      .strict(),
+  })
+  .strict();
+export type ProjectBundleImportResponse = z.infer<typeof projectBundleImportResponseSchema>;
+
 export const projectsResponseSchema = z
   .object({ projects: z.array(projectSummarySchema) })
   .strict();
