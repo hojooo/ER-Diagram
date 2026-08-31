@@ -10,6 +10,7 @@ import type {
   SqlImportStandalonePreviewResponse,
   SqlStatementConversion,
 } from "@er-diagram/contracts";
+import { type RuntimeResourceLimits, utf8ByteLength } from "@er-diagram/contracts";
 import { diffSchemaGraphs, type SchemaElementChange, type SchemaGraph } from "@er-diagram/core";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -19,6 +20,7 @@ import { Link, useBlocker, useNavigate, useParams } from "react-router-dom";
 import { ProjectApiError } from "../projects/project-api.js";
 import { useProjectApi } from "../projects/project-api-context.js";
 import { projectQueryKeys } from "../projects/project-queries.js";
+import { useRuntimeResourceLimits } from "../runtime-config.js";
 import { createDbmlParserWorkerClient } from "../source-editor/parser-worker-client.js";
 
 const buttonPrimary =
@@ -46,10 +48,20 @@ export interface SqlImportPageAdapters {
 }
 
 export function NewSqlImportPage({ adapters }: { readonly adapters?: SqlImportPageAdapters }) {
-  return <SqlImportPage mode="NEW" adapters={adapters ?? defaultAdapters} />;
+  const limits = useRuntimeResourceLimits();
+  const effectiveAdapters = useMemo(
+    () => adapters ?? createDefaultAdapters(limits),
+    [adapters, limits],
+  );
+  return <SqlImportPage mode="NEW" adapters={effectiveAdapters} />;
 }
 
 export function ReplaceSqlImportPage({ adapters }: { readonly adapters?: SqlImportPageAdapters }) {
+  const limits = useRuntimeResourceLimits();
+  const effectiveAdapters = useMemo(
+    () => adapters ?? createDefaultAdapters(limits),
+    [adapters, limits],
+  );
   const api = useProjectApi();
   const params = useParams();
   const projectId = params.projectId ?? "";
@@ -78,7 +90,7 @@ export function ReplaceSqlImportPage({ adapters }: { readonly adapters?: SqlImpo
     <SqlImportPage
       mode="REPLACE"
       projectState={projectQuery.data.state}
-      adapters={adapters ?? defaultAdapters}
+      adapters={effectiveAdapters}
     />
   );
 }
@@ -95,6 +107,7 @@ function SqlImportPage({
   const api = useProjectApi();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const runtimeLimits = useRuntimeResourceLimits();
   const [phase, setPhase] = useState<"EDIT" | "PREVIEW">("EDIT");
   const [name, setName] = useState("");
   const [dialect, setDialect] = useState<PrimaryDialect>(
@@ -193,8 +206,20 @@ function SqlImportPage({
     setFileError(undefined);
     setFileName(undefined);
     if (!file) return;
+    if (file.size > runtimeLimits.maxSourceBytes) {
+      setFileError(
+        `The SQL file exceeds the configured ${runtimeLimits.maxSourceBytes} byte limit.`,
+      );
+      return;
+    }
     try {
       const text = await file.text();
+      if (utf8ByteLength(text) > runtimeLimits.maxSourceBytes) {
+        setFileError(
+          `The SQL file exceeds the configured ${runtimeLimits.maxSourceBytes} byte limit.`,
+        );
+        return;
+      }
       setSource(text);
       setFileName(file.name);
     } catch {
@@ -211,6 +236,15 @@ function SqlImportPage({
     }
     if (source.trim().length === 0) {
       setError(new Error("Enter SQL DDL or choose a SQL file."));
+      return;
+    }
+    if (utf8ByteLength(source) > runtimeLimits.maxSourceBytes) {
+      setError(
+        new ProjectApiError(
+          `SQL source exceeds the configured ${runtimeLimits.maxSourceBytes} byte limit.`,
+          { status: null, code: "RESOURCE_SOURCE_TOO_LARGE" },
+        ),
+      );
       return;
     }
     setBusy("PREVIEW");
@@ -744,15 +778,25 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(Math.max(value, minimum), maximum);
 }
 
-const defaultAdapters: SqlImportPageAdapters = {
-  async parseDbml(source) {
-    const client = createDbmlParserWorkerClient();
-    try {
-      const result = await client.parse(source);
-      if (!result.ok) throw new Error("DBML diff input was invalid.");
-      return result.graph;
-    } finally {
-      client.dispose();
-    }
-  },
-};
+function createDefaultAdapters(limits: RuntimeResourceLimits): SqlImportPageAdapters {
+  return {
+    async parseDbml(source) {
+      const client = createDbmlParserWorkerClient({
+        timeoutMs: limits.dbmlParserTimeoutMs,
+        limits: {
+          maxSourceBytes: limits.maxSourceBytes,
+          maxTables: limits.maxTables,
+          maxReferences: limits.maxReferences,
+          maxSchemaElements: limits.maxSchemaElements,
+        },
+      });
+      try {
+        const result = await client.parse(source);
+        if (!result.ok) throw new Error("DBML diff input was invalid.");
+        return result.graph;
+      } finally {
+        client.dispose();
+      }
+    },
+  };
+}

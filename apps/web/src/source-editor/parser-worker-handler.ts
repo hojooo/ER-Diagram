@@ -2,14 +2,19 @@ import {
   type DbmlParserWorkerResponse,
   dbmlParserWorkerRequestSchema,
   dbmlParserWorkerResponseSchema,
+  utf8ByteLength,
 } from "@er-diagram/contracts";
-import { DBML_PARSER_VERSION, parseDbmlV2 } from "@er-diagram/core";
+import { DBML_PARSER_VERSION, measureSchemaGraph, parseDbmlV2 } from "@er-diagram/core";
 
 import { hashDbmlSource } from "./source-hash.js";
 
 export class DbmlParserWorkerRequestError extends Error {
   constructor(
-    readonly code: "PARSER_WORKER_REQUEST_HASH_MISMATCH" | "PARSER_WORKER_REQUEST_INVALID",
+    readonly code:
+      | "PARSER_WORKER_COMPLEXITY_LIMIT"
+      | "PARSER_WORKER_REQUEST_HASH_MISMATCH"
+      | "PARSER_WORKER_REQUEST_INVALID"
+      | "PARSER_WORKER_SOURCE_LIMIT",
     message: string,
   ) {
     super(message);
@@ -29,6 +34,12 @@ export async function handleDbmlParserWorkerRequest(
   }
 
   const request = parsed.data;
+  if (utf8ByteLength(request.source) > request.limits.maxSourceBytes) {
+    throw new DbmlParserWorkerRequestError(
+      "PARSER_WORKER_SOURCE_LIMIT",
+      "The DBML source exceeded the configured worker limit.",
+    );
+  }
   const actualSourceHash = await hashDbmlSource(request.source);
   if (actualSourceHash !== request.sourceHash) {
     throw new DbmlParserWorkerRequestError(
@@ -38,6 +49,19 @@ export async function handleDbmlParserWorkerRequest(
   }
 
   const result = await parseDbmlV2(request.source, request.filepath);
+  if (result.ok) {
+    const metrics = measureSchemaGraph(result.graph);
+    if (
+      metrics.tables > request.limits.maxTables ||
+      metrics.references > request.limits.maxReferences ||
+      metrics.totalElements > request.limits.maxSchemaElements
+    ) {
+      throw new DbmlParserWorkerRequestError(
+        "PARSER_WORKER_COMPLEXITY_LIMIT",
+        "The parsed schema exceeded the configured worker limit.",
+      );
+    }
+  }
   const response = result.ok
     ? {
         type: "DBML_PARSE_RESULT" as const,

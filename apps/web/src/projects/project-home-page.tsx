@@ -1,4 +1,4 @@
-import type { PrimaryDialect, ProjectSummary } from "@er-diagram/contracts";
+import { type PrimaryDialect, type ProjectSummary, utf8ByteLength } from "@er-diagram/contracts";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type RefObject, useRef, useState } from "react";
@@ -7,6 +7,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { ProjectApiError } from "./project-api.js";
 import { useProjectApi } from "./project-api-context.js";
 import { projectQueryKeys } from "./project-queries.js";
+import { useRuntimeResourceLimits } from "../runtime-config.js";
 
 const primaryButtonClass =
   "inline-flex min-h-11 items-center justify-center rounded-lg bg-cyan-300 px-4 font-semibold text-slate-950 transition hover:bg-cyan-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-55";
@@ -227,6 +228,7 @@ function CreateProjectDialog() {
   const api = useProjectApi();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const runtimeLimits = useRuntimeResourceLimits();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [dialect, setDialect] = useState<PrimaryDialect>("POSTGRESQL");
@@ -273,10 +275,22 @@ function CreateProjectDialog() {
     setFileError(undefined);
     setSource("");
     if (!file) return;
+    if (file.size > runtimeLimits.maxSourceBytes) {
+      setFileError(
+        `The DBML file exceeds the configured ${runtimeLimits.maxSourceBytes} byte limit.`,
+      );
+      return;
+    }
     setReadingFile(true);
     try {
       const text = await file.text();
       if (fileReadSequence.current !== sequence) return;
+      if (utf8ByteLength(text) > runtimeLimits.maxSourceBytes) {
+        setFileError(
+          `The DBML file exceeds the configured ${runtimeLimits.maxSourceBytes} byte limit.`,
+        );
+        return;
+      }
       setSource(text);
       setFileName(file.name);
     } catch {
