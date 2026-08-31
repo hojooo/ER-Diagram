@@ -59,6 +59,12 @@ export {
   validateSqliteVolumeBackup,
   validateSqliteVolumeDatabase,
 } from "./volume-recovery-validation.js";
+export {
+  applySqliteVolumeMigration,
+  applySqliteVolumeRestore,
+  planSqliteVolumeMigration,
+  planSqliteVolumeRestore,
+} from "./volume-recovery.js";
 export { createSqliteVisualCommandRepository } from "./visual-command-repository.js";
 
 export const storageSqlitePackage = "@er-diagram/storage-sqlite";
