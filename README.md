@@ -74,6 +74,7 @@ docs/
 - [ADR 0004: Fastify adapter 교체 경계](docs/adr/0004-fastify-adapter-boundary.md)
 - [ADR 0005: SQL capability target과 observed evidence](docs/adr/0005-sql-capability-matrix.md)
 - [ADR 0006: Revision 단위 session history와 durable restore](docs/adr/0006-session-history-and-durable-restore.md)
+- [ADR 0007: Runtime resource budget과 worker isolation](docs/adr/0007-runtime-resource-budgets-and-worker-isolation.md)
 
 ## License
 
