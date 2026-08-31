@@ -143,6 +143,100 @@ function jsonResponse(value: unknown, init: ResponseInit = {}): Response {
 }
 
 describe("HTTP project API", () => {
+  it("transports portable bundles as raw ZIP with strict length, hash and command headers", async () => {
+    const archive = new Uint8Array([80, 75, 3, 4]);
+    const bundleHash = "e".repeat(64);
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(archive, {
+          status: 200,
+          headers: {
+            "content-type": "application/zip",
+            "content-length": String(archive.byteLength),
+            "x-bundle-sha256": bundleHash,
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            bundleSchemaVersion: 1,
+            bundleHash,
+            state,
+            diagnostics: [],
+            imported: { revisionCount: 1, layoutCount: 0, reportCount: 0 },
+          },
+          { status: 201, headers: { "x-command-id": COMMAND_ID } },
+        ),
+      );
+    const api = createHttpProjectApi({ fetch: fetcher, generateCommandId: () => COMMAND_ID });
+
+    await expect(
+      api.exportProjectBundle({
+        projectId: PROJECT_ID,
+        expectedSchemaRevisionNo: 1,
+        expectedLayoutRevisionNo: 0,
+        reportMode: "REDACTED",
+      }),
+    ).resolves.toEqual({
+      content: archive,
+      contentLength: archive.byteLength,
+      sha256: bundleHash,
+      mimeType: "application/zip",
+      filename: "project.erdiagram.zip",
+    });
+    const upload = new Blob([archive], { type: "application/zip" });
+    await expect(api.importProjectBundle({ archive: upload })).resolves.toMatchObject({
+      bundleHash,
+      state,
+      imported: { revisionCount: 1 },
+    });
+    expect(fetcher.mock.calls[0]).toEqual([
+      `/api/v1/projects/${PROJECT_ID}/bundle-export`,
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          expectedSchemaRevisionNo: 1,
+          expectedLayoutRevisionNo: 0,
+          reportMode: "REDACTED",
+        }),
+      }),
+    ]);
+    expect(fetcher.mock.calls[1]).toEqual([
+      "/api/v1/project-bundles/import",
+      expect.objectContaining({
+        method: "POST",
+        body: upload,
+        headers: expect.objectContaining({
+          "content-type": "application/zip",
+          "x-command-id": COMMAND_ID,
+        }),
+      }),
+    ]);
+  });
+
+  it("fails closed when bundle response evidence is malformed", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: {
+          "content-type": "application/zip",
+          "content-length": "4",
+          "x-bundle-sha256": "not-a-hash",
+        },
+      }),
+    );
+    const api = createHttpProjectApi({ fetch: fetcher });
+    await expect(
+      api.exportProjectBundle({
+        projectId: PROJECT_ID,
+        expectedSchemaRevisionNo: 1,
+        expectedLayoutRevisionNo: 0,
+      }),
+    ).rejects.toMatchObject({ code: "CLIENT_BUNDLE_RESPONSE_INVALID" });
+  });
+
   it("posts a read-only SQL export request without generating a command ID", async () => {
     const generateCommandId = vi.fn(() => COMMAND_ID);
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse(sqlExportResponse()));

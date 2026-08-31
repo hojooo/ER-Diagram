@@ -862,7 +862,8 @@ export function ProjectSourceWorkspace({
   const requiresSavedWorkspace =
     navigationBlocker.state === "blocked" &&
     (navigationBlocker.location.pathname === `/projects/${projectId}/sql-import` ||
-      navigationBlocker.location.pathname === `/projects/${projectId}/sql-export`);
+      navigationBlocker.location.pathname === `/projects/${projectId}/sql-export` ||
+      navigationBlocker.location.pathname === `/projects/${projectId}/bundle-export`);
 
   useEffect(() => {
     if (navigationBlocker.state !== "blocked") {

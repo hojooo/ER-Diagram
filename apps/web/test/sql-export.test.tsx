@@ -150,6 +150,8 @@ function fakeApi(state: ProjectState, exported: SqlExportResponse): ProjectApi {
     previewProjectSqlImport: vi.fn(),
     applyProjectSqlImport: vi.fn(),
     exportProjectSql: vi.fn(async () => exported),
+    exportProjectBundle: vi.fn(),
+    importProjectBundle: vi.fn(),
   };
 }
 
