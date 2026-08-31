@@ -7,8 +7,8 @@ import {
 import type {
   VisualCommandPartialImpact as CoreVisualCommandPartialImpact,
   LayoutApplicationError,
-  ProjectBundleApplicationError,
   ProjectApplicationError,
+  ProjectBundleApplicationError,
   SqlExportApplicationError,
   SqlImportApplicationError,
   VisualCommandApplicationError,
@@ -16,8 +16,14 @@ import type {
 } from "@er-diagram/core";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { recordOperationalError } from "./operational-logging.js";
-import { ResourceOperationError } from "./resource-errors.js";
 import { ProjectBundleTransportError } from "./project-bundle-archive.js";
+import { ResourceOperationError } from "./resource-errors.js";
+import {
+  isUnsafeStaticWebRequest,
+  markSpaFallbackRequest,
+  type StaticWebOptions,
+  shouldServeSpaFallback,
+} from "./static-web.js";
 
 interface ContractParseSuccess<T> {
   readonly success: true;
@@ -241,10 +247,37 @@ export function sendVisualCommandApplicationError(
   return assertNever(error);
 }
 
-export function registerHttpErrorHandlers(server: FastifyInstance): void {
-  server.setNotFoundHandler((request, reply) =>
-    sendError(request, reply, 404, "ROUTE_NOT_FOUND", "The requested route was not found."),
-  );
+export function registerHttpErrorHandlers(
+  server: FastifyInstance,
+  staticWeb?: StaticWebOptions,
+): void {
+  if (staticWeb) {
+    server.addHook("onRequest", async (request, reply) => {
+      if (isUnsafeStaticWebRequest(request.url)) {
+        return sendError(
+          request,
+          reply,
+          404,
+          "ROUTE_NOT_FOUND",
+          "The requested route was not found.",
+        );
+      }
+    });
+  }
+
+  server.setNotFoundHandler((request, reply) => {
+    if (staticWeb && shouldServeSpaFallback(request.method, request.url, request.headers.accept)) {
+      markSpaFallbackRequest(request);
+      reply.header("cache-control", "no-store");
+      return reply.sendFile("index.html", staticWeb.rootDirectory, {
+        cacheControl: false,
+        dotfiles: "deny",
+        immutable: false,
+        maxAge: 0,
+      });
+    }
+    return sendError(request, reply, 404, "ROUTE_NOT_FOUND", "The requested route was not found.");
+  });
 
   server.setErrorHandler((error, request, reply) => {
     if (error instanceof ProjectBundleTransportError) {

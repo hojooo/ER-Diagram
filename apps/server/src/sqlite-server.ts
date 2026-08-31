@@ -8,8 +8,8 @@ import {
 } from "@er-diagram/core";
 import {
   createSqliteLayoutRepository,
-  createSqliteProjectRepository,
   createSqliteProjectBundleRepository,
+  createSqliteProjectRepository,
   createSqliteSqlImportRepository,
   createSqliteVisualCommandRepository,
   generateUuidV7,
@@ -29,6 +29,7 @@ import {
   parseServerResourceLimits,
   type ServerResourceLimits,
 } from "./resource-limits.js";
+import type { StaticWebOptions } from "./static-web.js";
 
 export interface CreateSqliteServerOptions {
   readonly storage: SqliteStorage;
@@ -38,6 +39,7 @@ export interface CreateSqliteServerOptions {
   readonly generateId?: () => string;
   readonly now?: () => string;
   readonly operationalLogSink?: OperationalLogSink;
+  readonly staticWeb?: StaticWebOptions;
 }
 
 export function createSqliteServer(options: CreateSqliteServerOptions): FastifyInstance {
@@ -97,6 +99,7 @@ export function createSqliteServer(options: CreateSqliteServerOptions): FastifyI
       : {}),
     operationalLogSink,
     resourceLimits,
+    ...(options.staticWeb ? { staticWeb: options.staticWeb } : {}),
   });
 
   server.addHook("onClose", async () => executor.close());

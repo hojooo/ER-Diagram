@@ -20,13 +20,13 @@ export {
   type ResourceOperationKind,
   type ResourceOperationOperationalLog,
 } from "./operational-logging.js";
+export { ResourceOperationError, type ResourceOperationErrorCode } from "./resource-errors.js";
 export {
   BoundedResourceWorkerPool,
   type CreateResourceExecutorOptions,
   createResourceExecutor,
   type ResourceExecutor,
 } from "./resource-executor.js";
-export { ResourceOperationError, type ResourceOperationErrorCode } from "./resource-errors.js";
 export {
   DEFAULT_SERVER_RESOURCE_LIMITS,
   parseServerResourceLimits,
@@ -43,4 +43,5 @@ export {
   type CreateSqliteServerOptions,
   createSqliteServer,
 } from "./sqlite-server.js";
+export type { StaticWebOptions } from "./static-web.js";
 export { runVolumeRecoveryCli } from "./volume-recovery-cli.js";
