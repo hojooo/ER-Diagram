@@ -1,6 +1,7 @@
 import type {
   LayoutApplication,
   ProjectApplication,
+  ProjectBundleApplication,
   SqlExportApplication,
   SqlImportApplication,
   VisualCommandApplication,
@@ -244,6 +245,7 @@ function trackedServer(
     sqlImportApplication: {} as SqlImportApplication,
     sqlExportApplication: {} as SqlExportApplication,
     visualCommandApplication: {} as VisualCommandApplication,
+    projectBundleApplication: {} as ProjectBundleApplication,
     generateCorrelationId: () => CORRELATION_ID,
     operationalLogSink: sink,
     resourceLimits: {

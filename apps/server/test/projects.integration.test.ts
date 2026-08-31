@@ -13,6 +13,7 @@ import {
   createProjectApplication,
   type LayoutApplication,
   type ProjectApplication,
+  type ProjectBundleApplication,
   type SqlExportApplication,
   type SqlImportApplication,
   type VisualCommandApplication,
@@ -83,6 +84,7 @@ function trackedServer(
     sqlImportApplication: {} as SqlImportApplication,
     sqlExportApplication: {} as SqlExportApplication,
     visualCommandApplication: {} as VisualCommandApplication,
+    projectBundleApplication: {} as ProjectBundleApplication,
     generateCorrelationId: correlationGenerator(),
   });
   openServers.add(server);

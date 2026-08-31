@@ -15,6 +15,8 @@ export type HttpOperation =
   | "PROJECT_RENAME"
   | "PROJECT_REVISION_LIST"
   | "PROJECT_REVISION_RESTORE"
+  | "PROJECT_BUNDLE_EXPORT"
+  | "PROJECT_BUNDLE_IMPORT"
   | "ROUTE_NOT_FOUND"
   | "RUNTIME_CONFIG_GET"
   | "SQL_EXPORT"
@@ -174,6 +176,8 @@ const OPERATIONS = new Map<string, HttpOperation>([
   ["POST /api/v1/projects/:projectId/sql-import/apply", "SQL_IMPORT_APPLY"],
   ["POST /api/v1/projects/:projectId/sql-export", "SQL_EXPORT"],
   ["POST /api/v1/projects/:projectId/visual-commands", "VISUAL_COMMAND_APPLY"],
+  ["POST /api/v1/projects/:projectId/bundle-export", "PROJECT_BUNDLE_EXPORT"],
+  ["POST /api/v1/project-bundles/import", "PROJECT_BUNDLE_IMPORT"],
 ]);
 
 function safeMethod(method: string): HttpCompletionOperationalLog["method"] {

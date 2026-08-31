@@ -18,6 +18,7 @@ import {
   createProjectApplication,
   createSqlExportApplication,
   createSqlImportApplication,
+  type ProjectBundleApplication,
   type VisualCommandApplication,
 } from "@er-diagram/core";
 import {
@@ -76,6 +77,7 @@ function openRuntime(filename: string): Runtime {
     }),
     sqlExportApplication: createSqlExportApplication({ persistence: projectRepository }),
     visualCommandApplication: {} as VisualCommandApplication,
+    projectBundleApplication: {} as ProjectBundleApplication,
     generateCorrelationId: () => CORRELATION_ID,
   });
   const runtime = { storage, server, importRepository };

@@ -1,6 +1,7 @@
 import type {
   LayoutApplication,
   ProjectApplication,
+  ProjectBundleApplication,
   SqlExportApplication,
   SqlImportApplication,
   VisualCommandApplication,
@@ -14,6 +15,7 @@ const unusedLayoutApplication = {} as LayoutApplication;
 const unusedSqlImportApplication = {} as SqlImportApplication;
 const unusedSqlExportApplication = {} as SqlExportApplication;
 const unusedVisualCommandApplication = {} as VisualCommandApplication;
+const unusedProjectBundleApplication = {} as ProjectBundleApplication;
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.close()));
@@ -27,6 +29,7 @@ describe("Fastify adapter bootstrap", () => {
       sqlImportApplication: unusedSqlImportApplication,
       sqlExportApplication: unusedSqlExportApplication,
       visualCommandApplication: unusedVisualCommandApplication,
+      projectBundleApplication: unusedProjectBundleApplication,
     });
     servers.push(server);
 

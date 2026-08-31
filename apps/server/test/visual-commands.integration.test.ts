@@ -15,6 +15,7 @@ import {
   createProjectApplication,
   createVisualCommandApplication,
   qualifiedElementKey,
+  type ProjectBundleApplication,
   type SqlExportApplication,
   type SqlImportApplication,
 } from "@er-diagram/core";
@@ -98,6 +99,7 @@ function createFixture(filename = databasePath()): TestResource {
       generateId: generateUuidV7,
       now,
     }),
+    projectBundleApplication: {} as ProjectBundleApplication,
     generateCorrelationId: () => CORRELATION_ID,
   });
   const resource = { filename, server, storage };
