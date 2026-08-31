@@ -57,6 +57,18 @@ export function parseResponse<T>(schema: ContractSchema<T>, value: unknown): T {
   return parsed.data;
 }
 
+export function sendServerNotReady(request: FastifyRequest, reply: FastifyReply): FastifyReply {
+  reply.header("cache-control", "no-store");
+  reply.header("retry-after", "1");
+  return sendError(
+    request,
+    reply,
+    503,
+    "SERVER_NOT_READY",
+    "The server is not ready to accept traffic.",
+  );
+}
+
 export function sendProjectApplicationError(
   request: FastifyRequest,
   reply: FastifyReply,

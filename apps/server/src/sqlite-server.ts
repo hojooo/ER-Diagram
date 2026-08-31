@@ -40,6 +40,10 @@ export interface CreateSqliteServerOptions {
   readonly now?: () => string;
   readonly operationalLogSink?: OperationalLogSink;
   readonly staticWeb?: StaticWebOptions;
+  readonly readinessProbe?: () => boolean | Promise<boolean>;
+  readonly trustedProxyCidrs?: readonly string[];
+  readonly hstsMaxAgeSeconds?: number;
+  readonly closeOwnedResources?: () => void | Promise<void>;
 }
 
 export function createSqliteServer(options: CreateSqliteServerOptions): FastifyInstance {
@@ -100,8 +104,19 @@ export function createSqliteServer(options: CreateSqliteServerOptions): FastifyI
     operationalLogSink,
     resourceLimits,
     ...(options.staticWeb ? { staticWeb: options.staticWeb } : {}),
+    ...(options.readinessProbe ? { readinessProbe: options.readinessProbe } : {}),
+    ...(options.trustedProxyCidrs ? { trustedProxyCidrs: options.trustedProxyCidrs } : {}),
+    ...(options.hstsMaxAgeSeconds === undefined
+      ? {}
+      : { hstsMaxAgeSeconds: options.hstsMaxAgeSeconds }),
   });
 
-  server.addHook("onClose", async () => executor.close());
+  server.addHook("onClose", async () => {
+    try {
+      await executor.close();
+    } finally {
+      await options.closeOwnedResources?.();
+    }
+  });
   return server;
 }

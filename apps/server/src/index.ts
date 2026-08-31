@@ -11,6 +11,7 @@ export {
 } from "./bounded-zip-reader.js";
 export {
   createJsonLineOperationalLogSink,
+  flushOperationalLog,
   type HttpCompletionOperationalLog,
   type HttpOperation,
   NOOP_OPERATIONAL_LOG_SINK,
@@ -19,7 +20,19 @@ export {
   type OperationalLogSink,
   type ResourceOperationKind,
   type ResourceOperationOperationalLog,
+  type ServerLifecycleOperationalLog,
+  type ServerLifecycleState,
 } from "./operational-logging.js";
+export {
+  DEFAULT_PRODUCTION_CONFIGURATION,
+  DEFAULT_PRODUCTION_SHUTDOWN_TIMEOUT_MS,
+  MAX_HSTS_AGE_SECONDS,
+  type OperationalLogMode,
+  type ProductionConfiguration,
+  ProductionConfigurationError,
+  parseProductionConfiguration,
+  type StartupMigrationMode,
+} from "./production-config.js";
 export { ResourceOperationError, type ResourceOperationErrorCode } from "./resource-errors.js";
 export {
   BoundedResourceWorkerPool,

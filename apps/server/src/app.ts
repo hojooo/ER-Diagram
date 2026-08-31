@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import {
   correlationIdSchema,
+  healthLiveResponseSchema,
+  healthReadyResponseSchema,
   RESOURCE_LIMITS_VERSION,
   runtimeConfigResponseSchema,
 } from "@er-diagram/contracts";
@@ -14,7 +16,7 @@ import type {
 } from "@er-diagram/core";
 import Fastify, { type FastifyInstance } from "fastify";
 
-import { registerHttpErrorHandlers } from "./http-errors.js";
+import { parseResponse, registerHttpErrorHandlers, sendServerNotReady } from "./http-errors.js";
 import { registerLayoutRoutes } from "./layout-routes.js";
 import {
   NOOP_OPERATIONAL_LOG_SINK,
@@ -46,6 +48,9 @@ export interface CreateServerOptions {
   readonly operationalLogSink?: OperationalLogSink;
   readonly resourceLimits?: ServerResourceLimits;
   readonly staticWeb?: StaticWebOptions;
+  readonly readinessProbe?: () => boolean | Promise<boolean>;
+  readonly trustedProxyCidrs?: readonly string[];
+  readonly hstsMaxAgeSeconds?: number;
 }
 
 export function createServer(options: CreateServerOptions): FastifyInstance {
@@ -58,9 +63,13 @@ export function createServer(options: CreateServerOptions): FastifyInstance {
     logger: false,
     requestIdHeader: false,
     genReqId: () => correlationIdSchema.parse(generateCorrelationId()),
+    trustProxy:
+      options.trustedProxyCidrs && options.trustedProxyCidrs.length > 0
+        ? [...options.trustedProxyCidrs]
+        : false,
   });
 
-  registerSecurityHeaders(server);
+  registerSecurityHeaders(server, { hstsMaxAgeSeconds: options.hstsMaxAgeSeconds ?? 0 });
   registerOperationalLogging(server, options.operationalLogSink ?? NOOP_OPERATIONAL_LOG_SINK);
 
   server.addHook("onRequest", async (request, reply) => {
@@ -70,7 +79,21 @@ export function createServer(options: CreateServerOptions): FastifyInstance {
   if (options.staticWeb) registerStaticWeb(server, options.staticWeb);
   registerHttpErrorHandlers(server, options.staticWeb);
 
-  server.get("/health/live", async () => ({ status: "ok" }));
+  server.get("/health/live", async (_request, reply) => {
+    reply.header("cache-control", "no-store");
+    return parseResponse(healthLiveResponseSchema, { status: "ok" });
+  });
+  server.get("/health/ready", async (request, reply) => {
+    reply.header("cache-control", "no-store");
+    try {
+      if (await (options.readinessProbe?.() ?? true)) {
+        return parseResponse(healthReadyResponseSchema, { status: "ready" });
+      }
+    } catch {
+      // A failed readiness probe is intentionally reduced to a stable public status.
+    }
+    return sendServerNotReady(request, reply);
+  });
   server.get("/api/v1/runtime-config", async (_request, reply) => {
     reply.header("cache-control", "no-store");
     return reply.send(

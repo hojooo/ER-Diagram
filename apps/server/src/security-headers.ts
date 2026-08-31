@@ -37,7 +37,15 @@ export const SECURITY_HEADERS = Object.freeze({
   "x-frame-options": "DENY",
 });
 
-export function registerSecurityHeaders(server: FastifyInstance): void {
+export interface SecurityHeaderOptions {
+  readonly hstsMaxAgeSeconds?: number;
+}
+
+export function registerSecurityHeaders(
+  server: FastifyInstance,
+  options: SecurityHeaderOptions = {},
+): void {
+  const hstsMaxAgeSeconds = options.hstsMaxAgeSeconds ?? 0;
   void server.register(fastifyHelmet, {
     global: true,
     contentSecurityPolicy: {
@@ -67,7 +75,10 @@ export function registerSecurityHeaders(server: FastifyInstance): void {
     xFrameOptions: { action: "deny" },
   });
 
-  server.addHook("onRequest", async (_request, reply) => {
+  server.addHook("onRequest", async (request, reply) => {
     reply.header("permissions-policy", PERMISSIONS_POLICY);
+    if (hstsMaxAgeSeconds > 0 && request.protocol === "https") {
+      reply.header("strict-transport-security", `max-age=${hstsMaxAgeSeconds}`);
+    }
   });
 }

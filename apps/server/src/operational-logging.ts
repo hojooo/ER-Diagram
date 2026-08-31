@@ -5,6 +5,7 @@ export const OPERATIONAL_LOG_VERSION = 1 as const;
 
 export type HttpOperation =
   | "HEALTH_LIVE"
+  | "HEALTH_READY"
   | "LAYOUT_GET"
   | "LAYOUT_SAVE"
   | "PROJECT_CREATE"
@@ -71,10 +72,24 @@ export interface ResourceOperationOperationalLog {
   readonly errorCode?: string;
 }
 
-export type OperationalLogEvent = HttpCompletionOperationalLog | ResourceOperationOperationalLog;
+export type ServerLifecycleState = "STARTING" | "READY" | "SHUTTING_DOWN" | "STOPPED" | "FAILED";
+
+export interface ServerLifecycleOperationalLog {
+  readonly logVersion: 1;
+  readonly event: "SERVER_LIFECYCLE";
+  readonly timestamp: string;
+  readonly state: ServerLifecycleState;
+  readonly reasonCode?: string;
+}
+
+export type OperationalLogEvent =
+  | HttpCompletionOperationalLog
+  | ResourceOperationOperationalLog
+  | ServerLifecycleOperationalLog;
 
 export interface OperationalLogSink {
   write(event: OperationalLogEvent): void | Promise<void>;
+  flush?(): void | Promise<void>;
 }
 
 interface RequestLogContext {
@@ -87,16 +102,27 @@ const requestContexts = new WeakMap<FastifyRequest, RequestLogContext>();
 
 export const NOOP_OPERATIONAL_LOG_SINK: OperationalLogSink = Object.freeze({
   write: (_event: OperationalLogEvent) => undefined,
+  flush: () => undefined,
 });
 
 export function createJsonLineOperationalLogSink(
-  writeLine: (line: string) => void = (line) => {
-    process.stdout.write(line);
+  writeLine: (line: string) => unknown = (line) => {
+    return new Promise<void>((resolve) => {
+      process.stdout.write(line, () => resolve());
+    });
   },
 ): OperationalLogSink {
+  const pending = new Set<Promise<void>>();
   return Object.freeze({
     write(event: OperationalLogEvent) {
-      writeLine(`${JSON.stringify(event)}\n`);
+      const result = writeLine(`${JSON.stringify(event)}\n`);
+      if (!isPromiseLike(result)) return;
+      const tracked = Promise.resolve(result).finally(() => pending.delete(tracked));
+      pending.add(tracked);
+      return tracked;
+    },
+    async flush() {
+      await Promise.allSettled([...pending]);
     },
   });
 }
@@ -143,6 +169,14 @@ export function writeOperationalLog(sink: OperationalLogSink, event: Operational
   }
 }
 
+export async function flushOperationalLog(sink: OperationalLogSink): Promise<void> {
+  try {
+    await sink.flush?.();
+  } catch {
+    // Operational logging is best-effort and must never alter lifecycle behavior.
+  }
+}
+
 export function recordOperationalError(
   request: FastifyRequest,
   errorCode: string,
@@ -181,6 +215,7 @@ function resolveOperation(request: FastifyRequest): HttpOperation {
 
 const OPERATIONS = new Map<string, HttpOperation>([
   ["GET /health/live", "HEALTH_LIVE"],
+  ["GET /health/ready", "HEALTH_READY"],
   ["GET /api/v1/runtime-config", "RUNTIME_CONFIG_GET"],
   ["GET /api/v1/projects", "PROJECT_LIST"],
   ["POST /api/v1/projects", "PROJECT_CREATE"],
@@ -282,6 +317,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isPromiseLike(value: void | Promise<void>): value is Promise<void> {
-  return typeof value === "object" && value !== null && "then" in value;
+function isPromiseLike(value: unknown): value is PromiseLike<void> {
+  return (
+    (typeof value === "object" || typeof value === "function") &&
+    value !== null &&
+    "then" in value &&
+    typeof value.then === "function"
+  );
 }
