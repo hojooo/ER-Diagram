@@ -1,5 +1,15 @@
 export { type CreateServerOptions, createServer } from "./app.js";
 export {
+  type BoundedZipArchiveEntry,
+  BoundedZipArchiveError,
+  type BoundedZipArchiveErrorCode,
+  type BoundedZipArchiveSummary,
+  type BoundedZipArchiveVisitor,
+  type BoundedZipLimits,
+  publicBoundedZipArchiveErrorMessage,
+  readBoundedZipArchive,
+} from "./bounded-zip-reader.js";
+export {
   BoundedResourceWorkerPool,
   type CreateResourceExecutorOptions,
   createResourceExecutor,

@@ -13,6 +13,7 @@ effect and must be retained when that package is redistributed.
 | `@biomejs/biome` | `2.5.10` | `MIT OR Apache-2.0` | `Apache-2.0` | [source](https://github.com/biomejs/biome) |
 | `@dbml/core` | `9.1.1` | `Apache-2.0` | `Apache-2.0` | [source](https://github.com/holistics/dbml/tree/master/packages/dbml-core) |
 | `@dbml/parse` | `9.1.1` | `Apache-2.0` | `Apache-2.0` | [source](https://github.com/holistics/dbml/tree/master/packages/dbml-parse) |
+| `@fastify/helmet` | `13.0.0` | `MIT` | `MIT` | [source](https://github.com/fastify/fastify-helmet) |
 | `@playwright/test` | `1.62.1` | `Apache-2.0` | `Apache-2.0` | [source](https://github.com/microsoft/playwright) |
 | `@radix-ui/react-dialog` | `1.1.23` | `MIT` | `MIT` | [source](https://github.com/radix-ui/primitives/tree/main/packages/react/dialog) |
 | `@tailwindcss/vite` | `4.3.3` | `MIT` | `MIT` | [source](https://github.com/tailwindlabs/tailwindcss/tree/main/packages/@tailwindcss-vite) |
@@ -24,6 +25,7 @@ effect and must be retained when that package is redistributed.
 | `@types/node` | `24.10.0` | `MIT` | `MIT` | [source](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node) |
 | `@types/react` | `19.2.18` | `MIT` | `MIT` | [source](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react) |
 | `@types/react-dom` | `19.2.5` | `MIT` | `MIT` | [source](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react-dom) |
+| `@types/yauzl` | `3.4.0` | `MIT` | `MIT` | [source](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/yauzl) |
 | `@vitejs/plugin-react` | `6.1.0` | `MIT` | `MIT` | [source](https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react) |
 | `@xyflow/react` | `12.11.5` | `MIT` | `MIT` | [source](https://github.com/xyflow/xyflow/tree/main/packages/react) |
 | `better-sqlite3` | `13.0.3` | `MIT` | `MIT` | [source](https://github.com/WiseLibs/better-sqlite3) |
@@ -40,6 +42,7 @@ effect and must be retained when that package is redistributed.
 | `typescript` | `7.0.2` | `Apache-2.0` | `Apache-2.0` | [source](https://github.com/microsoft/TypeScript) |
 | `vite` | `8.2.2` | `MIT` | `MIT` | [source](https://github.com/vitejs/vite/tree/main/packages/vite) |
 | `vitest` | `4.1.11` | `MIT` | `MIT` | [source](https://github.com/vitest-dev/vitest/tree/main/packages/vitest) |
+| `yauzl` | `3.4.0` | `MIT` | `MIT` | [source](https://github.com/thejoshwolfe/yauzl) |
 | `zod` | `4.4.3` | `MIT` | `MIT` | [source](https://github.com/colinhacks/zod) |
 | `zustand` | `5.0.15` | `MIT` | `MIT` | [source](https://github.com/pmndrs/zustand) |
 
