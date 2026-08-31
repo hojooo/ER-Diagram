@@ -6,6 +6,12 @@ const REQUEST_ID = "550e8400-e29b-41d4-a716-446655440000";
 const SOURCE = "Table users { id int [pk] }";
 const SOURCE_HASH = "a".repeat(64);
 const PARSER_INPUT_HASH = "b".repeat(64);
+const LIMITS = {
+  maxSourceBytes: 5 * 1024 * 1024,
+  maxTables: 2_000,
+  maxReferences: 10_000,
+  maxSchemaElements: 100_000,
+};
 const cloneStructured = (globalThis as unknown as { structuredClone<T>(value: T): T })
   .structuredClone;
 
@@ -32,6 +38,7 @@ describe("DBML parser worker transport contract", () => {
       filepath: "/main.dbml",
       source: SOURCE,
       sourceHash: SOURCE_HASH,
+      limits: LIMITS,
     });
 
     expect(request).toEqual({
@@ -40,6 +47,7 @@ describe("DBML parser worker transport contract", () => {
       filepath: "/main.dbml",
       source: SOURCE,
       sourceHash: SOURCE_HASH,
+      limits: LIMITS,
     });
     expect(JSON.parse(JSON.stringify(request))).toEqual(request);
     expect(cloneStructured(request)).toEqual(request);
@@ -50,6 +58,7 @@ describe("DBML parser worker transport contract", () => {
     ["non-entrypoint filepath", { filepath: "shared.dbml" }],
     ["uppercase hash", { sourceHash: "A".repeat(64) }],
     ["short hash", { sourceHash: "a".repeat(63) }],
+    ["invalid limit", { limits: { ...LIMITS, maxTables: 0 } }],
     ["unknown field", { parserMode: "dbmlv2" }],
   ])("rejects a request with %s", (_name, override) => {
     expect(
@@ -59,6 +68,7 @@ describe("DBML parser worker transport contract", () => {
         filepath: "/main.dbml",
         source: SOURCE,
         sourceHash: SOURCE_HASH,
+        limits: LIMITS,
         ...override,
       }).success,
     ).toBe(false);
