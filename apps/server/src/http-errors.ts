@@ -14,6 +14,7 @@ import type {
   VisualCommandTransformDiagnostic,
 } from "@er-diagram/core";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { ResourceOperationError } from "./resource-errors.js";
 
 interface ContractParseSuccess<T> {
   readonly success: true;
@@ -208,6 +209,17 @@ export function registerHttpErrorHandlers(server: FastifyInstance): void {
   );
 
   server.setErrorHandler((error, request, reply) => {
+    if (error instanceof ResourceOperationError) {
+      const statusCode =
+        error.code === "RESOURCE_SOURCE_TOO_LARGE"
+          ? 413
+          : error.code === "RESOURCE_COMPLEXITY_LIMIT_EXCEEDED" ||
+              error.code === "RESOURCE_OUTPUT_TOO_LARGE"
+            ? 422
+            : 503;
+      if (error.code === "RESOURCE_WORKER_BUSY") reply.header("retry-after", "1");
+      return sendError(request, reply, statusCode, error.code, error.message);
+    }
     if (isBodyTooLarge(error)) {
       return sendError(
         request,
