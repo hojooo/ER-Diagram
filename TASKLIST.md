@@ -301,8 +301,11 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - exact Node 24 image, production-only dependency closure, non-root `/data` ownership과 same-origin Web/API를 고정한다.
   - loopback Compose security default와 named-volume container replacement 복구를 실제 Chromium·worker·SQLite로 검증한다.
   - 검증: `pnpm test:container`
-- [ ] `M4-006` live/ready, graceful shutdown, outbound-disabled runtime
-  - 검증: health curl, offline E2E, SIGTERM autosave
+- [x] `M4-006` live/ready, graceful shutdown, outbound-disabled runtime
+  - strict environment allowlist, volume lifecycle lease와 opt-in backup migration으로 startup을 fail-closed 처리한다.
+  - readiness·trusted-proxy HSTS와 SIGTERM drain/flush/release 순서를 production runtime에 고정한다.
+  - internal-only application network에서 SPA, parser/layout worker, autosave, restart와 crash recovery를 검증한다.
+  - 검증: `pnpm test:runtime-lifecycle`
 - [ ] `M4-007` core-flow accessibility와 keyboard navigation
   - 검증: Playwright axe + manual keyboard checklist
 - [ ] `M4-008` parse/interactive/view switch/FPS performance acceptance

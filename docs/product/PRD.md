@@ -1184,7 +1184,7 @@ Fastify는 모든 success·error response에 enforced CSP를 적용한다. Scrip
 허용하며 inline script, script attribute, eval, object, frame과 외부 embedding은 차단한다. Monaco와 React
 Flow의 runtime style injection을 위해 style에만 `unsafe-inline`을 허용한다. M4-005 production container는
 Fastify가 Web과 API를 same-origin으로 제공하며 static HTML·asset·API·error에 같은 policy를 적용한다. HSTS는 TLS와
-reverse proxy를 조립하는 M4-006에서 결정한다. Production source는 HTML insertion API, `document.write`, `srcdoc`, `eval`과
+reverse proxy에서 전달된 HTTPS를 명시한 IP/CIDR에서만 신뢰하며 기본값은 off다. Production source는 HTML insertion API, `document.write`, `srcdoc`, `eval`과
 `Function`을 사용하지 않는다. DBML·SQL과 사용자 text는 변형하지 않고 text DOM, Monaco, textarea 또는
 download bytes로만 다룬다. Shared Zod contract는 schema 생성 전에 `jitless` mode를 적용해 strict CSP에서
 `Function` constructor probe 없이 경계 데이터를 검증한다.
@@ -1216,7 +1216,8 @@ bundled migration set, staged candidate checksum을 묶은 plan hash를 발급�
 상태에서 같은 evidence와 plan hash를 다시 확인한다. Existing target restore는 별도 safety backup output이 필수다.
 Candidate는 target과 같은 filesystem에서 fsync 후 atomic rename하고 close/reopen full integrity 검증에 실패하면 기존
 target을 자동 복구한다. Supported older schema만 staging copy에서 migrate하며 future version 또는 divergent migration
-history는 차단한다. Production startup 전에 이 preparation API를 호출하는 lifecycle 연결은 M4-006에서 수행한다.
+history는 차단한다. Production startup은 기본 `MANUAL`이며 명시적인 `APPLY_WITH_BACKUP`과 non-existing absolute
+backup output이 함께 있을 때만 같은 preparation API로 supported older schema를 적용한다.
 
 Production SQLite composition은 allowlist operational event를 newline-delimited JSON으로 stdout에 기록한다.
 UTC timestamp, correlation ID, static operation, method/status/latency, opaque project ID, safe byte·element count, version과
@@ -1235,7 +1236,8 @@ worker V8 old/young/stack budget은 256/32/4 MiB다.
 Graph는 table 2,000개, reference 10,000개와 전체 schema element 100,000개, layout projection은 node
 2,500개와 edge 10,000개를 기본 상한으로 둔다. Bundle contract는 archive 256 MiB, expanded 1 GiB, entry
 16 MiB와 2,048 entries를 기본값으로 고정하며 bounded archive reader는 M4-002·M4-003에서 이 값을 사용한다.
-Operator override는 M4-006 bootstrap에서 같은 strict contract를 검증한 뒤 적용한다.
+Operator override는 production bootstrap의 strict `ER_DIAGRAM_*` allowlist가 같은 contract와 cross-field rule로
+검증한 뒤 적용한다.
 
 Browser는 file byte를 읽기 전에 검사하고 Monaco/SQL local buffer가 초과하면 내용을 보존한 채 parse와
 mutation을 중지한다. Server route와 worker는 같은 제한을 독립적으로 재검사한다. 기존 DB에 상한보다 큰
@@ -1284,8 +1286,33 @@ current schema와 migration history만 열고 older/future/divergent database는
 
 Default Compose는 host `127.0.0.1:8080`, named `/data` volume, memory 2 GiB, PID 128, capability drop과
 `no-new-privileges`를 사용한다. Host bind mount는 UID 1000 ownership과 backup 책임을 명시한 opt-in override다.
-Readiness, healthcheck, strict environment override, process lock, graceful shutdown, HSTS/proxy와 outbound-disabled
-acceptance는 M4-006에서 완성한다.
+Compose healthcheck는 `/health/ready`를 사용하고 `SIGTERM`에 35초 grace를 제공한다. Production runtime의 strict
+environment, process lock, graceful shutdown, HSTS/proxy와 outbound-disabled acceptance는 18.2를 따른다.
+
+### 18.2 P0 production lifecycle profile
+
+Runtime state는 `STARTING → READY → SHUTTING_DOWN → STOPPED|FAILED`다. `/health/live`는 process와 HTTP listener만
+확인하고, `/health/ready`는 `READY`, SQLite volume lease 보유와 storage schema metadata read probe가 모두 성공할
+때만 200을 반환한다. Readiness 실패는 `503 SERVER_NOT_READY`, `Cache-Control: no-store`, `Retry-After: 1`이다.
+
+Production bootstrap은 알려지지 않은 `ER_DIAGRAM_*`, 빈 값, 비정수 resource 값과 cross-field 위반을 filesystem
+접근 전에 차단한다. Startup migration 기본값은 `MANUAL`이다. `APPLY_WITH_BACKUP`은 absolute non-existing backup
+output을 필수로 하며 verified plan, pre-migration backup, staged Apply와 current-schema read-back을 통과해야 한다.
+Future schema, divergent migration history, backup collision과 migration 실패는 target을 변경하지 않는다.
+
+`<database>.lock` private regular sidecar의 별도 SQLite connection이 zero-timeout lifetime exclusive lease를
+유지한다. 동일 volume의 두 번째 production runtime과 restore·migration Apply는 즉시 차단한다. Online backup과
+dry-run은 병행할 수 있고 crash 뒤 lease는 operating system이 해제한다. Lock sidecar는 backup이나 portable bundle에
+포함하지 않는다.
+
+첫 `SIGTERM`·`SIGINT`는 readiness를 내리고 Fastify가 이미 수신한 request를 drain한 뒤 resource worker, SQLite,
+operational log flush와 lease를 순서대로 닫는다. 기본 30초 timeout 또는 두 번째 signal은 exit code 1이다. Browser
+local debounce buffer처럼 server에 도달하지 않은 data는 graceful server guarantee에 포함하지 않는다.
+
+Proxy trust와 HSTS는 기본 off다. Proxy는 IP/CIDR만 allowlist로 받고 hostname, boolean과 hop count는 허용하지 않는다.
+HSTS는 trusted proxy를 통과해 HTTPS로 판정된 response에만 제한된 `max-age`를 추가한다. 기본 localhost Compose는
+유지하되, 별도 internal-network acceptance에서 external hostname·literal IP 연결 없이 Project Home, Monaco,
+parser worker, React Flow·ELK, source autosave와 reload가 동작해야 한다.
 
 ## 19. 관측성과 오류 모델
 

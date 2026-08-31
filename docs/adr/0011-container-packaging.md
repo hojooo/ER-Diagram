@@ -41,8 +41,9 @@ log에는 raw asset path 대신 `WEB_STATIC` operation만 기록한다.
 
 Entrypoint는 Web root와 `index.html`을 먼저 확인한다. 새 database는 storage schema v2로 초기화하지만 기존 database는
 whole-volume validator가 current schema v2와 exact migration history를 확인한 경우에만 연다. Older/future/divergent
-database는 자동 migration하지 않고 `SERVER_STORAGE_MIGRATION_REQUIRED`로 종료하며 ADR 0010의 dry-run/apply 절차를
-요구한다. Strict environment override, process lock과 signal lifecycle은 M4-006에서 연결한다.
+database는 기본적으로 자동 migration하지 않고 `SERVER_STORAGE_MIGRATION_REQUIRED`로 종료한다. ADR 0012의 explicit
+`APPLY_WITH_BACKUP`만 ADR 0010의 verified plan/apply를 startup에 연결한다. Strict environment, process lock과 signal
+lifecycle도 ADR 0012를 따른다.
 
 ### Localhost Compose 기본값
 
@@ -51,9 +52,9 @@ database는 자동 migration하지 않고 `SERVER_STORAGE_MIGRATION_REQUIRED`로
 고정하지 않아 Compose project별 격리를 유지한다. Host bind mount는 별도 override로만 제공하고 host directory의
 UID 1000 소유권과 backup 책임을 operator에게 명시한다.
 
-Portable bundle staging이 임시 filesystem을 사용할 수 있으므로 read-only root와 memory-backed `/tmp`는 이번
-단계에서 강제하지 않는다. `/health/ready`, healthcheck, outbound-disabled network, graceful shutdown과 HSTS/proxy
-설정은 M4-006의 lifecycle gate로 남긴다.
+Portable bundle staging이 임시 filesystem을 사용할 수 있으므로 read-only root와 memory-backed `/tmp`는 강제하지
+않는다. Compose는 storage-aware `/health/ready` healthcheck, `SIGTERM`과 application timeout보다 5초 긴 35초 grace를
+사용한다. 기본 localhost publish는 유지하고 outbound-disabled 동작은 별도 internal-network acceptance로 검증한다.
 
 ## 결과
 
@@ -63,9 +64,11 @@ Portable bundle staging이 임시 filesystem을 사용할 수 있으므로 read-
   검증한다.
 - Named volume은 container replacement 뒤에도 canonical source와 revision을 유지한다.
 - Image startup은 migration을 추측하거나 기존 volume을 자동 변경하지 않는다.
+- 동일 volume의 두 production runtime과 offline Apply는 authoritative lifecycle lease로 직렬화된다.
 
 ## 검증
 
 - `pnpm --filter @er-diagram/server test static-web`
 - `docker compose config --quiet`
 - `pnpm test:container`
+- `pnpm test:runtime-lifecycle`

@@ -21,8 +21,8 @@ HTTP caller, 저장된 legacy source와 worker protocol을 통해 제한을 우�
 `RuntimeResourceLimits` version 1을 Contracts의 plain-data Zod contract로 정의하고
 `GET /api/v1/runtime-config`에서 `Cache-Control: no-store`로 제공한다. Web application은 이 응답을 검증하기
 전에는 router, project query, parser 또는 layout worker를 시작하지 않는다. 설정 조회 실패는 accessible
-startup error와 명시적 Retry로만 복구한다. M4-006에서 environment override와 listen/bootstrap wiring을
-추가하되 이 contract와 기본값을 사용한다.
+startup error와 명시적 Retry로만 복구한다. ADR 0012의 production bootstrap은 strict environment allowlist로
+이 contract의 모든 server resource limit을 override하며 같은 cross-field validation을 다시 사용한다.
 
 Balanced P0 기본 profile은 다음과 같다.
 
@@ -89,7 +89,8 @@ worker의 독립 검사가 authoritative하다.
 
 Timeout 이전의 heap exhaustion이 전체 server process를 불안정하게 만들 수 있다. Worker V8 budget은 해당
 isolate만 종료한다. 다만 native/external memory와 전체 process RSS를 완전하게 보장하지 않으므로 OCI memory
-limit과 process 운영 기준은 M4-005·M4-006에서 추가한다.
+limit과 process 운영 기준은 ADR 0011의 2 GiB container budget과 ADR 0012의 strict environment·shutdown
+lifecycle에서 보완한다.
 
 ## Consequences
 
@@ -101,8 +102,8 @@ limit과 process 운영 기준은 M4-005·M4-006에서 추가한다.
   차단된다.
 - Large Vite worker chunk 자체는 runtime input/output budget과 다른 build artifact 문제다. Offline packaging과
   container memory acceptance에서 별도로 관찰한다.
-- Bundle reader, environment variable parsing, production static serving과 graceful shutdown은 후속 task가 이
-  contract를 소비한다.
+- Bundle reader와 production static serving은 이 contract를 소비한다. Production environment override와
+  graceful shutdown의 worker drain 순서는 ADR 0012가 확정한다.
 
 ## Verification
 

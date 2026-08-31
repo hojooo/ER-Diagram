@@ -41,9 +41,10 @@ online snapshot checksum, bundled migration set과 staged candidate checksum을 
 반환한다. Apply는 동일 입력을 다시 검사하고 같은 hash를 요구한다. Backup, target 또는 bundled migration evidence가
 바뀌면 `SQLITE_VOLUME_RECOVERY_PLAN_CONFLICT`로 중단한다.
 
-Restore·migration Apply는 server가 중지된 offline 상태에서만 허용한다. 구현은 zero-timeout WAL checkpoint와
-exclusive transaction으로 active writer를 차단하지만, process lifecycle lock의 authoritative 연결은 M4-006 production
-bootstrap이 담당한다. Existing target restore에는 사용자가 지정한 별도 `--safety-backup-output`이 필수이며 그
+Restore·migration Apply는 server가 중지된 offline 상태에서만 허용한다. ADR 0012의 private lifecycle sidecar와
+zero-timeout exclusive lease를 production runtime과 Apply가 공유하므로 active runtime에서는 즉시 차단된다. Online
+backup과 dry-run은 runtime과 병행할 수 있다. Existing target restore에는 사용자가 지정한 별도
+`--safety-backup-output`이 필수이며 그
 backup checksum이 dry-run target evidence와 같아야 한다.
 
 Candidate는 target과 같은 filesystem의 private sibling에서 준비하고 fsync한 뒤 기존 target을 rollback path로 옮기고
@@ -57,8 +58,9 @@ Applied migration history는 bundled migration set의 정확한 prefix여야 한
 migration history는 자동 추론하거나 재작성하지 않고 차단한다. Current schema migration은 no-op plan이며 pre-migration
 backup을 만들지 않는다.
 
-이번 경계는 synchronous `openSqliteStorage()`의 기존 startup migration 동작을 바꾸지 않는다. M4-006은 production
-startup 전에 이 preparation API를 호출해 pre-migration backup과 plan/apply lifecycle을 연결해야 한다.
+Low-level synchronous `openSqliteStorage()` 계약은 유지한다. Production bootstrap만 기본 `MANUAL`로 older schema를
+차단하고, explicit `APPLY_WITH_BACKUP`과 non-existing absolute backup output이 함께 있을 때 이 preparation API를
+호출한다.
 
 ## 결과
 
