@@ -204,5 +204,7 @@ jobs:
         run: pnpm test:e2e:security
       - name: Verify packaged container runtime
         run: pnpm test:container
+      - name: Verify production lifecycle and offline runtime
+        run: pnpm test:runtime-lifecycle
       - name: Run end-to-end tests
         run: pnpm test:e2e

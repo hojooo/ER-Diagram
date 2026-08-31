@@ -26,9 +26,10 @@ try {
   await assertImageRuntime();
 
   await run("docker", composeArgs("up", "--detach", "--no-build"));
-  await waitForLiveServer();
+  await waitForReadyServer();
   const firstContainerId = (await capture("docker", composeArgs("ps", "--quiet", service))).trim();
   assert.notEqual(firstContainerId, "", "Compose must create the application container");
+  await waitForContainerHealthy(firstContainerId);
   await assertContainerRuntime(firstContainerId);
 
   const project = await assertHttpRuntime();
@@ -43,7 +44,7 @@ try {
 
   await run("docker", composeArgs("down", "--remove-orphans"));
   await run("docker", composeArgs("up", "--detach", "--no-build"));
-  await waitForLiveServer();
+  await waitForReadyServer();
   const replacementContainerId = (
     await capture("docker", composeArgs("ps", "--quiet", service))
   ).trim();
@@ -77,6 +78,20 @@ function assertComposeConfig(config) {
   assert.equal(application.restart, "unless-stopped");
   assert.deepEqual(application.cap_drop, ["ALL"]);
   assert.deepEqual(application.security_opt, ["no-new-privileges:true"]);
+  assert.equal(application.stop_signal, "SIGTERM");
+  assert.equal(application.stop_grace_period, "35s");
+  assert.deepEqual(application.healthcheck, {
+    test: [
+      "CMD",
+      "node",
+      "-e",
+      "fetch('http://127.0.0.1:8080/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+    ],
+    timeout: "3s",
+    interval: "10s",
+    retries: 3,
+    start_period: "30s",
+  });
   assert.deepEqual(application.ports, [
     {
       mode: "ingress",
@@ -198,6 +213,8 @@ async function assertContainerRuntime(containerId) {
   assert.deepEqual(inspect.HostConfig.CapDrop, ["ALL"]);
   assert.deepEqual(inspect.HostConfig.SecurityOpt, ["no-new-privileges:true"]);
   assert.equal(inspect.HostConfig.Init, true);
+  assert.equal(inspect.Config.StopSignal, "SIGTERM");
+  assert.equal(inspect.State.Health.Status, "healthy");
   assert.deepEqual(inspect.HostConfig.PortBindings["8080/tcp"], [
     { HostIp: "127.0.0.1", HostPort: "8080" },
   ]);
@@ -299,15 +316,24 @@ async function assertBrowserRuntime(activeBrowser, projectId) {
   await page.close();
 }
 
-async function waitForLiveServer() {
+async function waitForReadyServer() {
   await waitFor(async () => {
     try {
-      const response = await fetch(`${baseUrl}/health/live`);
+      const response = await fetch(`${baseUrl}/health/ready`);
       return response.status === 200;
     } catch {
       return false;
     }
   }, 30_000);
+}
+
+async function waitForContainerHealthy(containerId) {
+  await waitFor(async () => {
+    const status = (
+      await capture("docker", ["inspect", containerId, "--format", "{{.State.Health.Status}}"])
+    ).trim();
+    return status === "healthy";
+  }, 45_000);
 }
 
 async function waitFor(predicate, timeoutMs) {
