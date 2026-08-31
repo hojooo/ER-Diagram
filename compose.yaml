@@ -1,0 +1,21 @@
+services:
+  er-diagram:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: er-diagram:local
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - er-diagram-data:/data
+    mem_limit: 2g
+    pids_limit: 128
+    init: true
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  er-diagram-data:

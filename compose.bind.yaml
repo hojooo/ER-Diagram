@@ -1,0 +1,6 @@
+services:
+  er-diagram:
+    volumes:
+      - type: bind
+        source: ${ER_DIAGRAM_DATA_DIRECTORY:-./data}
+        target: /data
