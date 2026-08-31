@@ -10,6 +10,7 @@ Milestone 3 visual editing integrity gate를 완료하고 Milestone 4 security·
 - `TablePartial`, `TableGroup`, `DiagramView`를 포함한 DBML v2 parsing과 탐색
 - PostgreSQL 14+·MySQL 8.0+ same-dialect DDL import/export
 - source, diagram layout, visual schema 편집
+- invalid draft·history·layout을 함께 옮기는 versioned portable project bundle
 - single-user self-host와 SQLite mounted-volume persistence
 - 변환 손실·미지원 SQL을 숨기지 않는 진단과 report
 
@@ -76,6 +77,7 @@ docs/
 - [ADR 0006: Revision 단위 session history와 durable restore](docs/adr/0006-session-history-and-durable-restore.md)
 - [ADR 0007: Runtime resource budget과 worker isolation](docs/adr/0007-runtime-resource-budgets-and-worker-isolation.md)
 - [ADR 0008: Web CSP, bounded ZIP과 redacted logging](docs/adr/0008-web-and-archive-security-boundaries.md)
+- [ADR 0009: Portable project bundle v1과 atomic re-key import](docs/adr/0009-portable-project-bundle.md)
 
 ## License
 
