@@ -2,6 +2,7 @@ import { z } from "./zod.js";
 import { dbmlParserWorkerLimitsSchema } from "./resource-limits.js";
 
 export * from "./resource-limits.js";
+export * from "./sqlite-volume-backup.js";
 
 export const contractPackage = "@er-diagram/contracts";
 
