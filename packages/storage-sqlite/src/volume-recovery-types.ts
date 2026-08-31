@@ -54,7 +54,9 @@ export type SqliteVolumeRecoveryErrorCode =
   | "SQLITE_VOLUME_INTEGRITY_FAILED"
   | "SQLITE_VOLUME_MIGRATION_FAILED"
   | "SQLITE_VOLUME_ATOMIC_APPLY_FAILED"
-  | "SQLITE_VOLUME_BACKUP_FAILED";
+  | "SQLITE_VOLUME_BACKUP_FAILED"
+  | "SQLITE_VOLUME_LOCKED"
+  | "SQLITE_VOLUME_LOCK_FAILED";
 
 export class SqliteVolumeRecoveryError extends Error {
   readonly code: SqliteVolumeRecoveryErrorCode;

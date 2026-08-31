@@ -1,6 +1,6 @@
 export { createSqliteLayoutRepository } from "./layout-repository.js";
-export { createSqliteProjectRepository } from "./project-repository.js";
 export { createSqliteProjectBundleRepository } from "./project-bundle-repository.js";
+export { createSqliteProjectRepository } from "./project-repository.js";
 export {
   appMetadata,
   DETAIL_LEVELS,
@@ -33,20 +33,31 @@ export {
   type SqliteTransaction,
 } from "./sqlite-storage.js";
 export { generateUuidV7, toUtcIsoTimestamp } from "./uuid-v7.js";
+export { createSqliteVisualCommandRepository } from "./visual-command-repository.js";
 export { createSqliteVolumeBackup } from "./volume-backup.js";
 export {
-  SQLITE_VOLUME_BACKUP_FORMAT_VERSION,
-  SQLITE_VOLUME_RECOVERY_PLAN_VERSION,
+  acquireSqliteVolumeLock,
+  type SqliteVolumeLock,
+} from "./volume-lock.js";
+export {
+  applySqliteVolumeMigration,
+  applySqliteVolumeRestore,
+  planSqliteVolumeMigration,
+  planSqliteVolumeRestore,
+} from "./volume-recovery.js";
+export {
   type ApplySqliteVolumeMigrationOptions,
   type ApplySqliteVolumeRestoreOptions,
   type CreateSqliteVolumeBackupOptions,
   type PlanSqliteVolumeMigrationOptions,
   type PlanSqliteVolumeRestoreOptions,
+  SQLITE_VOLUME_BACKUP_FORMAT_VERSION,
+  SQLITE_VOLUME_RECOVERY_PLAN_VERSION,
   type SqliteVolumeBackupInventory,
   type SqliteVolumeBackupManifestV1,
   type SqliteVolumeBackupResult,
-  type SqliteVolumeRecoveryErrorCode,
   SqliteVolumeRecoveryError,
+  type SqliteVolumeRecoveryErrorCode,
   type SqliteVolumeRecoveryPlanV1,
   type SqliteVolumeRecoveryResult,
 } from "./volume-recovery-types.js";
@@ -59,12 +70,5 @@ export {
   validateSqliteVolumeBackup,
   validateSqliteVolumeDatabase,
 } from "./volume-recovery-validation.js";
-export {
-  applySqliteVolumeMigration,
-  applySqliteVolumeRestore,
-  planSqliteVolumeMigration,
-  planSqliteVolumeRestore,
-} from "./volume-recovery.js";
-export { createSqliteVisualCommandRepository } from "./visual-command-repository.js";
 
 export const storageSqlitePackage = "@er-diagram/storage-sqlite";
