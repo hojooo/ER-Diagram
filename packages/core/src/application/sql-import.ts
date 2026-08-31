@@ -8,7 +8,11 @@ import type {
   SqlDataStatementHandling,
   SqlImportDataPolicyDecision,
 } from "../sql-data-exclusion.js";
-import type { ConversionReport, SqlImportConversionInput } from "../sql-import.js";
+import type {
+  ConversionReport,
+  SqlImportConversionInput,
+  SqlImportConversionResult,
+} from "../sql-import.js";
 import type {
   ProjectPersistenceReader,
   ProjectPersistenceTransaction,
@@ -260,7 +264,12 @@ export interface CreateSqlImportApplicationOptions {
   readonly persistence: SqlImportPersistencePort;
   readonly generateId: () => string;
   readonly now: () => string;
+  readonly convert?: SqlImportConverter;
 }
+
+export type SqlImportConverter = (
+  input: SqlImportConversionInput,
+) => Promise<SqlImportConversionResult>;
 
 export class SqlImportPersistenceInvariantError extends Error {
   constructor(

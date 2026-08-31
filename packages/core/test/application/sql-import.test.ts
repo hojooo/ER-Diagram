@@ -8,10 +8,12 @@ import {
 import {
   createProjectApplication,
   createSqlImportApplication,
+  convertSqlImport,
   type Project,
   type SchemaRevision,
   type SqlImportApplicationResult,
   type SqlImportArtifact,
+  type SqlImportConverter,
   type SqlImportPersistencePort,
   type SqlImportPersistenceTransaction,
 } from "../../src/index.js";
@@ -125,14 +127,22 @@ class FakeSqlImportPersistence
   }
 }
 
-function createFixture(primaryDialect: "POSTGRESQL" | "MYSQL" = "POSTGRESQL") {
+function createFixture(
+  primaryDialect: "POSTGRESQL" | "MYSQL" = "POSTGRESQL",
+  convert?: SqlImportConverter,
+) {
   const persistence = new FakeSqlImportPersistence();
   let id = 0;
   let epochMs = Date.parse("2026-08-28T01:02:03.000Z");
   const generateId = () => `018f0f87-7b5a-7cc0-8000-${(++id).toString(16).padStart(12, "0")}`;
   const now = () => new Date(epochMs++).toISOString();
   const projects = createProjectApplication({ persistence, generateId, now });
-  const imports = createSqlImportApplication({ persistence, generateId, now });
+  const imports = createSqlImportApplication({
+    persistence,
+    generateId,
+    now,
+    ...(convert ? { convert } : {}),
+  });
 
   return {
     persistence,
@@ -274,6 +284,42 @@ describe("SQL import preview application", () => {
 });
 
 describe("stateless SQL project import application", () => {
+  it("uses the injected converter for preview, apply verification, and project creation", async () => {
+    const inputs: string[] = [];
+    const convert: SqlImportConverter = async (input) => {
+      inputs.push(input.source);
+      return convertSqlImport(input);
+    };
+    const fixture = createFixture("POSTGRESQL", convert);
+    const standalone = success(
+      await fixture.imports.previewStandalone({ dialect: "POSTGRESQL", source: POSTGRESQL_DDL }),
+    );
+    await fixture.imports.createProjectFromPreview({
+      name: "Created through worker port",
+      primaryDialect: "POSTGRESQL",
+      source: POSTGRESQL_DDL,
+      previewHash: standalone.previewHash,
+    });
+    const project = await fixture.create();
+    const preview = success(
+      await fixture.imports.preview({
+        projectId: project.project.id,
+        expectedSchemaRevisionNo: project.project.schemaRevisionNo,
+        dialect: "POSTGRESQL",
+        source: POSTGRESQL_DDL,
+      }),
+    );
+    await fixture.imports.apply({
+      projectId: project.project.id,
+      expectedSchemaRevisionNo: project.project.schemaRevisionNo,
+      artifactId: preview.artifactId,
+      previewHash: preview.previewHash,
+      source: POSTGRESQL_DDL,
+    });
+
+    expect(inputs).toEqual([POSTGRESQL_DDL, POSTGRESQL_DDL, POSTGRESQL_DDL, POSTGRESQL_DDL]);
+  });
+
   it("previews successful and failed SQL without persisting anything", async () => {
     const fixture = createFixture();
 
