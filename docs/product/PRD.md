@@ -71,6 +71,7 @@ P0에서는 PostgreSQL 또는 MySQL DDL을 DBML로 가져오고, DBML 정본에�
 | `DEC-014` | dialect baseline | `CONFIRMED` | P0 검증 기준은 PostgreSQL 14 이상과 MySQL 8.0 이상이다. parser가 version 차이를 판별하지 못하면 warning을 표시한다. |
 | `DEC-015` | 배포 모델 | `CONFIRMED` | source repository와 release image를 open source로 공개한다. 공개 release는 source tag·commit과 대응해야 한다. |
 | `DEC-016` | history와 restore | `CONFIRMED` | Undo·redo는 project별 100단계 browser session history이고 새 `SOURCE_EDIT` revision으로 저장한다. 명시적 revision restore만 pruning되지 않는 `RESTORE` checkpoint를 만들며 layout은 복구하지 않는다. |
+| `DEC-017` | Web·bundle security | `CONFIRMED` | Script·worker는 same-origin CSP로 제한하고 외부 embedding을 차단한다. Portable archive는 bounded ZIP reader로 검증하며 operational log는 allowlist metadata만 기록한다. |
 | `LICENSE-DEC-001` | 정확한 SPDX license | `CONFIRMED` | project source와 자체 산출물은 `Apache-2.0`으로 배포한다. third-party dependency는 각자의 license와 notice 의무를 유지한다. |
 
 24장은 위 결정을 적용한 범위와 open-source release packaging 조건을 기록한다.
@@ -1174,7 +1175,30 @@ P0 대표 fixture는 약 200 KB, 143 tables, 573 refs, 15 groups, 7 views다.
 13. remote access를 지원할 경우 operator가 access control을 구성해야 하며, 제품 내 authentication 추가는 별도 scope다.
 14. DML이 포함된 SQL import는 row data를 기본 보존하지 않고 DDL-only 적용 여부를 별도로 확인한다.
 
-### 17.2.1 P0 runtime resource profile
+### 17.2.1 Web, archive와 logging security profile
+
+Fastify는 모든 success·error response에 enforced CSP를 적용한다. Script, worker와 connection은 same-origin만
+허용하며 inline script, script attribute, eval, object, frame과 외부 embedding은 차단한다. Monaco와 React
+Flow의 runtime style injection을 위해 style에만 `unsafe-inline`을 허용한다. HSTS는 TLS와 reverse proxy를
+조립하는 M4-006에서 결정한다. Production source는 HTML insertion API, `document.write`, `srcdoc`, `eval`과
+`Function`을 사용하지 않는다. DBML·SQL과 사용자 text는 변형하지 않고 text DOM, Monaco, textarea 또는
+download bytes로만 다룬다. Shared Zod contract는 schema 생성 전에 `jitless` mode를 적용해 strict CSP에서
+`Function` constructor probe 없이 경계 데이터를 검증한다.
+
+Portable archive container는 ZIP이다. Bounded reader는 symlink를 따르지 않는 regular file만 열고 central
+directory metadata 전체를 먼저 검증하며 filesystem에 extract하지 않는다. Absolute·parent·Windows path,
+portable-name collision, encrypted·non-regular entry, 지원하지 않는 compression, corrupt structure와
+archive/expanded/entry/count budget 초과는 archive 전체를 차단한다. Declared size와 실제 decompressed byte를
+모두 검사한다. M4-002는 container safety까지만 보장하고 manifest, exact entry allowlist, version과 SHA-256,
+HTTP import/export 및 atomic restore는 M4-003에서 추가한다.
+
+Production SQLite composition은 allowlist operational event를 newline-delimited JSON으로 stdout에 기록한다.
+UTC timestamp, correlation ID, static operation, method/status/latency, opaque project ID, safe byte·element count, version과
+diagnostic/error code만 허용한다. Raw URL·query·header·body, source, SQL literal, note, command payload,
+response, diagnostic message, native error와 stack은 기록하지 않는다. Logging failure는 request와 transaction
+결과를 변경하지 않는다.
+
+### 17.2.2 P0 runtime resource profile
 
 Server는 versioned runtime config를 `/api/v1/runtime-config`에서 `no-store`로 제공하고 Web은 이 contract를
 검증하기 전에는 project API와 parser/layout worker를 시작하지 않는다. 기본값은 source 5 MiB UTF-8,
