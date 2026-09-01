@@ -240,7 +240,7 @@ select {
 }
 
 .diagram-table__header span {
-  color: #64748b;
+  color: #94a3b8;
   font-size: 0.7rem;
 }
 
@@ -256,7 +256,7 @@ select {
 }
 
 .diagram-table__columns li {
-  min-height: 24px;
+  min-height: 28px;
   padding: 0;
   color: #cbd5e1;
   font-size: 0.68rem;
@@ -265,7 +265,7 @@ select {
 .diagram-table__column-action {
   display: grid;
   width: 100%;
-  min-height: 24px;
+  min-height: 28px;
   grid-template-columns: minmax(32px, auto) minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
@@ -292,6 +292,14 @@ select {
   font-size: 0.58rem;
   font-weight: 800;
   white-space: nowrap;
+}
+
+.react-flow__attribution {
+  background: #f8fafc;
+}
+
+.react-flow__attribution a {
+  color: #334155;
 }
 
 .diagram-edge-label {

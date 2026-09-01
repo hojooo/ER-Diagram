@@ -179,6 +179,8 @@ function RevisionHistoryDialog({
   readonly onCancelRestore: () => void;
   readonly onConfirmRestore: () => Promise<void>;
 }) {
+  const restoreTriggerRef = useRef<HTMLButtonElement | null>(null);
+
   return (
     <Dialog.Portal>
       <Dialog.Overlay className="fixed inset-0 z-40 bg-slate-950/80" />
@@ -228,7 +230,10 @@ function RevisionHistoryDialog({
                           className={secondaryButtonClass}
                           type="button"
                           disabled={interactionDisabled || snapshot.locked}
-                          onClick={() => onSelectRestore(revision)}
+                          onClick={(event) => {
+                            restoreTriggerRef.current = event.currentTarget;
+                            onSelectRestore(revision);
+                          }}
                         >
                           Restore revision {revision.revisionNo}
                         </button>
@@ -270,6 +275,7 @@ function RevisionHistoryDialog({
         <RestoreConfirmationDialog
           revision={restoreTarget}
           locked={interactionDisabled || snapshot.locked}
+          returnFocusRef={restoreTriggerRef}
           onCancel={onCancelRestore}
           onConfirm={onConfirmRestore}
         />
@@ -281,11 +287,13 @@ function RevisionHistoryDialog({
 function RestoreConfirmationDialog({
   revision,
   locked,
+  returnFocusRef,
   onCancel,
   onConfirm,
 }: {
   readonly revision: SchemaRevisionSummary | null;
   readonly locked: boolean;
+  readonly returnFocusRef: React.RefObject<HTMLButtonElement | null>;
   readonly onCancel: () => void;
   readonly onConfirm: () => Promise<void>;
 }) {
@@ -304,6 +312,10 @@ function RestoreConfirmationDialog({
           onOpenAutoFocus={(event) => {
             event.preventDefault();
             cancelRef.current?.focus();
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            returnFocusRef.current?.focus();
           }}
         >
           <Dialog.Title className="text-xl font-semibold">

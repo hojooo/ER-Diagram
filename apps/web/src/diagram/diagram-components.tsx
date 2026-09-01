@@ -83,6 +83,7 @@ export function TableDiagramNodeComponent({ data }: NodeProps<TableDiagramNode>)
         <button
           className="nodrag nopan diagram-table__table-action"
           type="button"
+          tabIndex={-1}
           aria-pressed={data.selectedElementKey === data.tableKey}
           onClick={(event) => {
             event.stopPropagation();
@@ -110,6 +111,7 @@ export function TableDiagramNodeComponent({ data }: NodeProps<TableDiagramNode>)
                 <button
                   className="nodrag nopan diagram-table__column-action"
                   type="button"
+                  tabIndex={-1}
                   aria-pressed={data.selectedElementKey === column.key}
                   aria-label={`${column.name}, ${column.type}${badges.length > 0 ? `, ${badges.join(", ")}` : ""}`}
                   onClick={(event) => {

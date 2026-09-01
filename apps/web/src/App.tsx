@@ -1,12 +1,19 @@
 import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { RuntimeConfigResponse } from "@er-diagram/contracts";
-import { type ComponentProps, useEffect, useState } from "react";
+import {
+  type ComponentProps,
+  type MouseEvent as ReactMouseEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   isRouteErrorResponse,
   Link,
   Outlet,
   type RouteObject,
   RouterProvider,
+  useLocation,
   useRouteError,
 } from "react-router-dom";
 
@@ -21,6 +28,9 @@ import type { SqlExportPageAdapters } from "./sql-export/sql-export-page.js";
 import type { ProjectBundlePageAdapters } from "./project-bundle/project-bundle-page.js";
 
 type DataRouter = ComponentProps<typeof RouterProvider>["router"];
+
+const PRODUCT_TITLE = "DBML·SQL ERD Studio";
+const MAIN_CONTENT_ID = "main-content";
 
 export interface AppProps {
   readonly api: ProjectApi;
@@ -70,16 +80,29 @@ export function App({ api, queryClient, router }: AppProps) {
 }
 
 function StartupConfigLoading() {
+  useDocumentTitle("Loading");
   return (
-    <main className="grid min-h-screen place-items-center bg-slate-950 p-6 text-slate-300">
-      <p aria-live="polite">Loading runtime configuration…</p>
+    <main
+      id={MAIN_CONTENT_ID}
+      className="grid min-h-screen place-items-center bg-slate-950 p-6 text-slate-300"
+    >
+      <section className="text-center">
+        <h1 className="text-xl font-semibold text-slate-100">Starting workspace</h1>
+        <p className="mt-2" aria-live="polite">
+          Loading runtime configuration…
+        </p>
+      </section>
     </main>
   );
 }
 
 function StartupConfigError({ onRetry }: { readonly onRetry: () => void }) {
+  useDocumentTitle("Runtime configuration unavailable");
   return (
-    <main className="grid min-h-screen place-items-center bg-slate-950 p-6 text-slate-100">
+    <main
+      id={MAIN_CONTENT_ID}
+      className="grid min-h-screen place-items-center bg-slate-950 p-6 text-slate-100"
+    >
       <section className="max-w-xl rounded-2xl border border-red-900 bg-slate-900 p-8 text-center">
         <h1 className="text-2xl font-semibold">Runtime configuration unavailable</h1>
         <p className="mt-3 text-slate-300" role="alert">
@@ -208,8 +231,69 @@ export function createAppRoutes(
 }
 
 function AppShell() {
+  const location = useLocation();
+  const previousLocationKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    const main = document.getElementById(MAIN_CONTENT_ID);
+    const routeChanged =
+      previousLocationKey.current !== null && previousLocationKey.current !== location.key;
+    previousLocationKey.current = location.key;
+    let focusHandled = false;
+    let observer: MutationObserver | null = null;
+    let frame: number | null = null;
+
+    const synchronizeRoute = () => {
+      const heading = main?.querySelector<HTMLElement>("h1") ?? null;
+      const headingText = heading?.textContent?.trim();
+      const routeStillLoading = heading?.dataset.routeLoading === "true";
+      document.title = headingText ? `${headingText} · ${PRODUCT_TITLE}` : PRODUCT_TITLE;
+      if (heading && !routeStillLoading) observer?.disconnect();
+
+      if (!routeChanged || focusHandled || !heading || !main || routeStillLoading) return;
+      const activeElement = document.activeElement;
+      const hasMoreSpecificFocus =
+        activeElement instanceof HTMLElement &&
+        activeElement !== document.body &&
+        activeElement !== main &&
+        main.contains(activeElement);
+      if (!hasMoreSpecificFocus) {
+        heading.tabIndex = -1;
+        heading.focus();
+      }
+      focusHandled = true;
+    };
+
+    synchronizeRoute();
+    if (!main?.querySelector("h1:not([data-route-loading='true'])")) {
+      frame = window.requestAnimationFrame(synchronizeRoute);
+      observer = main ? new MutationObserver(synchronizeRoute) : null;
+      if (observer && main) observer.observe(main, { childList: true, subtree: true });
+    }
+
+    return () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
+  }, [location.key]);
+
+  const focusMainContent = (event: ReactMouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    const main = document.getElementById(MAIN_CONTENT_ID);
+    if (!main) return;
+    main.focus();
+    window.history.replaceState(window.history.state, "", `#${MAIN_CONTENT_ID}`);
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
+      <a
+        className="fixed left-4 top-4 z-[100] -translate-y-24 rounded-lg bg-cyan-300 px-4 py-3 font-semibold text-slate-950 shadow-lg transition-transform focus:translate-y-0 focus:outline-2 focus:outline-offset-2 focus:outline-white"
+        href={`#${MAIN_CONTENT_ID}`}
+        onClick={focusMainContent}
+      >
+        Skip to main content
+      </a>
       <header className="border-b border-slate-800 bg-slate-950/95">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-5 py-4 sm:px-8">
           <div>
@@ -226,7 +310,11 @@ function AppShell() {
           </span>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-7xl px-5 py-8 sm:px-8 sm:py-10">
+      <main
+        id={MAIN_CONTENT_ID}
+        className="mx-auto w-full max-w-7xl px-5 py-8 outline-none sm:px-8 sm:py-10"
+        tabIndex={-1}
+      >
         <Outlet />
       </main>
     </div>
@@ -251,11 +339,28 @@ function NotFoundPage() {
 }
 
 function RouteLoadingPage() {
+  useDocumentTitle("Loading workspace");
   return (
-    <main className="grid min-h-screen place-items-center bg-slate-950 p-6 text-slate-300">
-      <p aria-live="polite">Loading workspace…</p>
+    <main
+      id={MAIN_CONTENT_ID}
+      className="grid min-h-screen place-items-center bg-slate-950 p-6 text-slate-300"
+    >
+      <section className="text-center">
+        <h1 data-route-loading="true" className="text-xl font-semibold text-slate-100">
+          Loading page
+        </h1>
+        <p className="mt-2" aria-live="polite">
+          Loading workspace…
+        </p>
+      </section>
     </main>
   );
+}
+
+function useDocumentTitle(pageTitle: string) {
+  useEffect(() => {
+    document.title = `${pageTitle} · ${PRODUCT_TITLE}`;
+  }, [pageTitle]);
 }
 
 function ErrorState({ title, message }: { readonly title: string; readonly message: string }) {

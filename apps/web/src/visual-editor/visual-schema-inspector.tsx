@@ -1,6 +1,6 @@
 import type { Diagnostic, PrimaryDialect, SourceRange } from "@er-diagram/contracts";
 import type { SchemaGraph } from "@er-diagram/core";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import type { DiagramSelectionStore } from "../diagram/selection-store.js";
 import { VisualCommandForm } from "./visual-command-form.js";
@@ -53,6 +53,8 @@ export function VisualSchemaInspector({
     [currentViewKey, graph, selection],
   );
   const [activeAction, setActiveAction] = useState<VisualEditorAction | null>(null);
+  const [activeToolbarIndex, setActiveToolbarIndex] = useState(0);
+  const actionButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [openedSchemaHash, setOpenedSchemaHash] = useState(graph.schemaHash);
   const [openedSelection, setOpenedSelection] = useState(selection);
   const partialProvenance = findPartialProvenance(graph, selection);
@@ -78,6 +80,11 @@ export function VisualSchemaInspector({
       setOpenedSelection(null);
     }
   }, [actions, activeAction, commandSnapshot.status]);
+
+  useEffect(() => {
+    actionButtonRefs.current.length = actions.length;
+    setActiveToolbarIndex((current) => Math.min(current, Math.max(0, actions.length - 1)));
+  }, [actions.length]);
 
   useEffect(() => {
     if (
@@ -133,14 +140,47 @@ export function VisualSchemaInspector({
         className="mt-4 flex max-h-44 flex-wrap gap-2 overflow-auto"
         role="toolbar"
         aria-label="Visual schema actions"
+        aria-orientation="horizontal"
+        onKeyDown={(event) => {
+          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const enabledIndexes = actionButtonRefs.current.flatMap((button, index) =>
+            button && !button.disabled ? [index] : [],
+          );
+          if (enabledIndexes.length === 0) return;
+          const focusedIndex =
+            document.activeElement instanceof HTMLButtonElement
+              ? actionButtonRefs.current.indexOf(document.activeElement)
+              : -1;
+          const currentIndex = focusedIndex >= 0 ? focusedIndex : activeToolbarIndex;
+          const enabledPosition = Math.max(0, enabledIndexes.indexOf(currentIndex));
+          const nextIndex =
+            event.key === "Home"
+              ? enabledIndexes[0]
+              : event.key === "End"
+                ? enabledIndexes.at(-1)
+                : event.key === "ArrowRight"
+                  ? enabledIndexes[(enabledPosition + 1) % enabledIndexes.length]
+                  : enabledIndexes[
+                      (enabledPosition - 1 + enabledIndexes.length) % enabledIndexes.length
+                    ];
+          if (nextIndex === undefined) return;
+          setActiveToolbarIndex(nextIndex);
+          actionButtonRefs.current[nextIndex]?.focus();
+        }}
       >
-        {actions.map((action) => (
+        {actions.map((action, index) => (
           <button
             key={action.id}
+            ref={(button) => {
+              actionButtonRefs.current[index] = button;
+            }}
             className={action.kind.startsWith("DELETE_") ? dangerButtonClass : actionButtonClass}
             type="button"
             disabled={busy}
+            tabIndex={index === activeToolbarIndex ? 0 : -1}
             aria-pressed={activeAction?.id === action.id}
+            onFocus={() => setActiveToolbarIndex(index)}
             onClick={() => openAction(action)}
           >
             {action.label}

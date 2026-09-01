@@ -159,9 +159,10 @@ describe("accessible schema history controls", () => {
     render(<SchemaHistoryControls session={session.controller} loadRevisions={loadRevisions} />);
     fireEvent.click(screen.getByRole("button", { name: "Revision history" }));
     const historyDialog = await screen.findByRole("dialog", { name: "Revision history" });
-    fireEvent.click(
-      await within(historyDialog).findByRole("button", { name: "Restore revision 2" }),
-    );
+    const restoreTrigger = await within(historyDialog).findByRole("button", {
+      name: "Restore revision 2",
+    });
+    fireEvent.click(restoreTrigger);
 
     const confirmation = await screen.findByRole("dialog", { name: "Restore revision 2?" });
     expect(confirmation).toHaveTextContent("last-valid diagram remains available");
@@ -170,7 +171,18 @@ describe("accessible schema history controls", () => {
       expect(within(confirmation).getByRole("button", { name: "Cancel" })).toHaveFocus(),
     );
 
-    fireEvent.click(within(confirmation).getByRole("button", { name: "Restore revision 2" }));
+    fireEvent.keyDown(confirmation, { key: "Escape" });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Restore revision 2?" })).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(restoreTrigger).toHaveFocus());
+
+    fireEvent.click(restoreTrigger);
+    const reopenedConfirmation = await screen.findByRole("dialog", { name: "Restore revision 2?" });
+
+    fireEvent.click(
+      within(reopenedConfirmation).getByRole("button", { name: "Restore revision 2" }),
+    );
     await waitFor(() => expect(session.restore).toHaveBeenCalledOnce());
     await waitFor(() => expect(loadRevisions).toHaveBeenCalledTimes(2));
     expect(await within(historyDialog).findByRole("article", { name: "Revision 4" })).toBeVisible();

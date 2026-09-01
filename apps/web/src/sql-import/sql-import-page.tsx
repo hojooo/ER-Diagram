@@ -71,7 +71,18 @@ export function ReplaceSqlImportPage({ adapters }: { readonly adapters?: SqlImpo
     enabled: projectId.length > 0,
   });
 
-  if (projectQuery.isPending) return <p aria-live="polite">Loading project for SQL import…</p>;
+  if (projectQuery.isPending) {
+    return (
+      <section>
+        <h1 data-route-loading="true" className="font-semibold text-slate-100">
+          Loading SQL import
+        </h1>
+        <p className="mt-2" aria-live="polite">
+          Loading project for SQL import…
+        </p>
+      </section>
+    );
+  }
   if (projectQuery.isError) {
     return (
       <section role="alert" className="rounded-xl border border-red-400/40 bg-red-950/30 p-6">

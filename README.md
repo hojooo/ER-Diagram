@@ -40,6 +40,14 @@ Production runtime은 strict `ER_DIAGRAM_*` allowlist, `/health/ready`, single-v
 pnpm test:runtime-lifecycle
 ```
 
+Core flow의 WCAG A/AA 자동 검사와 keyboard regression은 다음 명령으로 재검증한다. Axe 자동 검사는 전체
+접근성 인증을 대신하지 않으며, release 전에는 [접근성 keyboard checklist](docs/operations/accessibility-checklist.md)를
+current stable Chromium에서 함께 수행한다.
+
+```sh
+pnpm test:accessibility
+```
+
 ## 개발과 검증
 
 ```sh
@@ -99,11 +107,14 @@ docs/
 - [ADR 0010: SQLite whole-volume snapshot과 plan-hash recovery](docs/adr/0010-sqlite-volume-recovery.md)
 - [ADR 0011: Node 24 non-root container와 same-origin Web packaging](docs/adr/0011-container-packaging.md)
 - [ADR 0012: Production lifecycle, SQLite volume ownership와 offline runtime](docs/adr/0012-production-lifecycle-and-offline-runtime.md)
+- [ADR 0013: Core-flow accessibility와 keyboard navigation](docs/adr/0013-core-flow-accessibility.md)
 
 운영 backup, restore dry-run/apply와 pre-migration 절차는
 [SQLite volume backup·restore runbook](docs/operations/backup-restore.md)을 따른다.
 Container build, localhost Compose와 named-volume 운영은
 [Container runbook](docs/operations/container.md)을 따른다.
+Core flow의 manual keyboard evidence는
+[Accessibility checklist](docs/operations/accessibility-checklist.md)를 따른다.
 
 ## License
 

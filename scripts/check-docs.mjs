@@ -20,6 +20,8 @@ const requiredFiles = [
   "docs/adr/0010-sqlite-volume-recovery.md",
   "docs/adr/0011-container-packaging.md",
   "docs/adr/0012-production-lifecycle-and-offline-runtime.md",
+  "docs/adr/0013-core-flow-accessibility.md",
+  "docs/operations/accessibility-checklist.md",
   "docs/operations/backup-restore.md",
   "docs/operations/container.md",
 ];

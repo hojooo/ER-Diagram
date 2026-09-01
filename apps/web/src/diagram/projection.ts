@@ -21,7 +21,7 @@ export const GLOBAL_VIEW_KEY = "GLOBAL" as const;
 
 const TABLE_WIDTH = 260;
 const TABLE_HEADER_HEIGHT = 48;
-const TABLE_ROW_HEIGHT = 24;
+const TABLE_ROW_HEIGHT = 28;
 const GROUP_WIDTH = 340;
 const GROUP_HEADER_HEIGHT = 56;
 const GROUP_PADDING = 24;

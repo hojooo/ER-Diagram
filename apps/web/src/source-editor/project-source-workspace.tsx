@@ -11,7 +11,16 @@ import { utf8ByteLength } from "@er-diagram/contracts";
 import { diffSchemaGraphs, recoverLayoutStableKeys, type SchemaGraph } from "@er-diagram/core";
 import * as Dialog from "@radix-ui/react-dialog";
 import type { QueryClient } from "@tanstack/react-query";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { useBlocker } from "react-router-dom";
 
 import type {
@@ -126,6 +135,7 @@ export function ProjectSourceWorkspace({
   const flushedBlockedNavigationRef = useRef(false);
   const flushedBlockedLayoutNavigationRef = useRef(false);
   const proceededBlockedNavigationRef = useRef(false);
+  const blockedNavigationReturnFocusRef = useRef<HTMLElement | null>(null);
   const focusRequestIdRef = useRef(0);
   const layoutRequestIdRef = useRef(0);
   const previousGraphRef = useRef<SchemaGraph | null>(null);
@@ -858,7 +868,27 @@ export function ProjectSourceWorkspace({
   const hasUnsavedSource = sessionSnapshot !== null && sessionSnapshot.persistence !== "SAVED";
   const hasUnsavedLayout = layoutSnapshot?.hasUnsavedChanges ?? false;
   const hasUnsavedWorkspace = hasUnsavedSource || hasUnsavedLayout;
-  const navigationBlocker = useBlocker(hasUnsavedWorkspace);
+  useEffect(() => {
+    const captureNavigationTrigger = (event: MouseEvent) => {
+      const target = event.target;
+      const link = target instanceof Element ? target.closest("a[href]") : null;
+      if (link instanceof HTMLElement) blockedNavigationReturnFocusRef.current = link;
+    };
+    document.addEventListener("click", captureNavigationTrigger, true);
+    return () => document.removeEventListener("click", captureNavigationTrigger, true);
+  }, []);
+  const navigationBlocker = useBlocker(
+    useCallback(() => {
+      if (!hasUnsavedWorkspace) return false;
+      if (
+        document.activeElement instanceof HTMLElement &&
+        document.activeElement !== document.body
+      ) {
+        blockedNavigationReturnFocusRef.current = document.activeElement;
+      }
+      return true;
+    }, [hasUnsavedWorkspace]),
+  );
   const requiresSavedWorkspace =
     navigationBlocker.state === "blocked" &&
     (navigationBlocker.location.pathname === `/projects/${projectId}/sql-import` ||
@@ -902,7 +932,7 @@ export function ProjectSourceWorkspace({
       if (
         !(event.metaKey || event.ctrlKey) ||
         event.altKey ||
-        !isDiagramHistoryShortcutTarget(event.target)
+        !isSchemaHistoryShortcutTarget(event.target)
       ) {
         return;
       }
@@ -1132,6 +1162,7 @@ export function ProjectSourceWorkspace({
         snapshot={sessionSnapshot}
         hasUnsavedLayout={hasUnsavedLayout}
         requiresSavedWorkspace={requiresSavedWorkspace}
+        returnFocusRef={blockedNavigationReturnFocusRef}
         onStay={() => {
           proceededBlockedNavigationRef.current = true;
         }}
@@ -1740,7 +1771,7 @@ function ProblemsPanel({
                 ) : null}
               </div>
               <p className="mt-2 break-words text-sm text-slate-200">{diagnostic.message}</p>
-              <p className="mt-2 break-all text-[0.7rem] text-slate-500">{diagnostic.code}</p>
+              <p className="mt-2 break-all text-[0.7rem] text-slate-400">{diagnostic.code}</p>
             </li>
           ))}
         </ol>
@@ -1812,12 +1843,14 @@ function UnsavedNavigationDialog({
   snapshot,
   hasUnsavedLayout,
   requiresSavedWorkspace,
+  returnFocusRef,
   onStay,
 }: {
   readonly blocker: ReturnType<typeof useBlocker>;
   readonly snapshot: SourceSessionSnapshot;
   readonly hasUnsavedLayout: boolean;
   readonly requiresSavedWorkspace: boolean;
+  readonly returnFocusRef: RefObject<HTMLElement | null>;
   readonly onStay: () => void;
 }) {
   const stayRef = useRef<HTMLButtonElement>(null);
@@ -1840,6 +1873,10 @@ function UnsavedNavigationDialog({
           onOpenAutoFocus={(event) => {
             event.preventDefault();
             stayRef.current?.focus();
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            returnFocusRef.current?.focus();
           }}
         >
           <Dialog.Title className="text-xl font-semibold">Leave schema workspace?</Dialog.Title>
@@ -1897,7 +1934,7 @@ function StatusBadge({ label, testId }: { readonly label: string; readonly testI
 function DetailRow({ label, value }: { readonly label: string; readonly value: string }) {
   return (
     <div>
-      <dt className="text-slate-500">{label}</dt>
+      <dt className="text-slate-400">{label}</dt>
       <dd className="mt-1 font-semibold text-slate-200">{value}</dd>
     </div>
   );
@@ -2064,9 +2101,12 @@ function historyWorkspaceError(code: string, message: string): Error {
   return Object.assign(new Error(message), { code });
 }
 
-function isDiagramHistoryShortcutTarget(target: EventTarget | null): boolean {
+function isSchemaHistoryShortcutTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
-  return target.closest('[aria-label="ER diagram canvas"]') !== null;
+  return (
+    target.closest('[aria-label="ER diagram canvas"]') !== null ||
+    target.closest('section[aria-label="DBML source editor"]') !== null
+  );
 }
 
 const secondaryButtonClass =

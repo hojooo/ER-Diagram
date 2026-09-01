@@ -77,7 +77,7 @@ export function DiagramWorkspaceControls({
         <label htmlFor={`${listboxId}-input`}>Search current view</label>
         <input
           id={`${listboxId}-input`}
-          className="min-h-10 rounded-lg border border-slate-600 bg-slate-950 px-3 text-sm text-slate-100 placeholder:text-slate-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+          className="min-h-10 rounded-lg border border-slate-600 bg-slate-950 px-3 text-sm text-slate-100 placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
           type="search"
           role="combobox"
           autoComplete="off"
@@ -86,7 +86,7 @@ export function DiagramWorkspaceControls({
           disabled={disabled}
           aria-autocomplete="list"
           aria-expanded={showResults}
-          aria-controls={listboxId}
+          aria-controls={showResults ? listboxId : undefined}
           aria-activedescendant={activeResult ? optionId(listboxId, activeIndex) : undefined}
           onFocus={() => {
             if (searchQuery.trim()) setResultsOpen(true);
@@ -153,12 +153,12 @@ export function DiagramWorkspaceControls({
                   </span>
                   <span>{result.qualifiedLabel}</span>
                   {result.kind === "column" ? (
-                    <span className="ml-2 text-xs text-slate-500">in {result.ownerLabel}</span>
+                    <span className="ml-2 text-xs text-slate-400">in {result.ownerLabel}</span>
                   ) : null}
                 </button>
               ))
             )}
-            <p className="px-3 py-2 text-xs font-normal text-slate-500">
+            <p className="px-3 py-2 text-xs font-normal text-slate-400">
               Showing {search.results.length} of {search.total} matches
             </p>
           </div>

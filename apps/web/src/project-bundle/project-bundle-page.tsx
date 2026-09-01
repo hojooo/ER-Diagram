@@ -160,7 +160,18 @@ export function ProjectBundleExportPage({
     enabled: projectId.length > 0,
   });
 
-  if (projectQuery.isPending) return <p aria-live="polite">Loading project for bundle export…</p>;
+  if (projectQuery.isPending) {
+    return (
+      <section>
+        <h1 data-route-loading="true" className="font-semibold text-slate-100">
+          Loading bundle export
+        </h1>
+        <p className="mt-2" aria-live="polite">
+          Loading project for bundle export…
+        </p>
+      </section>
+    );
+  }
   if (projectQuery.isError) {
     return (
       <section role="alert" className="rounded-xl border border-red-400/40 bg-red-950/30 p-6">

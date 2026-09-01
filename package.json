@@ -26,6 +26,7 @@
     "storage:migrate": "pnpm build:resource-workers && node apps/server/dist/volume-recovery-cli.js migrate",
     "storage:restore": "pnpm build:resource-workers && node apps/server/dist/volume-recovery-cli.js restore",
     "test": "vitest run",
+    "test:accessibility": "pnpm --filter @er-diagram/web test test/accessibility.test.tsx test/views-search-lod.test.tsx test/visual-editor.test.tsx test/history-ui.test.tsx && pnpm test:e2e accessibility",
     "test:container": "node scripts/test-container.mjs",
     "test:e2e": "pnpm --filter @er-diagram/contracts build && pnpm --filter @er-diagram/core build && pnpm --filter @er-diagram/source-transform build && pnpm --filter @er-diagram/test-fixtures build && playwright test",
     "test:e2e:security": "pnpm build:resource-workers && playwright test --config playwright.security.config.ts",
@@ -41,6 +42,7 @@
     "workspace:imports:check": "node scripts/check-workspace-imports.mjs"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@biomejs/biome": "2.5.10",
     "@er-diagram/contracts": "workspace:*",
     "@er-diagram/core": "workspace:*",
