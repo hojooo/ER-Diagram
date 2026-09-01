@@ -67,6 +67,7 @@
 | TanStack Query 5.102.4 + Zustand 5.0.15 | server project/revision/layout cache와 editor·selection·viewport·undo 같은 session UI state를 분리해 서로 다른 수명주기를 표현한다. | 동일 데이터를 두 store에 중복 정본화하지 않는다. TanStack Query는 server state, Zustand는 ephemeral client state로 사용하며 canonical source는 server revision에 둔다. |
 | Tailwind CSS 4.3.3 + Radix Dialog 1.1.23 | 초기 design token과 responsive layout을 빠르게 일관화하고, destructive confirmation과 form dialog의 focus trap·Escape·focus return만 검증된 접근성 primitive에 맡긴다. | Radix를 전면 component framework로 사용하지 않는다. semantic HTML과 keyboard flow를 우선하고 styling만으로 접근성을 충족했다고 간주하지 않는다. |
 | Vitest 4.1.11 + React Testing Library 16.3.2 + Playwright 1.62.1 + `@axe-core/playwright` 4.13.0 | Vite/TypeScript와 같은 module 환경에서 parser·use case unit test, 사용자 관점 component test, 실제 browser E2E와 WCAG A/AA 자동 검사를 계층별로 구성한다. | Axe가 탐지한 violation 0건은 자동화 가능한 회귀 증거이며 전체 WCAG 인증이 아니다. SQLite restart, container, backup/restore, manual keyboard와 performance는 별도 acceptance evidence로 둔다. |
+| `@cyclonedx/cyclonedx-library` 10.2.0 | pnpm production dependency와 workspace edge를 CycloneDX JSON 1.6으로 정규화하고 같은 release identity에서 byte-identical application SBOM을 생성한다. | Development-only build tool이며 runtime closure에는 포함하지 않는다. Container filesystem은 별도 BuildKit SPDX attestation으로 검증하고 vulnerability·VEX 판단으로 과장하지 않는다. |
 | node-sql-parser 5.4.0 | P1의 PostgreSQL·MySQL `SELECT`를 실행하지 않고 AST로 변환해 table-level lineage 후보를 추출할 수 있다. | P1 전용 adapter에 격리하고 AST를 core 밖으로 노출하지 않는다. 지원하지 않는 syntax와 ambiguity는 확정 edge가 아니라 diagnostic으로 반환하며 SQL 실행 기능을 추가하지 않는다. |
 | Biome + strict TypeScript + dependency-cruiser | format/lint/type error를 일관되게 검사하고 Fastify, React, SQLite가 framework-free package로 역류하는 것을 CI에서 차단한다. | 정적 검사는 behavior·source fidelity·runtime security 검증을 대체하지 않는다. architecture rule 변경은 ADR과 forbidden-dependency fixture를 함께 갱신한다. |
 
@@ -319,7 +320,10 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - dispatch dry run과 main ancestry의 stable tag publish를 분리하고 immutable conflict·anonymous digest를 검증한다.
   - exact SemVer와 highest-stable `latest`, 한글 GitHub Release evidence를 fail-closed로 관리한다.
   - 검증: `pnpm test:release`
-- [ ] `M4-010` CycloneDX/SPDX SBOM, license inventory, EPL source 안내
+- [x] `M4-010` CycloneDX/SPDX SBOM, license inventory, EPL source 안내
+  - pnpm production closure를 deterministic CycloneDX 1.6으로 만들고 image·Release asset hash를 일치시킨다.
+  - 두 platform의 OCI-artifact SPDX subject를 검증하고 exact ELK source/license와 `SHA256SUMS`를 게시 준비한다.
+  - 기존 Release asset은 byte-identical replay만 허용하며 conflict에서는 overwrite하지 않는다.
   - 검증: `pnpm licenses:check && pnpm sbom:check`
 - [ ] `M4-011` complete P0 end-to-end acceptance suite
   - 검증: `pnpm test:e2e`
@@ -358,7 +362,7 @@ docker compose config
 ```
 
 `pnpm ci:verify`는 format check, lint, typecheck, architecture, unit, integration, build,
-license 검사를 모두 실행한다. Playwright와 Docker acceptance는 CI의 별도 job에서 실행하되
+license와 deterministic application SBOM 검사를 모두 실행한다. Playwright와 Docker acceptance는 CI의 별도 job에서 실행하되
 P0 release 전에는 모두 필수로 통과해야 한다.
 
 ## 6. 확정 가정

@@ -56,7 +56,8 @@ pnpm test:perf
 ```
 
 `linux/amd64`, `linux/arm64` release image의 OCI metadata, non-root runtime, native SQLite와 resource worker는
-publish 없이 다음 명령으로 재검증한다.
+publish 없이 다음 명령으로 재검증한다. 이 gate는 image 내 CycloneDX, platform별 SPDX attestation과 exact ELK
+source/license evidence도 함께 검사한다.
 
 ```sh
 pnpm test:release
@@ -71,7 +72,8 @@ docker pull ghcr.io/hojooo/er-diagram@sha256:<release-digest>
 ```
 
 Tag publish, 최초 GHCR Public 전환과 replay 절차는 [GHCR release runbook](docs/operations/release.md)을 따른다.
-실제 P0 tag는 M4-010·M4-011과 `P0-RELEASE` gate 전에는 생성하지 않는다.
+Application dependency SBOM만 빠르게 재검증하려면 `pnpm sbom:check`를 실행한다. 실제 P0 tag는 M4-011과
+`P0-RELEASE` gate 전에는 생성하지 않는다.
 
 ## 개발과 검증
 
@@ -135,6 +137,7 @@ docs/
 - [ADR 0013: Core-flow accessibility와 keyboard navigation](docs/adr/0013-core-flow-accessibility.md)
 - [ADR 0014: Large ERD performance acceptance](docs/adr/0014-large-erd-performance-acceptance.md)
 - [ADR 0015: Immutable multi-architecture GHCR release](docs/adr/0015-multi-architecture-ghcr-release.md)
+- [ADR 0016: CycloneDX·SPDX SBOM과 EPL source evidence](docs/adr/0016-sbom-and-epl-source-evidence.md)
 
 운영 backup, restore dry-run/apply와 pre-migration 절차는
 [SQLite volume backup·restore runbook](docs/operations/backup-restore.md)을 따른다.

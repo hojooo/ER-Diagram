@@ -42,7 +42,8 @@ Packaged Web, non-root user, native SQLite와 resource worker는 `linux/amd64`, 
 
 Action은 immutable commit SHA로 고정한다. Release image는 exact version tag와 현재 repository에서 가장 높은 stable
 version일 때만 `latest`를 게시한다. Major/minor floating tag와 prerelease는 만들지 않는다. Build record artifact,
-provenance와 SBOM 생성은 M4-010 이전에는 비활성화한다.
+provenance artifact upload는 비활성화한다. M4-010은 immutable scanner의 platform SPDX attestation을 추가하되
+SLSA provenance는 계속 생성하지 않는다.
 
 ### Immutability와 replay
 
@@ -80,7 +81,8 @@ event에만 부여한다.
 - 동일 version은 다른 source나 image로 덮어쓸 수 없다. 수정 release는 새 SemVer가 필요하다.
 - 첫 GHCR publish는 Public visibility 전환 때문에 한 번 실패하고 안전하게 replay할 수 있다.
 - Multi-architecture build와 두 platform runtime smoke로 release gate 시간이 늘어난다.
-- Dependency SBOM·EPL source evidence는 M4-010, 전체 P0 acceptance와 실제 P0 tag는 M4-011·`P0-RELEASE`에 남는다.
+- Dependency SBOM·EPL source evidence는 ADR 0016을 따르며 전체 P0 acceptance와 실제 P0 tag는
+  M4-011·`P0-RELEASE`에 남는다.
 
 ## Verification
 

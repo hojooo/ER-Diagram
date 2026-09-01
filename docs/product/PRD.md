@@ -1294,9 +1294,9 @@ Decoded source 초과와 raw body 초과는 각각 `RESOURCE_SOURCE_TOO_LARGE`, 
 | `OPS-007` | one-command backup/export와 restore 검증 절차를 문서화한다. |
 | `OPS-008` | outbound network가 없어도 core feature가 동작한다. font·asset도 image에 포함한다. |
 | `OPS-009` | graceful shutdown 시 pending atomic write를 완료하거나 rollback한다. |
-| `OPS-010` | release image에 dependency version inventory와 SBOM을 제공하고 parser·renderer license를 검토한다. |
+| `OPS-010` | release image와 GitHub Release에 결정론적 application CycloneDX 1.6 inventory를 제공하고, 각 `linux/amd64`·`linux/arm64` image manifest에는 subject digest가 일치하는 SPDX 2.2/2.3 attestation을 제공한다. |
 | `OPS-011` | stable public release tag·source commit·multi-architecture OCI image digest를 GitHub Release evidence로 서로 추적할 수 있게 한다. |
-| `OPS-012` | repository root에 project `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES`와 dependency source·license 안내를 제공한다. |
+| `OPS-012` | repository root와 release image에 project `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES`를 제공하고, 선택한 dependency license와 exact EPL-2.0 source archive·license·checksum evidence를 GitHub Release에서 검증 가능하게 제공한다. |
 
 ### 18.1 P0 container profile
 
@@ -1357,8 +1357,26 @@ Index와 manifest annotation 및 platform config label은 source repository, rev
 description을 포함한다. 두 platform에서 non-root user, packaged Web, native SQLite와 resource worker를 실행하고
 authentication을 제거한 digest pull이 성공해야 GitHub Release를 만든다. Image digest는 self-reference이므로 image
 내부에 넣지 않고 한글 GitHub Release evidence가 tag·commit·digest를 연결한다. 첫 GHCR package가 private이면
-Public 전환 뒤 같은 workflow를 replay하며 exact image는 다시 push하지 않는다. 실제 P0 tag는 M4-010, M4-011과
+Public 전환 뒤 같은 workflow를 replay하며 exact image는 다시 push하지 않는다. 실제 P0 tag는 M4-011과
 `P0-RELEASE`가 완료된 뒤에만 생성한다.
+
+### 18.4 P0 SBOM과 third-party source evidence
+
+Application dependency evidence는 `apps/server`, `apps/web`의 pnpm production closure와 internal workspace package를
+CycloneDX JSON 1.6으로 기록한다. Component는 exact version, deterministic npm PURL, HTTPS source와 검토된 license를
+가지며 dependency edge와 component는 code-unit 순서로 정렬한다. Development dependency, local absolute path,
+username, timestamp와 random serial number는 제외하고 동일 release identity의 canonical JSON은 byte-identical해야 한다.
+
+Container filesystem evidence는 immutable digest의 BuildKit Syft scanner가 `linux/amd64`, `linux/arm64`별 SPDX 2.2
+또는 2.3 attestation으로 제공한다. 각 runnable image manifest는 정확히 하나의 SPDX OCI artifact와 연결되며
+attestation manifest subject, predicate type, package·relationship 구조를 검증한다. Attestation descriptor의
+`unknown/unknown` platform은 runnable image set에 포함하지 않는다. SLSA provenance는 P0에서 생성하지 않는다.
+
+Release image는 `/app/sbom/er-diagram.cdx.json`, `/app/licenses/elkjs-EPL-2.0.txt`와 third-party notice를 포함한다.
+GitHub Release는 같은 CycloneDX, platform별 SPDX JSON, lockfile SHA-512와 일치하는 수정되지 않은
+`elkjs-0.12.0.tgz`, EPL-2.0 text와 `SHA256SUMS`를 제공한다. Existing Release asset은 전체 file set과 SHA-256이
+동일할 때만 replay하며 다른 byte를 overwrite하지 않는다. `elkjs`는 EPL-2.0, `dompurify`는 Apache-2.0 선택을
+license inventory와 CycloneDX에서 명시한다.
 
 ## 19. 관측성과 오류 모델
 
@@ -1509,8 +1527,9 @@ P0 release는 다음 조건을 모두 충족해야 한다.
 
 - `LICENSE-DEC-001 = CONFIRMED`
 - public source tag와 OCI image digest 대응
-- `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES`, SBOM 제공
-- Apache-2.0·MIT·EPL-2.0 dependency의 고지와 source 제공 조건 검토
+- `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES`, deterministic CycloneDX 제공
+- `linux/amd64`, `linux/arm64` image manifest별 SPDX attestation 검증
+- Apache-2.0·MIT·EPL-2.0 dependency의 고지와 exact ELK source archive 제공 조건 검토
 
 ## 23. 단계별 개발 순서
 
@@ -1636,8 +1655,8 @@ P0가 완료되기 전에 P1 parser dependency나 UI를 production path에 추�
 - 결정: project source와 자체 산출물을 `Apache-2.0`으로 배포한다.
 - 근거: permissive redistribution과 명시적 patent grant를 제공하며 현재 DBML core/parse의 Apache-2.0과도 일관된다.
 - dependency 경계: DBML core/parse `Apache-2.0`, DBML connector·React Flow·Monaco `MIT`, ELK.js `EPL-2.0`을 각 license 조건대로 배포한다. dependency를 project `Apache-2.0`으로 재라이선스하지 않는다.
-- release packaging: repository root에 Apache License 2.0 전문을 `LICENSE`로 두고, project attribution과 실제 copyright holder를 `NOTICE`에 기록하며 `THIRD_PARTY_NOTICES`와 SBOM을 제공한다.
-- ELK.js 조건: 배포하는 EPL-2.0 component의 license·notice와 해당 source를 얻는 방법을 명시하고, 수정했다면 수정본 source 제공 조건을 검증한다.
+- release packaging: repository root에 Apache License 2.0 전문을 `LICENSE`로 두고, project attribution과 실제 copyright holder를 `NOTICE`에 기록하며 `THIRD_PARTY_NOTICES`, application CycloneDX와 platform SPDX를 제공한다.
+- ELK.js 조건: 배포하는 EPL-2.0 component의 license·notice, lockfile integrity와 일치하는 exact source archive를 image와 GitHub Release evidence에 연결하고, 수정했다면 수정본 source 제공 조건을 검증한다.
 - 상태 영향: license 선택에 따른 implementation blocker는 해소됐다. copyright holder 표기는 repository 생성 시 실제 소유 주체를 사용하며 placeholder 상태로 release하지 않는다.
 
 ## 25. 주요 위험과 완화

@@ -1,7 +1,7 @@
 # GHCR release 운영 절차
 
-이 runbook은 source tag, multi-architecture GHCR image와 GitHub Release evidence를 연결하는 절차다. 실제 P0 tag는
-M4-010, M4-011과 `P0-RELEASE` gate가 끝나기 전에 만들지 않는다.
+이 runbook은 source tag, multi-architecture GHCR image, SBOM과 GitHub Release evidence를 연결하는 절차다. 실제
+P0 tag는 M4-011과 `P0-RELEASE` gate가 끝나기 전에 만들지 않는다.
 
 ## 고정 경계
 
@@ -25,8 +25,8 @@ gh run watch
 ```
 
 Dry run은 repository gate, production E2E·performance와 `linux/amd64`, `linux/arm64` OCI build·runtime smoke를 실행한다.
-GHCR login, push와 GitHub Release 생성은 하지 않는다. Local Docker/QEMU 환경에서는 같은 image evidence를 다음으로
-검증할 수 있다.
+Application CycloneDX, platform SPDX attestation, ELK source archive와 license asset도 staging하고 검증하지만 GHCR login,
+push와 GitHub Release 생성은 하지 않는다. Local Docker/QEMU 환경에서는 같은 evidence를 다음으로 검증할 수 있다.
 
 ```sh
 pnpm test:release
@@ -34,7 +34,7 @@ pnpm test:release
 
 ## Stable release 게시
 
-M4-010, M4-011과 `P0-RELEASE`가 모두 완료된 뒤 clean 최신 `main`에서만 tag를 만든다.
+M4-011과 `P0-RELEASE`가 모두 완료된 뒤 clean 최신 `main`에서만 tag를 만든다.
 
 ```sh
 git switch main
@@ -48,9 +48,47 @@ push한다. 가장 높은 stable version이면 같은 digest에 `latest`도 붙�
 
 - Index platform이 정확히 `linux/amd64`, `linux/arm64`
 - Index·manifest annotation과 image config label의 source, revision, version, license, title, description
+- 각 platform image manifest를 가리키는 OCI-artifact SPDX attestation과 exact platform set
+- Image의 `/app/sbom/er-diagram.cdx.json`, `/app/licenses/elkjs-EPL-2.0.txt`
 - 양 platform의 non-root user, packaged Web, native SQLite와 resource worker
 - 인증을 제거한 anonymous digest pull
 - GitHub Release 본문의 source commit, image tag와 immutable digest
+- Release CycloneDX·platform SPDX·ELK source/license와 `SHA256SUMS`
+
+## SBOM과 EPL source 확인
+
+Release asset은 다음 이름으로 고정한다.
+
+```text
+er-diagram-<version>.cdx.json
+er-diagram-<version>-linux-amd64.spdx.json
+er-diagram-<version>-linux-arm64.spdx.json
+elkjs-0.12.0-source.tgz
+elkjs-0.12.0-EPL-2.0.txt
+SHA256SUMS
+```
+
+Asset을 내려받고 게시된 byte를 먼저 검증한다.
+
+```sh
+mkdir er-diagram-release-evidence
+gh release download v1.0.0 --dir er-diagram-release-evidence
+cd er-diagram-release-evidence
+sha256sum --check SHA256SUMS
+```
+
+Application CycloneDX는 pnpm production dependency와 workspace edge, 검토된 license 선택을 제공한다. Container
+filesystem SPDX는 platform별 OS·native package evidence다. Registry에 연결된 SPDX는 다음처럼 직접 확인한다.
+
+```sh
+docker buildx imagetools inspect ghcr.io/hojooo/er-diagram:1.0.0 \
+  --format '{{ json (index .SBOM "linux/amd64").SPDX }}'
+docker buildx imagetools inspect ghcr.io/hojooo/er-diagram:1.0.0 \
+  --format '{{ json (index .SBOM "linux/arm64").SPDX }}'
+```
+
+`elkjs-0.12.0-source.tgz`는 npm source archive를 수정 없이 보존한다. Workflow는 이 byte의 SHA-512를 lockfile
+integrity와 비교하고 EPL text가 설치 package와 같은지 확인한 뒤에만 Release를 만든다.
 
 ## 첫 GHCR package 공개
 
@@ -92,6 +130,8 @@ Operational log의 `SERVER_RELEASE_IDENTITY`도 같은 source-free evidence를 �
   확인하고 자동으로 이동시키지 않는다.
 - `RELEASE_GITHUB_RELEASE_CONFLICT`: 기존 Release body가 source/tag/digest evidence와 다르다. 기존 evidence를
   보존하고 별도 incident로 조사한다.
+- `RELEASE_SBOM_ASSET_CONFLICT`: 기존 Release asset의 파일 집합 또는 SHA-256이 새 evidence와 다르다. Asset을
+  덮어쓰지 말고 새 SemVer 또는 incident 조사를 선택한다.
 - `RELEASE_IMAGE_NOT_PUBLIC`: 최초 visibility 절차를 완료한 뒤 동일 run을 재실행한다.
 
 Release tag나 GitHub Release를 삭제해 같은 version을 다시 사용하는 것을 복구 수단으로 삼지 않는다.
