@@ -200,6 +200,12 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Chromium and stable Chrome for Playwright
         run: pnpm exec playwright install --with-deps chromium chrome
+      - name: Set up QEMU for release image verification
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+      - name: Set up Docker Buildx for release image verification
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Verify multi-architecture release image evidence
+        run: pnpm test:release
       - name: Verify production Web CSP
         run: pnpm test:e2e:security
       - name: Verify packaged container runtime
