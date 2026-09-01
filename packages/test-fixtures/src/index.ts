@@ -1,5 +1,12 @@
 export const testFixturesPackage = "@er-diagram/test-fixtures";
 
+export type { ProjectBundleFixture } from "./project-bundle-fixtures.js";
+export {
+  PROJECT_BUNDLE_FIXTURE_SET_HASH,
+  PROJECT_BUNDLE_FIXTURE_VERSION,
+  projectBundleFixture,
+} from "./project-bundle-fixtures.js";
+
 export type { FixtureInventory, FixtureKind } from "./synthetic-fixtures.js";
 export {
   DEFAULT_FIXTURE_SEED,

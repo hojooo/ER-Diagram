@@ -6,6 +6,7 @@ import {
 } from "@er-diagram/contracts";
 import type {
   LayoutApplication,
+  ProjectBundleApplication,
   ProjectApplication,
   SqlExportApplication,
   SqlImportApplication,
@@ -21,6 +22,7 @@ import {
   registerOperationalLogging,
 } from "./operational-logging.js";
 import { registerProjectRoutes } from "./project-routes.js";
+import { registerProjectBundleRoutes } from "./project-bundle-routes.js";
 import {
   DEFAULT_SERVER_RESOURCE_LIMITS,
   parseServerResourceLimits,
@@ -38,6 +40,7 @@ export interface CreateServerOptions {
   readonly sqlImportApplication: SqlImportApplication;
   readonly sqlExportApplication: SqlExportApplication;
   readonly visualCommandApplication: VisualCommandApplication;
+  readonly projectBundleApplication: ProjectBundleApplication;
   readonly generateCorrelationId?: () => string;
   readonly operationalLogSink?: OperationalLogSink;
   readonly resourceLimits?: ServerResourceLimits;
@@ -84,6 +87,7 @@ export function createServer(options: CreateServerOptions): FastifyInstance {
   registerSqlImportRoutes(server, options.sqlImportApplication, resourceLimits);
   registerSqlExportRoutes(server, options.sqlExportApplication);
   registerVisualCommandRoutes(server, options.visualCommandApplication);
+  registerProjectBundleRoutes(server, options.projectBundleApplication, resourceLimits);
 
   return server;
 }

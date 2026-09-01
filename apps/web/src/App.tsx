@@ -18,6 +18,7 @@ import { RuntimeConfigProvider } from "./runtime-config.js";
 import type { ProjectWorkspaceAdapters } from "./source-editor/project-source-workspace.js";
 import type { SqlImportPageAdapters } from "./sql-import/sql-import-page.js";
 import type { SqlExportPageAdapters } from "./sql-export/sql-export-page.js";
+import type { ProjectBundlePageAdapters } from "./project-bundle/project-bundle-page.js";
 
 type DataRouter = ComponentProps<typeof RouterProvider>["router"];
 
@@ -102,6 +103,7 @@ export function createAppRoutes(
     readonly workspaceAdapters?: ProjectWorkspaceAdapters;
     readonly sqlImportAdapters?: SqlImportPageAdapters;
     readonly sqlExportAdapters?: SqlExportPageAdapters;
+    readonly projectBundleAdapters?: ProjectBundlePageAdapters;
   } = {},
 ): RouteObject[] {
   const routes: RouteObject[] = [
@@ -132,6 +134,28 @@ export function createAppRoutes(
               Component: () => (
                 <module.ReplaceSqlImportPage
                   {...(options.sqlImportAdapters ? { adapters: options.sqlImportAdapters } : {})}
+                />
+              ),
+            };
+          },
+        },
+        {
+          path: "project-bundles/import",
+          lazy: async () => {
+            const module = await import("./project-bundle/project-bundle-page.js");
+            return { Component: module.ProjectBundleImportPage };
+          },
+        },
+        {
+          path: "projects/:projectId/bundle-export",
+          lazy: async () => {
+            const module = await import("./project-bundle/project-bundle-page.js");
+            return {
+              Component: () => (
+                <module.ProjectBundleExportPage
+                  {...(options.projectBundleAdapters
+                    ? { adapters: options.projectBundleAdapters }
+                    : {})}
                 />
               ),
             };

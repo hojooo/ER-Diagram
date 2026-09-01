@@ -12,6 +12,7 @@ import {
   createLayoutApplication,
   createProjectApplication,
   createSqlImportApplication,
+  type ProjectBundleApplication,
   type SqlExportApplication,
   type VisualCommandApplication,
 } from "@er-diagram/core";
@@ -61,6 +62,7 @@ function createFixture() {
     }),
     sqlExportApplication: {} as SqlExportApplication,
     visualCommandApplication: {} as VisualCommandApplication,
+    projectBundleApplication: {} as ProjectBundleApplication,
     generateCorrelationId: () => "123e4567-e89b-42d3-a456-426614174001",
   });
   resources.push({ server, storage });

@@ -222,6 +222,12 @@ class FakeProjectApi implements ProjectApi {
   async exportProjectSql(): Promise<never> {
     throw new Error("SQL export is not used by this fixture.");
   }
+  async exportProjectBundle(): Promise<never> {
+    throw new Error("Bundle export is not used by this fixture.");
+  }
+  async importProjectBundle(): Promise<never> {
+    throw new Error("Bundle import is not used by this fixture.");
+  }
 }
 
 function renderApp(api: ProjectApi, initialEntry = "/") {

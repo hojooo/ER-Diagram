@@ -26,6 +26,7 @@ effect and must be retained when that package is redistributed.
 | `@types/react` | `19.2.18` | `MIT` | `MIT` | [source](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react) |
 | `@types/react-dom` | `19.2.5` | `MIT` | `MIT` | [source](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react-dom) |
 | `@types/yauzl` | `3.4.0` | `MIT` | `MIT` | [source](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/yauzl) |
+| `@types/yazl` | `3.3.1` | `MIT` | `MIT` | [source](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/yazl) |
 | `@vitejs/plugin-react` | `6.1.0` | `MIT` | `MIT` | [source](https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react) |
 | `@xyflow/react` | `12.11.5` | `MIT` | `MIT` | [source](https://github.com/xyflow/xyflow/tree/main/packages/react) |
 | `better-sqlite3` | `13.0.3` | `MIT` | `MIT` | [source](https://github.com/WiseLibs/better-sqlite3) |
@@ -43,6 +44,7 @@ effect and must be retained when that package is redistributed.
 | `vite` | `8.2.2` | `MIT` | `MIT` | [source](https://github.com/vitejs/vite/tree/main/packages/vite) |
 | `vitest` | `4.1.11` | `MIT` | `MIT` | [source](https://github.com/vitest-dev/vitest/tree/main/packages/vitest) |
 | `yauzl` | `3.4.0` | `MIT` | `MIT` | [source](https://github.com/thejoshwolfe/yauzl) |
+| `yazl` | `3.3.1` | `MIT` | `MIT` | [source](https://github.com/thejoshwolfe/yazl) |
 | `zod` | `4.4.3` | `MIT` | `MIT` | [source](https://github.com/colinhacks/zod) |
 | `zustand` | `5.0.15` | `MIT` | `MIT` | [source](https://github.com/pmndrs/zustand) |
 

@@ -1,6 +1,7 @@
 import {
   createLayoutApplication,
   createProjectApplication,
+  createProjectBundleApplication,
   createSqlExportApplication,
   createSqlImportApplication,
   createVisualCommandApplication,
@@ -8,6 +9,7 @@ import {
 import {
   createSqliteLayoutRepository,
   createSqliteProjectRepository,
+  createSqliteProjectBundleRepository,
   createSqliteSqlImportRepository,
   createSqliteVisualCommandRepository,
   generateUuidV7,
@@ -80,6 +82,13 @@ export function createSqliteServer(options: CreateSqliteServerOptions): FastifyI
       persistence: createSqliteVisualCommandRepository(options.storage),
       transform: (source, command, filepath) =>
         executor.transformVisualCommand(source, command, filepath),
+      generateId,
+      now,
+    }),
+    projectBundleApplication: createProjectBundleApplication({
+      persistence: createSqliteProjectBundleRepository(options.storage),
+      parseSource: (source, filepath) => executor.parseDbml(source, filepath),
+      resourceLimits,
       generateId,
       now,
     }),

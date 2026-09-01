@@ -114,8 +114,10 @@ function ImportAvailability() {
       />
       <AvailabilityCard
         title="Portable bundle"
-        status="Planned for M4"
-        detail="Backup and restore arrive with bundle v1."
+        status="Available"
+        detail="Create a new project from a validated portable ZIP."
+        to="/project-bundles/import"
+        actionLabel="Import bundle"
       />
     </section>
   );
@@ -126,11 +128,13 @@ function AvailabilityCard({
   status,
   detail,
   to,
+  actionLabel,
 }: {
   readonly title: string;
   readonly status: string;
   readonly detail: string;
   readonly to?: string;
+  readonly actionLabel?: string;
 }) {
   return (
     <article className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
@@ -141,7 +145,7 @@ function AvailabilityCard({
       <p className="mt-2 text-sm text-slate-400">{detail}</p>
       {to ? (
         <Link className={`${secondaryButtonClass} mt-4`} to={to}>
-          Start SQL import
+          {actionLabel ?? "Start SQL import"}
         </Link>
       ) : null}
     </article>

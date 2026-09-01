@@ -16,6 +16,7 @@ import {
   createProjectApplication,
   createVisualCommandApplication,
   parseDbmlV2,
+  type ProjectBundleApplication,
   qualifiedElementKey,
   type SqlExportApplication,
   type SqlImportApplication,
@@ -135,6 +136,7 @@ function openRuntime(filename = databasePath()): Runtime {
       generateId: generateUuidV7,
       now,
     }),
+    projectBundleApplication: {} as ProjectBundleApplication,
     generateCorrelationId: () => CORRELATION_ID,
   });
   const runtime = { filename, server, storage };

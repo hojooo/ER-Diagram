@@ -169,6 +169,8 @@ function fakeApi() {
     previewProjectSqlImport: vi.fn(),
     applyProjectSqlImport: vi.fn(),
     exportProjectSql: vi.fn(),
+    exportProjectBundle: vi.fn(),
+    importProjectBundle: vi.fn(),
   } satisfies ProjectApi;
   return api;
 }

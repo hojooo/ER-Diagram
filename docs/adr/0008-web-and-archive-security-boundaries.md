@@ -38,7 +38,7 @@ type, Store·Deflate 이외 compression과 M4-001 budget 초과는 archive 전�
 않는다.
 
 M4-002 reader는 container structure, path, entry type과 resource budget만 보장한다. Bundle manifest, exact
-entry allowlist, version, per-entry/root SHA-256, import/export API와 atomic restore는 M4-003이 담당한다. Reader
+entry allowlist, version, per-entry/root SHA-256, import/export API와 atomic restore는 ADR 0009가 담당한다. Reader
 consumer는 최종 destination에 직접 쓰지 않고 staging을 사용하며 전체 성공 후에만 commit한다.
 
 Operational logging은 versioned allowlist event를 newline-delimited JSON으로 기록한다. Production SQLite

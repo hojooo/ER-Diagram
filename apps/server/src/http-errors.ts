@@ -7,6 +7,7 @@ import {
 import type {
   VisualCommandPartialImpact as CoreVisualCommandPartialImpact,
   LayoutApplicationError,
+  ProjectBundleApplicationError,
   ProjectApplicationError,
   SqlExportApplicationError,
   SqlImportApplicationError,
@@ -16,6 +17,7 @@ import type {
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { recordOperationalError } from "./operational-logging.js";
 import { ResourceOperationError } from "./resource-errors.js";
+import { ProjectBundleTransportError } from "./project-bundle-archive.js";
 
 interface ContractParseSuccess<T> {
   readonly success: true;
@@ -97,6 +99,41 @@ export function sendLayoutApplicationError(
         500,
         error.code,
         "Stored layout data failed an integrity check.",
+      );
+  }
+  return assertNever(error);
+}
+
+export function sendProjectBundleApplicationError(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  error: ProjectBundleApplicationError,
+): FastifyReply {
+  switch (error.code) {
+    case "PROJECT_BUNDLE_PROJECT_NOT_FOUND":
+      return sendError(request, reply, 404, error.code, error.message);
+    case "PROJECT_BUNDLE_SCHEMA_REVISION_CONFLICT":
+      return sendError(request, reply, 409, error.code, error.message, {
+        currentRevisionNo: error.currentSchemaRevisionNo,
+      });
+    case "PROJECT_BUNDLE_LAYOUT_REVISION_CONFLICT":
+      return sendError(request, reply, 409, error.code, error.message, {
+        currentRevisionNo: error.currentLayoutRevisionNo,
+      });
+    case "PROJECT_BUNDLE_SNAPSHOT_CONFLICT":
+      return sendError(request, reply, 409, error.code, error.message);
+    case "PROJECT_BUNDLE_INVALID":
+    case "PROJECT_BUNDLE_PARSER_INCOMPATIBLE":
+      return sendError(request, reply, 422, error.code, error.message);
+    case "PROJECT_BUNDLE_RESOURCE_LIMIT_EXCEEDED":
+      return sendError(request, reply, 413, error.code, error.message);
+    case "PROJECT_BUNDLE_STORAGE_INVARIANT_VIOLATION":
+      return sendError(
+        request,
+        reply,
+        500,
+        error.code,
+        "Stored portable bundle data failed an integrity check.",
       );
   }
   return assertNever(error);
@@ -210,6 +247,9 @@ export function registerHttpErrorHandlers(server: FastifyInstance): void {
   );
 
   server.setErrorHandler((error, request, reply) => {
+    if (error instanceof ProjectBundleTransportError) {
+      return sendError(request, reply, error.statusCode, error.code, error.message);
+    }
     if (error instanceof ResourceOperationError) {
       const statusCode =
         error.code === "RESOURCE_SOURCE_TOO_LARGE"
@@ -237,6 +277,15 @@ export function registerHttpErrorHandlers(server: FastifyInstance): void {
         400,
         "REQUEST_VALIDATION_FAILED",
         "The request did not match the required contract.",
+      );
+    }
+    if (readErrorProperty(error, "statusCode") === 415) {
+      return sendError(
+        request,
+        reply,
+        415,
+        "PROJECT_BUNDLE_CONTENT_TYPE_UNSUPPORTED",
+        "Portable bundle imports require application/zip.",
       );
     }
     return sendError(

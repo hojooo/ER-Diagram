@@ -10,6 +10,7 @@ import {
   createLayoutApplication,
   createProjectApplication,
   parseDbmlV2,
+  type ProjectBundleApplication,
   type SqlExportApplication,
   type SqlImportApplication,
   type VisualCommandApplication,
@@ -61,6 +62,7 @@ function createFixture(filename = temporaryDatabasePath()) {
     sqlImportApplication: {} as SqlImportApplication,
     sqlExportApplication: {} as SqlExportApplication,
     visualCommandApplication: {} as VisualCommandApplication,
+    projectBundleApplication: {} as ProjectBundleApplication,
   });
   openServers.add(server);
   return { filename, server, storage };

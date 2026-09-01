@@ -389,6 +389,8 @@ Project HTTP API는 `/api/v1` 아래에서 다음 resource contract를 사용한
 | `PUT /projects/:projectId/draft` | draft 저장 결과 `200` |
 | `GET /projects/:projectId/revisions` | source를 제외한 revision summary 목록 `200` |
 | `POST /projects/:projectId/revisions/:revisionNo/restore` | 새 restore checkpoint 결과 `200` |
+| `POST /projects/:projectId/bundle-export` | revision-checked portable ZIP `200` |
+| `POST /project-bundles/import` | 새 project로 atomic import한 결과 `201` |
 
 `POST /projects`는 `operation`이 `CREATE`인 요청과 `DUPLICATE`인 요청을 strict discriminated
 union으로 구분한다. 모든 write request는 RFC UUID 형식의 `commandId`를 받고 응답의
@@ -1150,7 +1152,8 @@ P0 대표 fixture는 약 200 KB, 143 tables, 573 refs, 15 groups, 7 views다.
 - 표준 DBML file은 별도 제품 metadata 없이 내보낼 수 있어야 한다.
 - layout은 optional sidecar이므로 제거해도 schema 의미가 바뀌지 않는다.
 - project bundle은 `bundleSchemaVersion`을 갖는다.
-- parser와 bundle schema upgrade는 forward migration과 rollback 안내를 제공한다.
+- 지원하지 않는 parser 또는 bundle schema version은 source를 자동 migration하지 않고 import를 차단하며,
+  operator가 원래 runtime에서 다시 export할 수 있도록 recovery 안내를 제공한다.
 
 ## 17. 보안과 개인정보
 
@@ -1189,8 +1192,16 @@ Portable archive container는 ZIP이다. Bounded reader는 symlink를 따르지 
 directory metadata 전체를 먼저 검증하며 filesystem에 extract하지 않는다. Absolute·parent·Windows path,
 portable-name collision, encrypted·non-regular entry, 지원하지 않는 compression, corrupt structure와
 archive/expanded/entry/count budget 초과는 archive 전체를 차단한다. Declared size와 실제 decompressed byte를
-모두 검사한다. M4-002는 container safety까지만 보장하고 manifest, exact entry allowlist, version과 SHA-256,
-HTTP import/export 및 atomic restore는 M4-003에서 추가한다.
+모두 검사한다. Portable bundle v1은 `manifest.json`, exact entry allowlist, per-entry SHA-256과 root hash를
+독립 검증하고 raw `application/zip` HTTP import/export와 new-project atomic restore에 이 reader를 사용한다.
+
+Portable bundle은 current DBML, retained revision, 모든 per-view layout과 선택한 SQL import report를 포함한다.
+Import는 existing project를 교체하지 않고 ID를 다시 발급한 독립 project를 생성하며 name, dialect, source,
+history, layout과 timestamp metadata를 보존한다. 기본 `REDACTED` report mode는 retained original SQL을 제거하고
+project evidence hash를 다시 계산한다. Original SQL은 별도 확인이 있는 `INCLUDE_RETAINED_SQL`에서만 포함하며
+`OMIT`은 report artifact를 제외한다. Portable bundle은 visual command receipt, browser undo stack과 instance
+metadata를 복구하지 않는다. 이 identity와 whole SQLite volume을 그대로 복구하는 기능은 M4-004 backup/restore가
+담당한다.
 
 Production SQLite composition은 allowlist operational event를 newline-delimited JSON으로 stdout에 기록한다.
 UTC timestamp, correlation ID, static operation, method/status/latency, opaque project ID, safe byte·element count, version과

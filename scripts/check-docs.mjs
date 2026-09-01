@@ -16,6 +16,7 @@ const requiredFiles = [
   "docs/adr/0006-session-history-and-durable-restore.md",
   "docs/adr/0007-runtime-resource-budgets-and-worker-isolation.md",
   "docs/adr/0008-web-and-archive-security-boundaries.md",
+  "docs/adr/0009-portable-project-bundle.md",
 ];
 const forbiddenMarkers = /PROPOSED|OPEN-|IMPLEMENTATION_BLOCKER/u;
 const ineffectivePnpmTestFilter =

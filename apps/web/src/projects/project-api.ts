@@ -13,11 +13,15 @@ import {
   type OriginalSqlRetentionMode,
   type PrimaryDialect,
   type ProjectMutationResponse,
+  type ProjectBundleImportResponse,
+  type ProjectBundleReportMode,
   type ProjectResponse,
   type ProjectRevisionsResponse,
   type ProjectsResponse,
   projectIdSchema,
   projectMutationResponseSchema,
+  projectBundleExportRequestSchema,
+  projectBundleImportResponseSchema,
   projectResponseSchema,
   projectRevisionsResponseSchema,
   projectsResponseSchema,
@@ -34,6 +38,7 @@ import {
   type SqlImportStandalonePreviewResponse,
   saveDraftRequestSchema,
   saveLayoutRequestSchema,
+  sha256HexSchema,
   sqlExportRequestSchema,
   sqlExportResponseSchema,
   sqlImportApplyRequestSchema,
@@ -137,6 +142,25 @@ export interface ApplyVisualCommandInput {
   readonly command: VisualCommand;
 }
 
+export interface ExportProjectBundleInput {
+  readonly projectId: string;
+  readonly expectedSchemaRevisionNo: number;
+  readonly expectedLayoutRevisionNo: number;
+  readonly reportMode?: ProjectBundleReportMode;
+}
+
+export interface ImportProjectBundleInput {
+  readonly archive: Blob;
+}
+
+export interface ProjectBundleDownload {
+  readonly content: Uint8Array<ArrayBuffer>;
+  readonly contentLength: number;
+  readonly sha256: string;
+  readonly mimeType: "application/zip";
+  readonly filename: string;
+}
+
 export interface ProjectApi {
   getRuntimeConfig(): Promise<RuntimeConfigResponse>;
   listProjects(): Promise<ProjectsResponse>;
@@ -160,6 +184,8 @@ export interface ProjectApi {
   applyProjectSqlImport(input: ApplyProjectSqlImportInput): Promise<SqlImportApplyResponse>;
   exportProjectSql(input: ExportProjectSqlInput): Promise<SqlExportResponse>;
   applyVisualCommand(input: ApplyVisualCommandInput): Promise<VisualCommandMutationResponse>;
+  exportProjectBundle(input: ExportProjectBundleInput): Promise<ProjectBundleDownload>;
+  importProjectBundle(input: ImportProjectBundleInput): Promise<ProjectBundleImportResponse>;
 }
 
 export class ProjectApiError extends Error {
@@ -531,7 +557,104 @@ export function createHttpProjectApi(options: HttpProjectApiOptions = {}): Proje
         commandId: body.commandId,
       });
     },
+    exportProjectBundle: async (input) => {
+      const projectId = parseClientInput(projectIdSchema, input.projectId);
+      const body = parseClientInput(projectBundleExportRequestSchema, {
+        expectedSchemaRevisionNo: input.expectedSchemaRevisionNo,
+        expectedLayoutRevisionNo: input.expectedLayoutRevisionNo,
+        ...(input.reportMode === undefined ? {} : { reportMode: input.reportMode }),
+      });
+      const response = await fetchResponse(
+        fetcher,
+        `${basePath}/projects/${encodeURIComponent(projectId)}/bundle-export`,
+        {
+          method: "POST",
+          headers: jsonHeaders(),
+          body: JSON.stringify(body),
+        },
+      );
+      await assertSuccessfulResponse(response, 200);
+      const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim();
+      const contentLength = parseContentLength(response.headers.get("content-length"));
+      const parsedHash = sha256HexSchema.safeParse(response.headers.get("x-bundle-sha256"));
+      if (contentType !== "application/zip" || contentLength === undefined || !parsedHash.success) {
+        throw new ProjectApiError("The bundle response headers were invalid.", {
+          status: response.status,
+          code: "CLIENT_BUNDLE_RESPONSE_INVALID",
+          ...correlationFromHeader(response),
+        });
+      }
+      const buffer = await response.arrayBuffer();
+      if (buffer.byteLength !== contentLength) {
+        throw new ProjectApiError("The bundle response length did not match its header.", {
+          status: response.status,
+          code: "CLIENT_BUNDLE_RESPONSE_INVALID",
+          ...correlationFromHeader(response),
+        });
+      }
+      return {
+        content: new Uint8Array(buffer),
+        contentLength,
+        sha256: parsedHash.data,
+        mimeType: "application/zip",
+        filename: "project.erdiagram.zip",
+      };
+    },
+    importProjectBundle: async (input) => {
+      const archiveLimit = runtimeConfig?.resourceLimits.bundle.maxArchiveBytes;
+      if (archiveLimit !== undefined && input.archive.size > archiveLimit) {
+        throw new ProjectApiError(`Archive exceeds the configured ${archiveLimit} byte limit.`, {
+          status: null,
+          code: "PROJECT_BUNDLE_ARCHIVE_TOO_LARGE",
+        });
+      }
+      const commandId = generateCommandId();
+      const response = await fetchResponse(fetcher, `${basePath}/project-bundles/import`, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/zip",
+          "x-command-id": commandId,
+        },
+        body: input.archive,
+      });
+      await assertSuccessfulResponse(response, 201);
+      if (response.headers.get("x-command-id") !== commandId) {
+        throw new ProjectApiError("The server returned an unexpected command identifier.", {
+          status: response.status,
+          code: "CLIENT_COMMAND_ID_MISMATCH",
+          ...correlationFromHeader(response),
+        });
+      }
+      return parseResponse(projectBundleImportResponseSchema, await readJson(response), response);
+    },
   };
+}
+
+async function fetchResponse(
+  fetcher: typeof globalThis.fetch,
+  input: string,
+  init: RequestInit,
+): Promise<Response> {
+  try {
+    return await fetcher(input, init);
+  } catch {
+    throw new ProjectApiError("The server could not be reached.", {
+      status: null,
+      code: "CLIENT_NETWORK_ERROR",
+    });
+  }
+}
+
+async function assertSuccessfulResponse(response: Response, expectedStatus: number): Promise<void> {
+  if (!response.ok) throw await toPublicApiError(response);
+  if (response.status !== expectedStatus) {
+    throw new ProjectApiError("The server returned an unexpected status.", {
+      status: response.status,
+      code: "CLIENT_HTTP_STATUS_MISMATCH",
+      ...correlationFromHeader(response),
+    });
+  }
 }
 
 async function request<T = void>(
@@ -655,6 +778,12 @@ function correlationFromHeader(response: Response): { readonly correlationId?: s
 
 function jsonHeaders(): HeadersInit {
   return { accept: "application/json", "content-type": "application/json" };
+}
+
+function parseContentLength(value: string | null): number | undefined {
+  if (value === null || !/^(?:0|[1-9][0-9]*)$/u.test(value)) return undefined;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : undefined;
 }
 
 function normalizeBasePath(basePath: string): string {
