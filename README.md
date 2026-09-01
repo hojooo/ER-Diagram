@@ -48,6 +48,13 @@ current stable Chromium에서 함께 수행한다.
 pnpm test:accessibility
 ```
 
+Versioned large-ERD profile의 parse, cold interactive, first-uncached view switch, drag·pan·zoom과 source-input
+latency는 production Chrome에서 다음 명령으로 재검증한다.
+
+```sh
+pnpm test:perf
+```
+
 ## 개발과 검증
 
 ```sh
@@ -108,6 +115,7 @@ docs/
 - [ADR 0011: Node 24 non-root container와 same-origin Web packaging](docs/adr/0011-container-packaging.md)
 - [ADR 0012: Production lifecycle, SQLite volume ownership와 offline runtime](docs/adr/0012-production-lifecycle-and-offline-runtime.md)
 - [ADR 0013: Core-flow accessibility와 keyboard navigation](docs/adr/0013-core-flow-accessibility.md)
+- [ADR 0014: Large ERD performance acceptance](docs/adr/0014-large-erd-performance-acceptance.md)
 
 운영 backup, restore dry-run/apply와 pre-migration 절차는
 [SQLite volume backup·restore runbook](docs/operations/backup-restore.md)을 따른다.

@@ -73,17 +73,21 @@ graph와 현재 view filter에서 매번 재생성하는 파생 데이터다. Vi
 자동으로 다른 view에 노출하지 않고 사용자가 명시적으로 Global view로 전환한 경우에만 선택·focus한다.
 
 View별 position, viewport, detail level, collapsed group key와 hidden element key는 같은 view key의 durable
-layout sidecar가 소유한다. Hydration은 collapse와 LOD를 먼저 적용한 뒤 matching stable key의 저장 위치를
-ELK 결과에 overlay하고 저장 viewport를 복구한다. Current graph에 새로 생긴 node는 ELK 위치를 사용하고,
-사라진 key의 위치는 recovery를 위해 저장 row에서 즉시 제거하지 않는다. View key가 source에서 삭제되면
-browser session 상태는 폐기하되 stale SQLite row 정리는 별도 lifecycle 작업으로 남긴다.
+layout sidecar가 소유한다. 일반 hydration, view·LOD·collapse 전환은 ELK를 호출하지 않는 deterministic
+Derived layout을 사용한다. Target view의 저장 위치를 우선하고 current stable projection의 absolute 위치를
+stable key별로 재사용한다. Parent group이 바뀐 table은 target group 상대 좌표로 변환하고 visible child로
+compound bounds를 다시 계산한다. 위치가 없는 node는 stable-key 순 collision-free grid에 배치한다. Derived
+position은 자동 저장하지 않으며 사라진 key의 위치는 recovery를 위해 저장 row에서 즉시 제거하지 않는다.
+View key가 source에서 삭제되면 browser session 상태는 폐기하되 stale SQLite row 정리는 별도 lifecycle
+작업으로 남긴다.
 
 `baseSchemaHash`는 layout provenance이며 mismatch 자체로 저장이나 복구를 거부하지 않는다. Exact HIGH
 table/column rename candidate만 새 key에 position과 hidden state를 복사하고 old key는 유지한다. Ambiguous
 candidate와 key 충돌은 자동 적용하지 않는다. M3 visual rename에서 모든 view row를 atomic migration하는
 정책과 구분한다.
 
-Auto-layout preview는 current durable layout을 먼저 baseline으로 flush한 뒤 별도 generation에서 실행한다.
+ELK worker는 명시적인 Auto-layout Preview와 Reset에서만 실행한다. Auto-layout preview는 current durable
+layout을 먼저 baseline으로 flush한 뒤 별도 generation에서 실행한다.
 Preview 중 graph, view, collapse, LOD와 drag 변경을 잠그고 graph가 바뀌면 결과를 폐기한다. Apply만 preview
 position과 viewport를 저장하며 Cancel은 추가 write 없이 exact baseline을 다시 표시한다. Reset은 current
 view의 position, viewport, collapse, hidden state와 LOD 전체를 fresh ELK 결과로 교체하고 worker 또는 save가

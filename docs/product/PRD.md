@@ -30,7 +30,9 @@ P0에서는 PostgreSQL 또는 MySQL DDL을 DBML로 가져오고, DBML 정본에�
 
 대규모 ERD는 단일 전체 화면으로는 탐색하기 어렵다. DBML은 table, enum, reference뿐 아니라 `TablePartial`, `TableGroup`, `DiagramView` 같은 구조화 문법을 제공하지만, 일부 도구는 이를 제거하거나 부분적으로만 해석한다. SQL 기반 도구도 DDL dialect 차이와 변환 손실을 명확히 보여주지 않는 경우가 있다.
 
-현재 대표 검증 대상인 Digreed `ERD.dbml`은 다음 규모다.
+현재 대표 검증 대상은 실제 고객 schema가 아닌 deterministic synthetic fidelity fixture다. Performance
+profile version 1은 source hash
+`f43bccdd83369eb9fa606e4251ede3b747e117eb6c5648c9ca22d071affe5716`와 다음 inventory를 고정한다.
 
 | 항목 | 수량 |
 | --- | ---: |
@@ -40,7 +42,7 @@ P0에서는 PostgreSQL 또는 MySQL DDL을 DBML로 가져오고, DBML 정본에�
 | `TableGroup` | 15 |
 | `DiagramView` | 7 |
 | `Ref` | 573 |
-| 파일 크기 | 약 199 KB |
+| UTF-8 source bytes | 147,689 |
 
 이 규모에서는 다음 문제가 동시에 발생한다.
 
@@ -598,11 +600,16 @@ write는 project 전체의 `layoutRevisionNo` 하나로 optimistic locking하며
 stale request를 `409`로 차단한다. 동일 payload는 revision을 만들지 않는 no-op이고 layout write는 DBML
 source, schema revision, project `updatedAt`과 Project Home 정렬을 변경하지 않는다.
 
-저장된 `baseSchemaHash`가 current graph와 다르면 matching stable key만 overlay하고 새 node는 ELK 위치를
-사용한다. Exact HIGH rename 후보는 새 key로 위치와 hidden state를 복사하되 old key는 recovery를 위해
-보존한다. Layout conflict에서는 자동 overwrite하지 않고 사용자가 최신 global revision으로 local layout을
-재시도하거나 확인 후 충돌 view의 server layout을 불러온다. Auto-layout preview는 durable baseline과
-격리하며 Cancel은 추가 write 없이 이전 상태를 복구한다. Reset은 current view만 `FULL`, 모든 group
+일반 진입과 view·LOD·collapse 변경은 ELK를 호출하지 않고 deterministic Derived layout을 사용한다. Target
+view의 durable position, current stable projection의 absolute position 순으로 재사용하고 parent group이 바뀐
+table은 target group 상대 좌표로 변환한다. 위치가 없는 node는 stable-key 순 collision-free grid에 배치하며
+visible child 기준으로 group bounds를 다시 계산한다. 이 파생 배치는 자동 저장하지 않는다.
+
+저장된 `baseSchemaHash`가 current graph와 다르면 matching stable key만 복구한다. Exact HIGH rename 후보는 새
+key로 위치와 hidden state를 복사하되 old key는 recovery를 위해 보존한다. Layout conflict에서는 자동
+overwrite하지 않고 사용자가 최신 global revision으로 local layout을 재시도하거나 확인 후 충돌 view의 server
+layout을 불러온다. ELK worker는 명시적 Auto-layout Preview와 Reset에서만 사용한다. Preview는 durable
+baseline과 격리하며 Cancel은 추가 write 없이 이전 상태를 복구한다. Reset은 current view만 `FULL`, 모든 group
 expanded, hidden empty, fresh ELK 위치와 fit viewport로 저장하고 다른 view를 변경하지 않는다.
 
 ### 11.6 Visual schema editing
@@ -1110,19 +1117,25 @@ UI가 parser-specific object를 직접 수정하지 않는다. 모든 schema wri
 
 ### 16.1 성능
 
-P0 대표 fixture는 약 200 KB, 143 tables, 573 refs, 15 groups, 7 views다.
+P0 fidelity fixture는 performance profile version 1에 고정된 UTF-8 147,689 bytes, 143 tables, 86 enums,
+4 partials, 15 groups, 7 views, 573 refs다. Interaction scale fixture는 UTF-8 118,982 bytes, 200 tables와
+1,000 refs다.
 
 | ID | 목표 |
 | --- | --- |
 | `PERF-001` | 대표 fixture의 DBML parse+diagnostics p95 1초 이내 |
-| `PERF-002` | cold load 후 first interactive diagram p95 3초 이내 |
-| `PERF-003` | view 전환 p95 300ms 이내이며 DBML을 재파싱하지 않음 |
+| `PERF-002` | cold load 후 stable layout·viewport 적용 또는 fit, drag·pan·zoom 활성화까지 p95 3초 이내 |
+| `PERF-003` | Global에서 source-defined view의 first uncached 전환을 포함한 모든 관찰과 aggregate p95가 300ms 이내이며 DBML 재parse·ELK·source/layout write가 없음 |
 | `PERF-004` | drag·pan·zoom 중 일반 동작 30 FPS 이상, 목표 60 FPS |
 | `PERF-005` | source 입력 중 main thread long task 100ms 초과를 반복 생성하지 않음 |
 | `PERF-006` | parser와 auto layout을 Web Worker에서 실행 |
 | `PERF-007` | 최소 200 tables, 1,000 refs fixture에서 기능 degradation 없이 동작 |
 
-측정 환경은 release 전에 4-core CPU, 8 GB RAM, Chromium 최신 안정판 기준으로 고정한다. 목표를 충족하지 못하면 table virtualization, viewport culling, label LOD, edge simplification을 순서대로 적용한다.
+측정 환경은 production Vite bundle, current stable Chrome headless, 1440×900 viewport, DPR 1, Playwright
+worker 1·retry 0, 최소 4 logical CPU·8 GiB RAM으로 고정한다. Parse는 persistent worker warm-up 3회 뒤 20회,
+cold interactive는 isolated context 20회, source-defined 7개 view는 각 first-uncached 전환 3회와 ordered cycle을
+측정하며 p95는 nearest-rank로 계산한다. 임계값을 충족하지 못하면 측정이나 gate를 완화하지 않고 table
+virtualization, viewport culling, label LOD, edge simplification을 순서대로 적용한다.
 
 ### 16.2 신뢰성
 
