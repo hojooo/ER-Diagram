@@ -583,6 +583,36 @@ describe("Monaco DBML adapter", () => {
     expect(runtime.model.dispose).toHaveBeenCalledOnce();
     expect(runtime.setModelMarkers).toHaveBeenLastCalledWith(runtime.model, DBML_MARKER_OWNER, []);
   });
+
+  it("adopts authoritative source received before the Monaco runtime is ready", async () => {
+    const runtime = new FakeMonacoRuntime();
+    const editorHandle = createRef<SourceEditorHandle>();
+    const onReady = vi.fn();
+    let resolveRuntime: ((value: MonacoRuntime) => void) | undefined;
+    const runtimePromise = new Promise<MonacoRuntime>((resolve) => {
+      resolveRuntime = resolve;
+    });
+
+    render(
+      <MonacoDbmlEditor
+        ref={editorHandle}
+        projectId={PROJECT_ID}
+        initialSource="Table stale { id int }"
+        diagnostics={[]}
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+        onReady={onReady}
+        loadRuntime={() => runtimePromise}
+      />,
+    );
+
+    act(() => editorHandle.current?.replaceSource("Table authoritative { id int }"));
+    act(() => resolveRuntime?.(runtime.value));
+
+    await waitFor(() => expect(runtime.createModel).toHaveBeenCalledOnce());
+    expect(runtime.model.getValue()).toBe("Table authoritative { id int }");
+    expect(onReady).toHaveBeenCalledOnce();
+  });
 });
 
 const FakeSourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(

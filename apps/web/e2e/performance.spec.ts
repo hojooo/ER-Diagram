@@ -1,5 +1,3 @@
-import { performance } from "node:perf_hooks";
-
 import { DEFAULT_RUNTIME_RESOURCE_LIMITS, RESOURCE_LIMITS_VERSION } from "@er-diagram/contracts";
 import {
   fixtureInventory,
@@ -104,6 +102,7 @@ test("measures persistent parser-worker latency on the fidelity fixture", async 
 test("measures cold interactive readiness in isolated Chrome contexts", async ({ browser }) => {
   test.setTimeout(600_000);
   const observations: number[] = [];
+  const parserDurationsMs: number[] = [];
 
   for (
     let sample = 0;
@@ -114,10 +113,9 @@ test("measures cold interactive readiness in isolated Chrome contexts", async ({
     const page = await context.newPage();
     const browserErrors = collectBrowserErrors(page);
     await installPerformanceApi(page, FIDELITY_SOURCE);
-    const startedAt = performance.now();
-    await openStableWorkspace(page, fixtureInventory.fidelity);
-    observations.push(performance.now() - startedAt);
+    observations.push(await measureColdInteractive(page, fixtureInventory.fidelity));
     const telemetry = await readTelemetry(page);
+    parserDurationsMs.push(...telemetry.parserDurationsMs);
     expect(telemetry.parserRequests).toBeGreaterThanOrEqual(1);
     expect(telemetry.layoutRequests).toBe(0);
     expect(browserErrors).toEqual([]);
@@ -125,8 +123,11 @@ test("measures cold interactive readiness in isolated Chrome contexts", async ({
   }
 
   const summary = summarize(observations);
+  emitResult("coldInteractive", {
+    ...summary,
+    parser: summarize(parserDurationsMs),
+  });
   expect(summary.p95Ms).toBeLessThanOrEqual(m4PerformanceProfile.coldInteractive.p95ThresholdMs);
-  emitResult("coldInteractive", summary);
 });
 
 test("keeps every first view switch below threshold without parser, ELK, or writes", async ({
@@ -517,11 +518,45 @@ async function openStableWorkspace(
   await expect(
     page
       .getByRole("region", { name: "Schema outline" })
-      .getByText(
-        `${inventory.tables} ${plural(inventory.tables, "table")} · ${inventory.tableGroups} ${plural(inventory.tableGroups, "group")} · ${inventory.references} ${plural(inventory.references, "relationship")}`,
-        { exact: true },
-      ),
+      .getByText(inventorySummary(inventory), { exact: true }),
   ).toBeVisible();
+}
+
+async function measureColdInteractive(
+  page: Page,
+  inventory: {
+    readonly tables: number;
+    readonly tableGroups: number;
+    readonly references: number;
+  },
+): Promise<number> {
+  await page.goto(`/projects/${PROJECT_ID}`);
+  return page.evaluate(
+    ({ expectedInventory }) =>
+      new Promise<number>((resolve, reject) => {
+        const navigation = performance.getEntriesByType("navigation").at(-1);
+        const navigationStartedAt = navigation?.startTime ?? 0;
+        const timeout = window.setTimeout(
+          () => reject(new Error("The cold diagram did not become interactive.")),
+          15_000,
+        );
+        const inspect = () => {
+          const status = document.querySelector<HTMLElement>(
+            '[data-testid="base-diagram-layout-status"]',
+          );
+          const outline = document.querySelector<HTMLElement>('[aria-label="Schema outline"]');
+          if (
+            status?.textContent === "Diagram layout ready" &&
+            outline?.textContent?.includes(expectedInventory)
+          ) {
+            window.clearTimeout(timeout);
+            resolve(performance.now() - navigationStartedAt);
+          } else requestAnimationFrame(inspect);
+        };
+        requestAnimationFrame(inspect);
+      }),
+    { expectedInventory: inventorySummary(inventory) },
+  );
 }
 
 async function switchView(page: Page, viewLabel: string): Promise<void> {
@@ -716,6 +751,14 @@ function round(value: number): number {
 
 function plural(count: number, noun: string): string {
   return count === 1 ? noun : `${noun}s`;
+}
+
+function inventorySummary(inventory: {
+  readonly tables: number;
+  readonly tableGroups: number;
+  readonly references: number;
+}): string {
+  return `${inventory.tables} ${plural(inventory.tables, "table")} · ${inventory.tableGroups} ${plural(inventory.tableGroups, "group")} · ${inventory.references} ${plural(inventory.references, "relationship")}`;
 }
 
 function emitResult(metric: string, result: object): void {

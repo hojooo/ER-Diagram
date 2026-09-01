@@ -43,6 +43,7 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
       onSave,
       onUndo,
       onRedo,
+      onReady,
       onCursorPositionChange,
       readOnly = false,
       loadRuntime = loadMonacoRuntime,
@@ -60,6 +61,7 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
     const onSaveRef = useRef(onSave);
     const onUndoRef = useRef(onUndo);
     const onRedoRef = useRef(onRedo);
+    const onReadyRef = useRef(onReady);
     const onCursorPositionChangeRef = useRef(onCursorPositionChange);
     const suppressChangeRef = useRef(false);
     const [loadState, setLoadState] = useState<"LOADING" | "READY" | "ERROR">("LOADING");
@@ -69,6 +71,7 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
     onSaveRef.current = onSave;
     onUndoRef.current = onUndo;
     onRedoRef.current = onRedo;
+    onReadyRef.current = onReady;
     onCursorPositionChangeRef.current = onCursorPositionChange;
     readOnlyRef.current = readOnly;
 
@@ -76,6 +79,7 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
       forwardedRef,
       () => ({
         replaceSource(source) {
+          initialSourceRef.current = source;
           const model = modelRef.current;
           if (!model) return;
           suppressChangeRef.current = true;
@@ -176,6 +180,7 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
           editorRef.current = activeEditor;
           applyDiagnosticMarkers(monaco, model, diagnosticsRef.current);
           setLoadState("READY");
+          onReadyRef.current?.();
         },
         () => {
           if (!cancelled) setLoadState("ERROR");

@@ -56,6 +56,13 @@ fixture에 포함하지 않는다.
 
 측정 환경은 production Vite bundle, current stable Chrome headless, viewport 1440×900, DPR 1, Playwright
 worker 1, retry 0, 최소 4 logical CPU와 8 GiB RAM이다. p95는 nearest-rank로 계산한다.
+Cold interactive는 browser navigation clock부터 `Diagram layout ready`와 expected outline inventory가 동시에
+확인되는 시점까지 측정한다. Monaco asset 가시성이나 Playwright process 간 assertion 왕복 시간은
+layout·viewport·interaction 완료 기준에 포함하지 않는다. Valid workspace는 parser worker와 diagram을 먼저
+완성하고 Monaco runtime은 diagram ready 이후 browser idle 시점에 초기화한다. Invalid·empty schema 또는 layout
+load failure는 source recovery를 위해 editor를 즉시 초기화한다. Editor가 준비되기 전에는 source navigation만
+비활성화하고 diagram drag·pan·zoom은 ready 시점부터 사용할 수 있다. 이는 test 전용 우회가 아니라 production
+초기화 순서를 명시적으로 분리한 동작이다.
 
 | 항목 | Sample과 hard threshold |
 | --- | --- |
