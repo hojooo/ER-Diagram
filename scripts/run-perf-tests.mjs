@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import process from "node:process";
 
 const args = process.argv.slice(2);
+if (args[0] === "--") args.shift();
 const scenarioIndex = args.indexOf("--scenario");
 let scenario;
 
@@ -16,10 +17,21 @@ if (scenario && scenario !== "layout-spike") {
 }
 
 const executable = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-const result = spawnSync(
-  executable,
-  ["exec", "vitest", "run", "--config", "vitest.perf.config.ts", ...args],
-  { stdio: "inherit" },
-);
 
-process.exit(result.status ?? 1);
+if (scenario === "layout-spike") {
+  run(["exec", "vitest", "run", "--config", "vitest.perf.config.ts", ...args]);
+  process.exit(0);
+}
+
+run(["--filter", "@er-diagram/test-fixtures", "test", "test/performance-profile.test.ts"]);
+run(["exec", "vitest", "run", "--config", "vitest.perf.config.ts"]);
+run(["--filter", "@er-diagram/contracts", "build"]);
+run(["--filter", "@er-diagram/core", "build"]);
+run(["--filter", "@er-diagram/test-fixtures", "build"]);
+run(["exec", "playwright", "test", "--config", "playwright.performance.config.ts", ...args]);
+
+function run(commandArgs) {
+  const result = spawnSync(executable, commandArgs, { stdio: "inherit" });
+  if (result.error) throw result.error;
+  if (result.status !== 0) process.exit(result.status ?? 1);
+}

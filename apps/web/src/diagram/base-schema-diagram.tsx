@@ -310,7 +310,13 @@ export function BaseSchemaDiagram({
 
   return (
     <div className="relative min-h-[32rem] h-[min(68vh,52rem)] bg-slate-950">
-      <p className="sr-only" aria-live="polite" data-testid="base-diagram-layout-status">
+      <p
+        className="sr-only"
+        aria-live="polite"
+        data-testid="base-diagram-layout-status"
+        data-view-key={displayProjection.viewKey}
+        data-lod={displayProjection.lod}
+      >
         {layoutStatus === "LAYING_OUT"
           ? "Laying out diagram"
           : layoutStatus === "SETTLING"
