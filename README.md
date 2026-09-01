@@ -75,6 +75,7 @@ docs/
 - [ADR 0005: SQL capability target과 observed evidence](docs/adr/0005-sql-capability-matrix.md)
 - [ADR 0006: Revision 단위 session history와 durable restore](docs/adr/0006-session-history-and-durable-restore.md)
 - [ADR 0007: Runtime resource budget과 worker isolation](docs/adr/0007-runtime-resource-budgets-and-worker-isolation.md)
+- [ADR 0008: Web CSP, bounded ZIP과 redacted logging](docs/adr/0008-web-and-archive-security-boundaries.md)
 
 ## License
 

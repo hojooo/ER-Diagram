@@ -18,7 +18,7 @@
 | 영역 | 기준 |
 | --- | --- |
 | Web | React 19.2.8, React Router DOM 7.18.2, Vite 8.2.2, TypeScript 7.0.2 |
-| Server | Fastify 5.12.1 |
+| Server | Fastify 5.12.1, `@fastify/helmet` 13.0.0, `yauzl` 3.4.0 |
 | DBML | `@dbml/core`, `@dbml/parse` 9.1.1 exact pin; `@dbml/connector` P0 제외 |
 | Diagram | `@xyflow/react` 12.11.5, ELK.js 0.12.0 |
 | Editor | Monaco Editor 0.56.0 |
@@ -57,6 +57,7 @@
 | Vite 8.2.2 | React SPA의 빠른 개발 server와 production bundling을 제공하고 parser/layout Web Worker를 별도 bundle로 구성하기 쉽다. P0에는 SSR이 필요하지 않다. | worker asset, Monaco chunk, offline production build를 실제 container에서 검증한다. SSR·server component가 필요해지면 별도 결정이 필요하다. |
 | TypeScript 7.0.2 | parser-neutral graph, visual command, HTTP/worker/bundle contract를 정적 타입으로 공유하고 adapter 경계의 실수를 조기에 탐지한다. | 타입 검사는 runtime 입력이나 semantic invariant 검증을 대체하지 않는다. 외부 입력은 Zod와 application validation을 반드시 통과한다. |
 | Fastify 5.12.1 | P0 API가 CRUD, revision conflict, import/export orchestration 중심이므로 작은 HTTP/CLI adapter를 구성하기에 충분하며 core를 framework 밖에 유지하기 쉽다. | auth, multi-user policy, queue, WebSocket orchestration 또는 복잡한 integration이 확정되면 NestJS adapter를 별도 ADR로 검토한다. Fastify plugin을 core로 누출하지 않는다. |
+| `@fastify/helmet` 13.0.0 + `yauzl` 3.4.0 | Fastify response에 enforced CSP·security header를 일관 적용하고, file-backed ZIP을 central directory 기반 bounded stream으로 검증한다. | Style inline 예외는 Monaco·React Flow에만 필요한 CSP tradeoff다. Bundle manifest·hash·entry allowlist와 import/export transaction은 M4-003에서 추가하고 archive를 filesystem에 직접 extract하지 않는다. |
 | `@dbml/core` + `@dbml/parse` 9.1.1 | 공식 DBML grammar/compiler model과 PostgreSQL·MySQL 변환 경로를 재사용해 custom dialect와 정규식 전처리를 피한다. | parser object를 공개 계약으로 노출하지 않는다. `@dbml/connector` 9.1.1은 호환성 조사에만 사용했으며 live database schema fetch API를 노출하므로 P0에서 설치·pin·import하지 않는다. Version 변경은 revalidation·semantic diff가 필요한 compatibility event다. |
 | `@xyflow/react` 12.11.5 | table custom node, relationship edge, selection, viewport, compound parent 같은 interactive diagram 기능을 직접 canvas engine부터 구현하지 않고 제공한다. | React Flow layout을 schema semantics의 정본으로 사용하지 않는다. 대규모 graph에서는 node/edge memoization, viewport culling, LOD를 별도로 적용한다. |
 | ELK.js 0.12.0 | group을 포함한 compound graph와 많은 edge의 자동 배치를 UI rendering과 분리해 계산할 수 있다. | layout worker와 timeout을 적용하고 결과는 preview 후 sidecar에만 저장한다. EPL-2.0 notice와 source 제공 안내를 release artifact에서 검증한다. |
@@ -286,8 +287,9 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
 
 - [x] `M4-001` source/bundle/worker size와 timeout limit
   - 검증: `pnpm test:security limits-timeouts`
-- [ ] `M4-002` CSP, text escaping, archive traversal/bomb/symlink 방어, redacted logging
-  - 검증: `pnpm test:security`
+- [x] `M4-002` CSP, text escaping, archive traversal/bomb/symlink 방어, redacted logging
+  - enforced CSP와 Zod jitless contract, bounded ZIP central-directory/stream 검증, allowlist JSONL logging을 적용한다.
+  - 검증: `pnpm test:security && pnpm test:e2e:security`
 - [ ] `M4-003` portable bundle v1과 hash/version/traversal validation
   - 검증: `pnpm test:integration bundles`
 - [ ] `M4-004` backup, restore dry-run/apply와 pre-migration checksum

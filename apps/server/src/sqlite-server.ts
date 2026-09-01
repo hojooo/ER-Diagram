@@ -17,6 +17,10 @@ import {
 import type { FastifyInstance } from "fastify";
 
 import { createServer } from "./app.js";
+import {
+  createJsonLineOperationalLogSink,
+  type OperationalLogSink,
+} from "./operational-logging.js";
 import { createResourceExecutor, type ResourceExecutor } from "./resource-executor.js";
 import {
   DEFAULT_SERVER_RESOURCE_LIMITS,
@@ -31,6 +35,7 @@ export interface CreateSqliteServerOptions {
   readonly generateCorrelationId?: () => string;
   readonly generateId?: () => string;
   readonly now?: () => string;
+  readonly operationalLogSink?: OperationalLogSink;
 }
 
 export function createSqliteServer(options: CreateSqliteServerOptions): FastifyInstance {
@@ -43,7 +48,10 @@ export function createSqliteServer(options: CreateSqliteServerOptions): FastifyI
   ) {
     throw new RangeError("The injected resource executor limits must match the server limits.");
   }
-  const executor = options.resourceExecutor ?? createResourceExecutor({ limits: resourceLimits });
+  const operationalLogSink = options.operationalLogSink ?? createJsonLineOperationalLogSink();
+  const executor =
+    options.resourceExecutor ??
+    createResourceExecutor({ limits: resourceLimits, operationalLogSink });
   const generateId = options.generateId ?? generateUuidV7;
   const now = options.now ?? (() => toUtcIsoTimestamp());
   const projectPersistence = createSqliteProjectRepository(options.storage);
@@ -78,6 +86,7 @@ export function createSqliteServer(options: CreateSqliteServerOptions): FastifyI
     ...(options.generateCorrelationId
       ? { generateCorrelationId: options.generateCorrelationId }
       : {}),
+    operationalLogSink,
     resourceLimits,
   });
 

@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "./zod.js";
 
 export const RESOURCE_LIMITS_VERSION = 1 as const;
 

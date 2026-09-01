@@ -200,5 +200,7 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Chromium for Playwright
         run: pnpm exec playwright install --with-deps chromium
+      - name: Verify production Web CSP
+        run: pnpm test:e2e:security
       - name: Run end-to-end tests
         run: pnpm test:e2e

@@ -21,6 +21,12 @@
       "source": "https://github.com/holistics/dbml/tree/master/packages/dbml-parse"
     },
     {
+      "name": "@fastify/helmet",
+      "version": "13.0.0",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/fastify/fastify-helmet"
+    },
+    {
       "name": "@playwright/test",
       "version": "1.62.1",
       "licenseExpression": "Apache-2.0",
@@ -86,6 +92,12 @@
       "version": "19.2.5",
       "licenseExpression": "MIT",
       "source": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react-dom"
+    },
+    {
+      "name": "@types/yauzl",
+      "version": "3.4.0",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/yauzl"
     },
     {
       "name": "@vitejs/plugin-react",
@@ -184,6 +196,12 @@
       "version": "4.1.11",
       "licenseExpression": "MIT",
       "source": "https://github.com/vitest-dev/vitest/tree/main/packages/vitest"
+    },
+    {
+      "name": "yauzl",
+      "version": "3.4.0",
+      "licenseExpression": "MIT",
+      "source": "https://github.com/thejoshwolfe/yauzl"
     },
     {
       "name": "zod",

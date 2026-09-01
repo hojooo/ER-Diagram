@@ -1,15 +1,26 @@
 import { randomUUID } from "node:crypto";
 import { Worker } from "node:worker_threads";
-import type { VisualCommand } from "@er-diagram/contracts";
-import type {
-  DbmlParseResult,
-  SqlExportConversionInput,
-  SqlExportConversionResult,
-  SqlImportConversionInput,
-  SqlImportConversionResult,
-  VisualCommandTransformResult,
+import { utf8ByteLength, type VisualCommand } from "@er-diagram/contracts";
+import {
+  DBML_PARSER_VERSION,
+  type DbmlParseResult,
+  measureSchemaGraph,
+  type SchemaGraph,
+  type SqlExportConversionInput,
+  type SqlExportConversionResult,
+  type SqlImportConversionInput,
+  type SqlImportConversionResult,
+  type VisualCommandTransformResult,
 } from "@er-diagram/core";
 
+import {
+  NOOP_OPERATIONAL_LOG_SINK,
+  OPERATIONAL_LOG_VERSION,
+  type OperationalLogSink,
+  type ResourceOperationOperationalLog,
+  utcTimestamp,
+  writeOperationalLog,
+} from "./operational-logging.js";
 import { ResourceOperationError } from "./resource-errors.js";
 import {
   DEFAULT_SERVER_RESOURCE_LIMITS,
@@ -39,6 +50,7 @@ export interface ResourceExecutor {
 export interface CreateResourceExecutorOptions {
   readonly limits?: ServerResourceLimits;
   readonly allowTestOperations?: boolean;
+  readonly operationalLogSink?: OperationalLogSink;
   readonly workerUrl?: URL;
 }
 
@@ -61,6 +73,7 @@ interface WorkerSlot {
 
 export class BoundedResourceWorkerPool implements ResourceExecutor {
   readonly #limits: ServerResourceLimits;
+  readonly #operationalLogSink: OperationalLogSink;
   readonly #allowTestOperations: boolean;
   readonly #workerUrl: URL;
   readonly #slots: WorkerSlot[] = [];
@@ -70,6 +83,7 @@ export class BoundedResourceWorkerPool implements ResourceExecutor {
   constructor(options: CreateResourceExecutorOptions = {}) {
     this.#limits = parseServerResourceLimits(options.limits ?? DEFAULT_SERVER_RESOURCE_LIMITS);
     this.#allowTestOperations = options.allowTestOperations ?? false;
+    this.#operationalLogSink = options.operationalLogSink ?? NOOP_OPERATIONAL_LOG_SINK;
     this.#workerUrl = options.workerUrl ?? new URL("./resource-worker.js", import.meta.url);
     for (let index = 0; index < this.#limits.workerPoolSize; index += 1) {
       this.#slots.push(this.#createSlot(index));
@@ -130,6 +144,26 @@ export class BoundedResourceWorkerPool implements ResourceExecutor {
   }
 
   #submit<Operation extends ResourceWorkerOperation>(
+    operation: Operation,
+  ): Promise<ResourceOperationResultMap[Operation["type"]]> {
+    const startedAt = performance.now();
+    return this.#submitUnlogged(operation).then(
+      (value) => {
+        writeResourceOperationalLog(this.#operationalLogSink, () =>
+          resourceSuccessEvent(operation, value, performance.now() - startedAt),
+        );
+        return value;
+      },
+      (error: unknown) => {
+        writeResourceOperationalLog(this.#operationalLogSink, () =>
+          resourceErrorEvent(operation, error, performance.now() - startedAt),
+        );
+        throw error;
+      },
+    );
+  }
+
+  #submitUnlogged<Operation extends ResourceWorkerOperation>(
     operation: Operation,
   ): Promise<ResourceOperationResultMap[Operation["type"]]> {
     if (this.#closed) {
@@ -249,6 +283,188 @@ export class BoundedResourceWorkerPool implements ResourceExecutor {
     const next = this.#queue.shift();
     if (next) this.#start(index, next);
   }
+}
+
+function resourceSuccessEvent(
+  operation: ResourceWorkerOperation,
+  value: unknown,
+  latencyMs: number,
+): ResourceOperationOperationalLog {
+  return {
+    logVersion: OPERATIONAL_LOG_VERSION,
+    event: "RESOURCE_OPERATION_COMPLETED",
+    timestamp: utcTimestamp(),
+    operation: resourceOperationKind(operation),
+    status: "SUCCESS",
+    latencyMs: safeLatency(latencyMs),
+    inputBytes: resourceInputBytes(operation),
+    ...resourceResultMetrics(operation, value),
+  };
+}
+
+function resourceErrorEvent(
+  operation: ResourceWorkerOperation,
+  error: unknown,
+  latencyMs: number,
+): ResourceOperationOperationalLog {
+  return {
+    logVersion: OPERATIONAL_LOG_VERSION,
+    event: "RESOURCE_OPERATION_COMPLETED",
+    timestamp: utcTimestamp(),
+    operation: resourceOperationKind(operation),
+    status: "ERROR",
+    latencyMs: safeLatency(latencyMs),
+    inputBytes: resourceInputBytes(operation),
+    errorCode: error instanceof ResourceOperationError ? error.code : "RESOURCE_OPERATION_FAILED",
+  };
+}
+
+function writeResourceOperationalLog(
+  sink: OperationalLogSink,
+  createEvent: () => ResourceOperationOperationalLog,
+): void {
+  try {
+    writeOperationalLog(sink, createEvent());
+  } catch {
+    // Event measurement is best-effort and must never alter product behavior.
+  }
+}
+
+function resourceOperationKind(
+  operation: ResourceWorkerOperation,
+): ResourceOperationOperationalLog["operation"] {
+  switch (operation.type) {
+    case "PARSE_DBML":
+      return "DBML_PARSE";
+    case "CONVERT_SQL_IMPORT":
+      return "SQL_IMPORT";
+    case "CONVERT_SQL_EXPORT":
+      return "SQL_EXPORT";
+    case "TRANSFORM_VISUAL_COMMAND":
+      return "VISUAL_TRANSFORM";
+    case "TEST_CRASH":
+    case "TEST_HANG":
+    case "TEST_OOM":
+    case "TEST_PROTOCOL":
+      return "INTERNAL_TEST";
+  }
+}
+
+function resourceInputBytes(operation: ResourceWorkerOperation): number {
+  switch (operation.type) {
+    case "PARSE_DBML":
+    case "TRANSFORM_VISUAL_COMMAND":
+      return utf8ByteLength(operation.source);
+    case "CONVERT_SQL_IMPORT":
+    case "CONVERT_SQL_EXPORT":
+      return utf8ByteLength(operation.input.source);
+    case "TEST_CRASH":
+    case "TEST_HANG":
+    case "TEST_OOM":
+    case "TEST_PROTOCOL":
+      return 0;
+  }
+}
+
+function resourceResultMetrics(
+  operation: ResourceWorkerOperation,
+  value: unknown,
+): Omit<
+  ResourceOperationOperationalLog,
+  "event" | "inputBytes" | "latencyMs" | "logVersion" | "operation" | "status" | "timestamp"
+> {
+  switch (operation.type) {
+    case "PARSE_DBML": {
+      const result = value as DbmlParseResult;
+      return result.ok
+        ? {
+            ...graphMetrics(result.graph),
+            parserVersion: result.graph.parserVersion,
+            ...diagnosticMetrics(result.graph.diagnostics),
+          }
+        : {
+            parserVersion: DBML_PARSER_VERSION,
+            ...diagnosticMetrics(result.diagnostics),
+          };
+    }
+    case "CONVERT_SQL_IMPORT": {
+      const result = value as SqlImportConversionResult;
+      const reportCodes = result.report.statements.flatMap((statement) => [
+        statement.code,
+        ...statement.clauses.map((clause) => clause.code),
+      ]);
+      return {
+        ...(result.candidate ? graphMetrics(result.candidate.graph) : {}),
+        ...(result.candidate ? { outputBytes: utf8ByteLength(result.candidate.dbml) } : {}),
+        parserVersion: result.report.parserVersions.dbmlCore,
+        semanticChangeCount: result.report.semanticVerification.changes.length,
+        ...diagnosticMetrics(result.report.diagnostics, reportCodes),
+      };
+    }
+    case "CONVERT_SQL_EXPORT": {
+      const result = value as SqlExportConversionResult;
+      return {
+        ...(result.candidate ? { outputBytes: utf8ByteLength(result.candidate.sql) } : {}),
+        parserVersion: result.report.parserVersions.dbmlCore,
+        semanticChangeCount: result.report.semanticVerification.changes.length,
+        ...diagnosticMetrics(
+          result.report.diagnostics,
+          result.report.entries.map((entry) => entry.code),
+        ),
+      };
+    }
+    case "TRANSFORM_VISUAL_COMMAND": {
+      const result = value as VisualCommandTransformResult;
+      return {
+        outputBytes: utf8ByteLength(result.source),
+        parserVersion: DBML_PARSER_VERSION,
+        ...(result.ok ? { semanticChangeCount: result.semanticDiff.changes.length } : {}),
+        ...diagnosticMetrics(result.diagnostics),
+      };
+    }
+    case "TEST_CRASH":
+    case "TEST_HANG":
+    case "TEST_OOM":
+    case "TEST_PROTOCOL":
+      return {};
+  }
+}
+
+function graphMetrics(
+  graph: SchemaGraph,
+): Pick<ResourceOperationOperationalLog, "referenceCount" | "schemaElementCount" | "tableCount"> {
+  const metrics = measureSchemaGraph(graph);
+  return {
+    tableCount: metrics.tables,
+    referenceCount: metrics.references,
+    schemaElementCount: metrics.totalElements,
+  };
+}
+
+function diagnosticMetrics(
+  diagnostics: readonly { readonly code: string }[],
+  additionalCodes: readonly string[] = [],
+): Pick<
+  ResourceOperationOperationalLog,
+  "diagnosticCodes" | "diagnosticCodesTruncated" | "diagnosticCount"
+> {
+  const allCodes = [...diagnostics.map((diagnostic) => diagnostic.code), ...additionalCodes];
+  const safeCodes = [...new Set(allCodes.filter(isSafeDiagnosticCode))].toSorted();
+  const diagnosticCodes = safeCodes.slice(0, 32);
+  return {
+    diagnosticCount: allCodes.length,
+    diagnosticCodes,
+    ...(safeCodes.length > diagnosticCodes.length ? { diagnosticCodesTruncated: true } : {}),
+  };
+}
+
+function isSafeDiagnosticCode(value: string): boolean {
+  return /^[A-Z][A-Z0-9_]*$/u.test(value);
+}
+
+function safeLatency(value: number): number {
+  if (!Number.isFinite(value) || value < 0) return 0;
+  return Math.round(value * 1_000) / 1_000;
 }
 
 export function createResourceExecutor(
