@@ -1,4 +1,5 @@
 import { projectIdSchema, utf8ByteLength } from "@er-diagram/contracts";
+import type { RuntimeReleaseIdentity } from "@er-diagram/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
 export const OPERATIONAL_LOG_VERSION = 1 as const;
@@ -82,10 +83,23 @@ export interface ServerLifecycleOperationalLog {
   readonly reasonCode?: string;
 }
 
+export interface ServerReleaseIdentityOperationalLog {
+  readonly logVersion: 1;
+  readonly event: "SERVER_RELEASE_IDENTITY";
+  readonly timestamp: string;
+  readonly channel: RuntimeReleaseIdentity["channel"];
+  readonly version: string;
+  readonly sourceRevision: string | null;
+  readonly imageReference: string | null;
+  readonly parserVersion: "9.1.1";
+  readonly bundleSchemaVersion: 1;
+}
+
 export type OperationalLogEvent =
   | HttpCompletionOperationalLog
   | ResourceOperationOperationalLog
-  | ServerLifecycleOperationalLog;
+  | ServerLifecycleOperationalLog
+  | ServerReleaseIdentityOperationalLog;
 
 export interface OperationalLogSink {
   write(event: OperationalLogEvent): void | Promise<void>;

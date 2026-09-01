@@ -123,6 +123,7 @@ async function assertImageRuntime() {
     const required = [
       "/app/server/dist/resource-worker.js",
       "/app/web/index.html",
+      "/app/release.json",
       "/app/LICENSE",
       "/app/NOTICE",
       "/app/THIRD_PARTY_NOTICES.md",
@@ -249,7 +250,15 @@ async function assertHttpRuntime() {
 
   const runtimeConfig = await fetchJson(`${baseUrl}/api/v1/runtime-config`);
   assert.equal(runtimeConfig.response.status, 200);
-  assert.equal(runtimeConfig.body.configVersion, 1);
+  assert.equal(runtimeConfig.body.configVersion, 2);
+  assert.deepEqual(runtimeConfig.body.release, {
+    channel: "DEVELOPMENT",
+    version: "development",
+    sourceRevision: null,
+    imageReference: null,
+    parserVersion: "9.1.1",
+    bundleSchemaVersion: 1,
+  });
 
   const commandId = randomUUID();
   const created = await fetchJson(`${baseUrl}/api/v1/projects`, {
