@@ -56,6 +56,12 @@ function probe() {
     const identity = JSON.parse(readFileSync("/app/release.json", "utf8"));
     const serverPackage = await import("/app/server/dist/index.js");
     const executor = serverPackage.createResourceExecutor({
+      limits: {
+        ...serverPackage.DEFAULT_SERVER_RESOURCE_LIMITS,
+        bundle: { ...serverPackage.DEFAULT_SERVER_RESOURCE_LIMITS.bundle },
+        dbmlParserTimeoutMs: 60_000,
+        workerPoolSize: 1,
+      },
       operationalLogSink: serverPackage.NOOP_OPERATIONAL_LOG_SINK,
     });
     let parsed;
