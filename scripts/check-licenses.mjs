@@ -32,9 +32,11 @@ const ignoredDirectories = new Set([
   "test-results",
 ]);
 const allowedSelectedLicenses = new Set([
+  "0BSD",
   "Apache-2.0",
   "BSD-2-Clause",
   "BSD-3-Clause",
+  "BlueOak-1.0.0",
   "EPL-2.0",
   "ISC",
   "MIT",
@@ -42,6 +44,7 @@ const allowedSelectedLicenses = new Set([
 ]);
 const knownLicenseExpressions = new Set([
   ...allowedSelectedLicenses,
+  "(MPL-2.0 OR Apache-2.0)",
   "EPL-2.0 OR GPL-3.0-or-later",
   "MIT OR Apache-2.0",
 ]);
@@ -123,7 +126,7 @@ function loadInventory() {
   const rawInventory = readText(path.relative(rootDirectory, inventoryPath));
 
   if (!rawInventory) {
-    return [];
+    return { packages: [], productionLicenseSelections: [] };
   }
 
   reportPlaceholders("scripts/license-inventory.json", rawInventory);
@@ -131,16 +134,26 @@ function loadInventory() {
   try {
     const parsed = JSON.parse(rawInventory);
 
-    if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.packages)) {
-      errors.push("scripts/license-inventory.json must use schemaVersion 1 and a packages array.");
-      return [];
+    if (
+      parsed.schemaVersion !== 2 ||
+      !Array.isArray(parsed.packages) ||
+      !Array.isArray(parsed.productionLicenseSelections)
+    ) {
+      errors.push(
+        "scripts/license-inventory.json must use schemaVersion 2 with packages and productionLicenseSelections arrays.",
+      );
+      return { packages: [], productionLicenseSelections: [] };
     }
 
-    return parsed.packages;
+    return parsed;
   } catch (error) {
     errors.push(`scripts/license-inventory.json is not valid JSON: ${error.message}`);
-    return [];
+    return { packages: [], productionLicenseSelections: [] };
   }
+}
+
+function splitLicenseChoices(expression) {
+  return expression?.replace(/^\((.*)\)$/u, "$1").split(" OR ") ?? [];
 }
 
 function validateInventory(packages, thirdPartyNotices) {
@@ -187,7 +200,7 @@ function validateInventory(packages, thirdPartyNotices) {
     }
 
     if (licenseExpression?.includes(" OR ")) {
-      const choices = licenseExpression.split(" OR ");
+      const choices = splitLicenseChoices(licenseExpression);
 
       if (!selectedLicense || !choices.includes(selectedLicense)) {
         errors.push(
@@ -235,6 +248,59 @@ function validateInventory(packages, thirdPartyNotices) {
   }
 
   return packagesByName;
+}
+
+function validateProductionLicenseSelections(selections, thirdPartyNotices) {
+  const expectedKeys = selections
+    .map(({ name, version }) => `${name}@${version}`)
+    .toSorted((left, right) => left.localeCompare(right, "en"));
+  const actualKeys = selections.map(({ name, version }) => `${name}@${version}`);
+
+  if (JSON.stringify(expectedKeys) !== JSON.stringify(actualKeys)) {
+    errors.push(
+      "scripts/license-inventory.json production license selections must be sorted by name and version.",
+    );
+  }
+
+  const seen = new Set();
+  for (const selection of selections) {
+    const { licenseExpression, name, selectedLicense, source, version } = selection;
+    const key = `${name}@${version}`;
+
+    if (!name || seen.has(key)) {
+      errors.push(`Production license selection is missing or duplicated: ${key}`);
+      continue;
+    }
+    seen.add(key);
+
+    if (!exactVersionPattern.test(version ?? "")) {
+      errors.push(`${key} production selection version is not exact.`);
+    }
+    if (!knownLicenseExpressions.has(licenseExpression)) {
+      errors.push(`${key} has an unknown production license expression: ${licenseExpression}`);
+    }
+    if (
+      !allowedSelectedLicenses.has(selectedLicense) ||
+      !splitLicenseChoices(licenseExpression).includes(selectedLicense) ||
+      forbiddenLicensePattern.test(selectedLicense)
+    ) {
+      errors.push(`${key} selects a forbidden or invalid production license: ${selectedLicense}`);
+    }
+    if (typeof source !== "string" || !source.startsWith("https://")) {
+      errors.push(`${key} must have an HTTPS source URL in the production selection.`);
+    }
+
+    for (const marker of [
+      `\`${key}\` declares \`${licenseExpression}\``,
+      `the ${selectedLicense} option`,
+      source,
+    ]) {
+      if (!thirdPartyNotices.includes(marker)) {
+        errors.push(`THIRD_PARTY_NOTICES.md is missing the production choice for ${key}.`);
+        break;
+      }
+    }
+  }
 }
 
 function findPackageJsonFiles(directory, results = []) {
@@ -404,8 +470,10 @@ function validateInstalledMetadata(packages) {
 }
 
 const thirdPartyNotices = validateProjectFiles();
-const packages = loadInventory();
+const inventory = loadInventory();
+const packages = inventory.packages;
 const packagesByName = validateInventory(packages, thirdPartyNotices);
+validateProductionLicenseSelections(inventory.productionLicenseSelections, thirdPartyNotices);
 const directDependencyCount = validateDirectDependencies(packagesByName);
 const installedMetadataChecked = validateInstalledMetadata(packages);
 

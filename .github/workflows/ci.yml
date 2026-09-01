@@ -168,8 +168,8 @@ jobs:
             ${{ runner.os }}-node-${{ env.NODE_VERSION }}-pnpm-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Check licenses and notices
-        run: pnpm licenses:check
+      - name: Check licenses, notices, and application SBOM
+        run: pnpm licenses:check && pnpm sbom:check
 
   playwright:
     name: Playwright end-to-end tests

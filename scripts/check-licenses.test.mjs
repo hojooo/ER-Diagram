@@ -142,6 +142,19 @@ test("rejects unknown inventory licenses", () => {
   );
 });
 
+test("rejects an invalid production license selection", () => {
+  expectFailure(
+    (fixtureRoot) =>
+      replaceInFixture(
+        fixtureRoot,
+        path.join("scripts", "license-inventory.json"),
+        '"selectedLicense": "Apache-2.0",\n      "source": "https://github.com/cure53/DOMPurify"',
+        '"selectedLicense": "MIT",\n      "source": "https://github.com/cure53/DOMPurify"',
+      ),
+    /dompurify@3\.4\.8 selects a forbidden or invalid production license: MIT/,
+  );
+});
+
 test("rejects @dbml/connector as a direct dependency", () => {
   expectFailure(
     (fixtureRoot) =>
