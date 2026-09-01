@@ -37,7 +37,7 @@
     "test:m2-gate": "pnpm --filter @er-diagram/test-fixtures test test/sql-interchange-gate-fixtures.test.ts && pnpm --filter @er-diagram/core test test/sql-interchange-gate.test.ts && pnpm --filter @er-diagram/server test:integration milestone-2-gate && pnpm test:e2e milestone-2-gate",
     "test:m3-gate": "pnpm --filter @er-diagram/test-fixtures test test/visual-command-gate-fixtures.test.ts && pnpm --filter @er-diagram/contracts test test/visual-command.test.ts && pnpm --filter @er-diagram/source-transform test test/visual-command-gate.test.ts && pnpm --filter @er-diagram/server test:integration milestone-3-gate && pnpm test:e2e milestone-3-gate",
     "test:perf": "node scripts/run-perf-tests.mjs",
-    "test:release": "node --test scripts/check-release-image.test.mjs && node scripts/test-release.mjs",
+    "test:release": "node --test scripts/check-release-image.test.mjs scripts/release-sbom-assets.test.mjs && node scripts/test-release.mjs",
     "test:runtime-lifecycle": "pnpm build:resource-workers && node scripts/test-runtime-lifecycle.mjs",
     "test:security": "pnpm security:sinks && pnpm build:resource-workers && vitest run --config vitest.security.config.ts",
     "test:unit": "vitest run --config vitest.config.ts",
