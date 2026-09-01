@@ -3,7 +3,7 @@
 import "@testing-library/jest-dom/vitest";
 
 import {
-  DEFAULT_RUNTIME_RESOURCE_LIMITS,
+  DEFAULT_RUNTIME_CONFIG_RESPONSE,
   type ProjectState,
   type SqlImportStandalonePreviewResponse,
 } from "@er-diagram/contracts";
@@ -134,10 +134,7 @@ function preview(): SqlImportStandalonePreviewResponse {
 function fakeApi() {
   const state = projectState();
   const api = {
-    getRuntimeConfig: vi.fn(async () => ({
-      configVersion: 1 as const,
-      resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS,
-    })),
+    getRuntimeConfig: vi.fn(async () => DEFAULT_RUNTIME_CONFIG_RESPONSE),
     listProjects: vi.fn(async () => ({ projects: [] })),
     getProject: vi.fn(async () => ({ state })),
     listRevisions: vi.fn(async () => ({ revisions: [] })),
@@ -197,9 +194,7 @@ function renderNewImport(api: ProjectApi) {
     { initialEntries: ["/sql-import/new"] },
   );
   return render(
-    <RuntimeConfigProvider
-      config={{ configVersion: 1, resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS }}
-    >
+    <RuntimeConfigProvider config={DEFAULT_RUNTIME_CONFIG_RESPONSE}>
       <ProjectApiProvider api={api}>
         <QueryClientProvider client={queryClient}>
           <RouterProvider router={router} />

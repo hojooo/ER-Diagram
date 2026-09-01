@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { DEFAULT_RUNTIME_RESOURCE_LIMITS, RESOURCE_LIMITS_VERSION } from "@er-diagram/contracts";
+import { DEFAULT_RUNTIME_CONFIG_RESPONSE } from "@er-diagram/contracts";
 import { CONTENT_SECURITY_POLICY } from "../../server/src/security-headers.js";
 import { createControlledLayoutApi } from "./controlled-layout-api.js";
 import { expect, type Page, test } from "./test-fixture.js";
@@ -155,10 +155,7 @@ async function installControlledApi(page: Page): Promise<void> {
       status: 200,
       contentType: "application/json",
       headers: { "cache-control": "no-store" },
-      body: JSON.stringify({
-        configVersion: RESOURCE_LIMITS_VERSION,
-        resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS,
-      }),
+      body: JSON.stringify(DEFAULT_RUNTIME_CONFIG_RESPONSE),
     });
   });
   await page.route("**/api/v1/projects**", async (route) => {

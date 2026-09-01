@@ -1,4 +1,7 @@
-import { DEFAULT_RUNTIME_RESOURCE_LIMITS, RESOURCE_LIMITS_VERSION } from "@er-diagram/contracts";
+import {
+  DEFAULT_RUNTIME_CONFIG_RESPONSE,
+  DEFAULT_RUNTIME_RESOURCE_LIMITS,
+} from "@er-diagram/contracts";
 
 import { expect, test } from "./test-fixture.js";
 
@@ -62,7 +65,7 @@ test("oversized SQL file and textarea remain local without preview mutation", as
 
 function runtimeConfig(maxSourceBytes: number) {
   return {
-    configVersion: RESOURCE_LIMITS_VERSION,
+    ...DEFAULT_RUNTIME_CONFIG_RESPONSE,
     resourceLimits: {
       ...DEFAULT_RUNTIME_RESOURCE_LIMITS,
       bundle: { ...DEFAULT_RUNTIME_RESOURCE_LIMITS.bundle },

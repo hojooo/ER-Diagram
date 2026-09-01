@@ -7,7 +7,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { ProjectApiError } from "./project-api.js";
 import { useProjectApi } from "./project-api-context.js";
 import { projectQueryKeys } from "./project-queries.js";
-import { useRuntimeResourceLimits } from "../runtime-config.js";
+import { useRuntimeConfig, useRuntimeResourceLimits } from "../runtime-config.js";
 
 const primaryButtonClass =
   "inline-flex min-h-11 items-center justify-center rounded-lg bg-cyan-300 px-4 font-semibold text-slate-950 transition hover:bg-cyan-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-55";
@@ -50,6 +50,7 @@ export function ProjectHomePage() {
       </div>
 
       <ImportAvailability />
+      <RuntimeReleaseDetails />
 
       {projectsQuery.isPending ? (
         <p
@@ -92,6 +93,54 @@ export function ProjectHomePage() {
         </ul>
       )}
     </section>
+  );
+}
+
+export function RuntimeReleaseDetails() {
+  const { release } = useRuntimeConfig();
+  return (
+    <section
+      className="mt-6 rounded-xl border border-slate-800 bg-slate-950/50 p-4"
+      aria-labelledby="runtime-release-heading"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="runtime-release-heading" className="font-semibold text-slate-100">
+          Runtime release
+        </h2>
+        <span className="text-xs font-semibold uppercase tracking-[0.12em] text-cyan-300">
+          {release.channel === "RELEASE" ? "Published image" : "Development build"}
+        </span>
+      </div>
+      <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+        <ReleaseMetadata label="Image version" value={release.version} />
+        <ReleaseMetadata
+          label="Source revision"
+          value={release.sourceRevision ?? "Not embedded"}
+          code={release.sourceRevision !== null}
+        />
+        <ReleaseMetadata label="Parser" value={release.parserVersion} />
+        <ReleaseMetadata label="Bundle schema" value={String(release.bundleSchemaVersion)} />
+      </dl>
+    </section>
+  );
+}
+
+function ReleaseMetadata({
+  label,
+  value,
+  code = false,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly code?: boolean;
+}) {
+  return (
+    <div>
+      <dt className="text-xs text-slate-400">{label}</dt>
+      <dd className="mt-1 break-all font-semibold text-slate-200">
+        {code ? <code>{value}</code> : value}
+      </dd>
+    </div>
   );
 }
 

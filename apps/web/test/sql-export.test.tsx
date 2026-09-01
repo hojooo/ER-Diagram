@@ -3,7 +3,7 @@
 import "@testing-library/jest-dom/vitest";
 
 import {
-  DEFAULT_RUNTIME_RESOURCE_LIMITS,
+  DEFAULT_RUNTIME_CONFIG_RESPONSE,
   type ProjectState,
   type SqlExportResponse,
 } from "@er-diagram/contracts";
@@ -129,10 +129,7 @@ function exportResponse(overrides: Partial<SqlExportResponse> = {}): SqlExportRe
 
 function fakeApi(state: ProjectState, exported: SqlExportResponse): ProjectApi {
   return {
-    getRuntimeConfig: vi.fn(async () => ({
-      configVersion: 1 as const,
-      resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS,
-    })),
+    getRuntimeConfig: vi.fn(async () => DEFAULT_RUNTIME_CONFIG_RESPONSE),
     listProjects: vi.fn(async () => ({ projects: [] })),
     getProject: vi.fn(async () => ({ state })),
     listRevisions: vi.fn(async () => ({ revisions: [] })),

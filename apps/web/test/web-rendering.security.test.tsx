@@ -3,7 +3,7 @@
 import "@testing-library/jest-dom/vitest";
 
 import {
-  DEFAULT_RUNTIME_RESOURCE_LIMITS,
+  DEFAULT_RUNTIME_CONFIG_RESPONSE,
   type ProjectState,
   type SqlExportResponse,
   type SqlImportStandalonePreviewResponse,
@@ -384,9 +384,7 @@ function renderWithProviders(
 ): ReturnType<typeof render> {
   const content = includeRouter ? <MemoryRouter>{element}</MemoryRouter> : element;
   return render(
-    <RuntimeConfigProvider
-      config={{ configVersion: 1, resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS }}
-    >
+    <RuntimeConfigProvider config={DEFAULT_RUNTIME_CONFIG_RESPONSE}>
       <ProjectApiProvider api={api}>
         <QueryClientProvider
           client={
@@ -407,10 +405,7 @@ function fakeApi(overrides: Partial<ProjectApi> = {}): ProjectApi {
     throw new Error("This API operation is not used by the security fixture.");
   };
   return {
-    getRuntimeConfig: async () => ({
-      configVersion: 1,
-      resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS,
-    }),
+    getRuntimeConfig: async () => DEFAULT_RUNTIME_CONFIG_RESPONSE,
     listProjects: async () => ({ projects: [] }),
     getProject: unused,
     listRevisions: async () => ({ revisions: [] }),

@@ -3,6 +3,7 @@
 import "@testing-library/jest-dom/vitest";
 
 import {
+  DEFAULT_RUNTIME_CONFIG_RESPONSE,
   DEFAULT_RUNTIME_RESOURCE_LIMITS,
   type ProjectState,
   runtimeResourceLimitsSchema,
@@ -27,7 +28,7 @@ const limits = runtimeResourceLimitsSchema.parse({
   bundle: { ...DEFAULT_RUNTIME_RESOURCE_LIMITS.bundle },
   maxSourceBytes: 4,
 });
-const runtimeConfig = { configVersion: 1 as const, resourceLimits: limits };
+const runtimeConfig = { ...DEFAULT_RUNTIME_CONFIG_RESPONSE, resourceLimits: limits };
 
 afterEach(cleanup);
 

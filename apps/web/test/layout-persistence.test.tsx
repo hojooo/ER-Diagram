@@ -4,7 +4,7 @@ import "@testing-library/jest-dom/vitest";
 
 import { createHash } from "node:crypto";
 import {
-  DEFAULT_RUNTIME_RESOURCE_LIMITS,
+  DEFAULT_RUNTIME_CONFIG_RESPONSE,
   type DiagramLayout,
   type DiagramLayoutValue,
   type LayoutResponse,
@@ -243,7 +243,7 @@ class LayoutProjectApi implements ProjectApi {
   }
 
   async getRuntimeConfig() {
-    return { configVersion: 1 as const, resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS };
+    return DEFAULT_RUNTIME_CONFIG_RESPONSE;
   }
 
   async getLayout(input: { projectId: string; viewKey: string }): Promise<LayoutResponse> {
@@ -356,9 +356,7 @@ function renderWorkspace(api: LayoutProjectApi) {
   );
   return {
     ...render(
-      <RuntimeConfigProvider
-        config={{ configVersion: 1, resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS }}
-      >
+      <RuntimeConfigProvider config={DEFAULT_RUNTIME_CONFIG_RESPONSE}>
         <RouterProvider router={router} />
       </RuntimeConfigProvider>,
     ),
