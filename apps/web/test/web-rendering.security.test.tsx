@@ -342,6 +342,7 @@ describe("Web text and byte-preservation security boundaries", () => {
           modelValue = source;
           return model;
         }),
+        defineTheme: vi.fn(),
         getModel: vi.fn(() => null),
         setModelMarkers: vi.fn(),
       },

@@ -13,6 +13,19 @@ import { loadMonacoRuntime, type MonacoRuntime } from "./monaco-runtime.js";
 
 export const DBML_MARKER_OWNER = "er-diagram-dbml";
 export const DBML_MAIN_FILEPATH = "/main.dbml";
+export const DBML_EDITOR_THEME = "er-diagram-dark";
+
+const DBML_EDITOR_THEME_DATA: editor.IStandaloneThemeData = {
+  base: "vs-dark",
+  inherit: true,
+  rules: [],
+  colors: {
+    "editor.background": "#1E1E1E",
+    "editorLineNumber.foreground": "#94A3B8",
+    "editorLineNumber.activeForeground": "#F8FAFC",
+    "editorLineNumber.dimmedForeground": "#94A3B8",
+  },
+};
 
 interface MonacoDbmlEditorProps extends SourceEditorProps {
   readonly loadRuntime?: () => Promise<MonacoRuntime>;
@@ -111,6 +124,7 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
         (monaco) => {
           if (cancelled || !containerRef.current) return;
           registerDbmlLanguage(monaco);
+          monaco.editor.defineTheme(DBML_EDITOR_THEME, DBML_EDITOR_THEME_DATA);
           const uri = monaco.Uri.parse(
             `inmemory://projects/${encodeURIComponent(projectId)}/main.dbml`,
           );
@@ -128,7 +142,7 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
             padding: { top: 14, bottom: 14 },
             scrollBeyondLastLine: false,
             tabSize: 2,
-            theme: "vs-dark",
+            theme: DBML_EDITOR_THEME,
             wordWrap: "off",
             readOnly: readOnlyRef.current,
           });

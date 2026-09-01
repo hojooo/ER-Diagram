@@ -25,7 +25,11 @@ import type {
   SourceEditorHandle,
   SourceEditorProps,
 } from "../src/source-editor/editor-contract.js";
-import { DBML_MARKER_OWNER, MonacoDbmlEditor } from "../src/source-editor/monaco-dbml-editor.js";
+import {
+  DBML_EDITOR_THEME,
+  DBML_MARKER_OWNER,
+  MonacoDbmlEditor,
+} from "../src/source-editor/monaco-dbml-editor.js";
 import type { MonacoRuntime } from "../src/source-editor/monaco-runtime.js";
 import type {
   DbmlParserWorkerClient,
@@ -497,6 +501,15 @@ describe("Monaco DBML adapter", () => {
     expect(runtime.registerLanguage).toHaveBeenCalledWith({ id: "dbml", extensions: [".dbml"] });
     expect(runtime.setLanguageConfiguration).toHaveBeenCalledOnce();
     expect(runtime.setMonarchTokensProvider).toHaveBeenCalledOnce();
+    expect(runtime.defineTheme).toHaveBeenCalledWith(
+      DBML_EDITOR_THEME,
+      expect.objectContaining({
+        base: "vs-dark",
+        colors: expect.objectContaining({
+          "editorLineNumber.dimmedForeground": "#94A3B8",
+        }),
+      }),
+    );
     expect(runtime.model.getValue()).toBe(source);
     expect(runtime.model.lastEol).toBe(1);
     expect(runtime.createEditor.mock.calls[0]?.[1]).toMatchObject({
@@ -1006,6 +1019,7 @@ class FakeMonacoRuntime {
     return this.model;
   });
   readonly setModelMarkers = vi.fn();
+  readonly defineTheme = vi.fn();
   readonly editor = {
     commands: new Map<number, () => void>(),
     addCommand: vi.fn((keybinding: number, command: () => void) => {
@@ -1044,6 +1058,7 @@ class FakeMonacoRuntime {
       getModel: vi.fn(() => null),
       createModel: this.createModel,
       create: this.createEditor,
+      defineTheme: this.defineTheme,
       setModelMarkers: this.setModelMarkers,
     },
   } as unknown as MonacoRuntime;
