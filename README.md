@@ -55,6 +55,24 @@ latency는 production Chrome에서 다음 명령으로 재검증한다.
 pnpm test:perf
 ```
 
+`linux/amd64`, `linux/arm64` release image의 OCI metadata, non-root runtime, native SQLite와 resource worker는
+publish 없이 다음 명령으로 재검증한다.
+
+```sh
+pnpm test:release
+```
+
+Stable release image는 `ghcr.io/hojooo/er-diagram:<version>`으로 게시한다. 운영 배포는 GitHub Release가 기록한
+immutable digest를 우선한다.
+
+```sh
+docker pull ghcr.io/hojooo/er-diagram:1.0.0
+docker pull ghcr.io/hojooo/er-diagram@sha256:<release-digest>
+```
+
+Tag publish, 최초 GHCR Public 전환과 replay 절차는 [GHCR release runbook](docs/operations/release.md)을 따른다.
+실제 P0 tag는 M4-010·M4-011과 `P0-RELEASE` gate 전에는 생성하지 않는다.
+
 ## 개발과 검증
 
 ```sh
@@ -116,6 +134,7 @@ docs/
 - [ADR 0012: Production lifecycle, SQLite volume ownership와 offline runtime](docs/adr/0012-production-lifecycle-and-offline-runtime.md)
 - [ADR 0013: Core-flow accessibility와 keyboard navigation](docs/adr/0013-core-flow-accessibility.md)
 - [ADR 0014: Large ERD performance acceptance](docs/adr/0014-large-erd-performance-acceptance.md)
+- [ADR 0015: Immutable multi-architecture GHCR release](docs/adr/0015-multi-architecture-ghcr-release.md)
 
 운영 backup, restore dry-run/apply와 pre-migration 절차는
 [SQLite volume backup·restore runbook](docs/operations/backup-restore.md)을 따른다.
@@ -123,6 +142,8 @@ Container build, localhost Compose와 named-volume 운영은
 [Container runbook](docs/operations/container.md)을 따른다.
 Core flow의 manual keyboard evidence는
 [Accessibility checklist](docs/operations/accessibility-checklist.md)를 따른다.
+GHCR dry run, tag publish와 digest deployment는
+[GHCR release runbook](docs/operations/release.md)을 따른다.
 
 ## License
 
