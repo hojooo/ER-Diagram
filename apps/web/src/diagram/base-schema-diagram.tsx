@@ -19,6 +19,7 @@ import {
   ReferenceDiagramEdgeComponent,
   TableDiagramNodeComponent,
 } from "./diagram-components.js";
+import { deriveInteractiveLayout } from "./interactive-layout.js";
 import { requestWorkerLayout } from "./layout-worker-client.js";
 import {
   createDiagramProjection,
@@ -42,7 +43,7 @@ const nodeTypes = {
 } satisfies NodeTypes;
 const edgeTypes = { reference: ReferenceDiagramEdgeComponent } satisfies EdgeTypes;
 
-type LayoutStatus = "LAYING_OUT" | "READY" | "ERROR";
+type LayoutStatus = "LAYING_OUT" | "SETTLING" | "READY" | "ERROR";
 const EMPTY_LAYOUT_POSITIONS = {} as const;
 
 export function BaseSchemaDiagram({
@@ -79,9 +80,13 @@ export function BaseSchemaDiagram({
     () => listDiagramViews(graph).find((view) => view.key === viewKey)?.label ?? "Global",
     [graph, viewKey],
   );
-  const [displayProjection, setDisplayProjection] = useState(projection);
+  const [displayProjection, setDisplayProjection] = useState(() =>
+    layoutRequest
+      ? projection
+      : deriveInteractiveLayout(projection, { savedPositions: layoutPositions }),
+  );
   const [layoutStatus, setLayoutStatus] = useState<LayoutStatus>(
-    projection.nodes.length === 0 ? "READY" : "LAYING_OUT",
+    projection.nodes.length === 0 ? "READY" : layoutRequest ? "LAYING_OUT" : "SETTLING",
   );
   const [settledLayoutRequestId, setSettledLayoutRequestId] = useState<string | null>(null);
   const [layoutGeneration, setLayoutGeneration] = useState(0);
@@ -90,7 +95,9 @@ export function BaseSchemaDiagram({
   >();
   const selection = useStore(selectionStore, (state) => state.selection);
   const requestGenerationRef = useRef(0);
-  const layoutPositionsRef = useRef(layoutPositions);
+  const stableProjectionRef = useRef<DiagramProjection | null>(
+    layoutRequest ? null : displayProjection,
+  );
   const activeLayoutRequestRef = useRef("");
   const fittedLayoutRequestRef = useRef<string | null>(null);
   const focusedRequestRef = useRef<number | null>(null);
@@ -100,46 +107,56 @@ export function BaseSchemaDiagram({
   );
 
   useEffect(() => {
-    layoutPositionsRef.current = layoutPositions;
-    if (layoutRequest) return;
-    setDisplayProjection((current) => applySavedPositions(current, layoutPositions));
-  }, [layoutPositions, layoutRequest]);
-
-  useEffect(() => {
     requestGenerationRef.current += 1;
     const requestId = `${graph.schemaHash}:${layoutGeneration}:${requestGenerationRef.current}`;
     activeLayoutRequestRef.current = requestId;
-    setDisplayProjection(
-      layoutRequest ? projection : applySavedPositions(projection, layoutPositionsRef.current),
-    );
     setSettledLayoutRequestId(null);
 
     if (projection.nodes.length === 0) {
+      const emptyProjection = deriveInteractiveLayout(projection);
+      setDisplayProjection(emptyProjection);
+      if (!layoutRequest) stableProjectionRef.current = emptyProjection;
       setLayoutStatus("READY");
       setSettledLayoutRequestId(requestId);
       return;
     }
 
+    if (!layoutRequest) {
+      setDisplayProjection(
+        deriveInteractiveLayout(projection, {
+          savedPositions: layoutPositions,
+          previousProjection: stableProjectionRef.current,
+        }),
+      );
+      setLayoutStatus("SETTLING");
+      setSettledLayoutRequestId(requestId);
+      return;
+    }
+
+    setDisplayProjection(projection);
     setLayoutStatus("LAYING_OUT");
     void requestLayout(projection).then(
       (laidOut) => {
         if (activeLayoutRequestRef.current !== requestId) return;
-        setDisplayProjection(
-          layoutRequest ? laidOut : applySavedPositions(laidOut, layoutPositionsRef.current),
-        );
-        setLayoutStatus("READY");
+        setDisplayProjection(laidOut);
+        setLayoutStatus("SETTLING");
         setSettledLayoutRequestId(requestId);
       },
       () => {
         if (activeLayoutRequestRef.current !== requestId) return;
-        setDisplayProjection(
-          layoutRequest ? projection : applySavedPositions(projection, layoutPositionsRef.current),
-        );
+        setDisplayProjection(projection);
         setLayoutStatus("ERROR");
         setSettledLayoutRequestId(requestId);
       },
     );
-  }, [graph.schemaHash, layoutGeneration, layoutRequest, projection, requestLayout]);
+  }, [
+    graph.schemaHash,
+    layoutGeneration,
+    layoutPositions,
+    layoutRequest,
+    projection,
+    requestLayout,
+  ]);
 
   useEffect(() => {
     if (
@@ -153,31 +170,29 @@ export function BaseSchemaDiagram({
     if (fittedLayoutRequestRef.current === settledLayoutRequestId) return;
     fittedLayoutRequestRef.current = settledLayoutRequestId;
     const animationFrame = requestAnimationFrame(() => {
-      if (!layoutRequest && layoutViewport) {
-        void Promise.resolve(flowInstance.setViewport(layoutViewport)).then(() => {
-          onRenderedLayoutReady?.(
-            projectionPositions(displayProjection),
-            flowInstance.getViewport(),
-          );
-        });
-        return;
-      }
-      void Promise.resolve(flowInstance.fitView({ padding: 0.15 })).then(() => {
+      const finishRenderedLayout = () => {
+        if (activeLayoutRequestRef.current !== settledLayoutRequestId) return;
         if (layoutRequest) {
+          const succeeded = layoutStatus !== "ERROR";
+          if (succeeded) setLayoutStatus("READY");
           onLayoutRequestReady?.({
             requestId: layoutRequest.requestId,
             mode: layoutRequest.mode,
-            succeeded: layoutStatus === "READY",
+            succeeded,
             positions: projectionPositions(displayProjection),
             viewport: flowInstance.getViewport(),
           });
-        } else {
-          onRenderedLayoutReady?.(
-            projectionPositions(displayProjection),
-            flowInstance.getViewport(),
-          );
+          return;
         }
-      });
+        stableProjectionRef.current = displayProjection;
+        setLayoutStatus("READY");
+        onRenderedLayoutReady?.(projectionPositions(displayProjection), flowInstance.getViewport());
+      };
+      if (!layoutRequest && layoutViewport) {
+        void Promise.resolve(flowInstance.setViewport(layoutViewport)).then(finishRenderedLayout);
+        return;
+      }
+      void Promise.resolve(flowInstance.fitView({ padding: 0.15 })).then(finishRenderedLayout);
     });
     return () => cancelAnimationFrame(animationFrame);
   }, [
@@ -298,9 +313,11 @@ export function BaseSchemaDiagram({
       <p className="sr-only" aria-live="polite" data-testid="base-diagram-layout-status">
         {layoutStatus === "LAYING_OUT"
           ? "Laying out diagram"
-          : layoutStatus === "READY"
-            ? "Diagram layout ready"
-            : "Diagram layout failed; fallback positions are shown"}
+          : layoutStatus === "SETTLING"
+            ? "Preparing diagram viewport"
+            : layoutStatus === "READY"
+              ? "Diagram layout ready"
+              : "Diagram layout failed; fallback positions are shown"}
       </p>
       {layoutStatus === "ERROR" ? (
         <div
@@ -391,19 +408,6 @@ export function BaseSchemaDiagram({
       </DiagramInteractionContext.Provider>
     </div>
   );
-}
-
-function applySavedPositions(
-  projection: DiagramProjection,
-  positions: Readonly<Record<string, { readonly x: number; readonly y: number }>>,
-): DiagramProjection {
-  return {
-    ...projection,
-    nodes: projection.nodes.map((node) => {
-      const position = positions[node.id];
-      return position ? { ...node, position: { ...position } } : node;
-    }),
-  };
 }
 
 function projectionPositions(
