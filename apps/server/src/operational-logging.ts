@@ -24,7 +24,8 @@ export type HttpOperation =
   | "SQL_IMPORT_PREVIEW"
   | "SQL_IMPORT_STANDALONE_PREVIEW"
   | "UNCLASSIFIED_ROUTE"
-  | "VISUAL_COMMAND_APPLY";
+  | "VISUAL_COMMAND_APPLY"
+  | "WEB_STATIC";
 
 export interface HttpCompletionOperationalLog {
   readonly logVersion: 1;
@@ -79,6 +80,7 @@ export interface OperationalLogSink {
 interface RequestLogContext {
   errorCode?: string;
   diagnosticCount?: number;
+  operation?: HttpOperation;
 }
 
 const requestContexts = new WeakMap<FastifyRequest, RequestLogContext>();
@@ -111,7 +113,7 @@ export function registerOperationalLogging(
         event: "HTTP_REQUEST_COMPLETED",
         timestamp: utcTimestamp(),
         correlationId: request.id,
-        operation: resolveOperation(request),
+        operation: context?.operation ?? resolveOperation(request),
         method: safeMethod(request.method),
         statusCode: reply.statusCode,
         latencyMs: safeLatency(reply.elapsedTime),
@@ -146,16 +148,35 @@ export function recordOperationalError(
   errorCode: string,
   diagnosticCount?: number,
 ): void {
+  const current = requestContexts.get(request);
   requestContexts.set(request, {
+    ...(current?.operation ? { operation: current.operation } : {}),
     errorCode: safeErrorCode(errorCode),
     ...(diagnosticCount === undefined ? {} : { diagnosticCount: safeCount(diagnosticCount) }),
+  });
+}
+
+export function recordStaticWebOperation(request: FastifyRequest): void {
+  const current = requestContexts.get(request);
+  requestContexts.set(request, {
+    ...(current ?? {}),
+    operation: "WEB_STATIC",
   });
 }
 
 function resolveOperation(request: FastifyRequest): HttpOperation {
   const route = request.routeOptions.url;
   if (route === undefined) return "ROUTE_NOT_FOUND";
-  return OPERATIONS.get(`${request.method} ${route}`) ?? "UNCLASSIFIED_ROUTE";
+  const knownOperation = OPERATIONS.get(`${request.method} ${route}`);
+  if (knownOperation) return knownOperation;
+  if (
+    route === "/*" &&
+    (request.method === "GET" || request.method === "HEAD") &&
+    !isReservedServerUrl(request.url)
+  ) {
+    return "WEB_STATIC";
+  }
+  return route === "/*" ? "ROUTE_NOT_FOUND" : "UNCLASSIFIED_ROUTE";
 }
 
 const OPERATIONS = new Map<string, HttpOperation>([
@@ -179,6 +200,16 @@ const OPERATIONS = new Map<string, HttpOperation>([
   ["POST /api/v1/projects/:projectId/bundle-export", "PROJECT_BUNDLE_EXPORT"],
   ["POST /api/v1/project-bundles/import", "PROJECT_BUNDLE_IMPORT"],
 ]);
+
+function isReservedServerUrl(url: string): boolean {
+  const pathname = url.split("?", 1)[0] ?? "/";
+  return (
+    pathname === "/api" ||
+    pathname.startsWith("/api/") ||
+    pathname === "/health" ||
+    pathname.startsWith("/health/")
+  );
+}
 
 function safeMethod(method: string): HttpCompletionOperationalLog["method"] {
   switch (method) {

@@ -1,0 +1,53 @@
+# syntax=docker/dockerfile:1.7
+
+ARG NODE_IMAGE=node:24.14.0-bookworm-slim@sha256:d8e448a56fc63242f70026718378bd4b00f8c82e78d20eefb199224a4d8e33d8
+
+FROM ${NODE_IMAGE} AS builder
+
+ENV PNPM_HOME=/pnpm
+ENV PATH=/pnpm:${PATH}
+WORKDIR /workspace
+
+RUN apt-get update && \
+    apt-get install --yes --no-install-recommends g++ make python3 && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN corepack enable && corepack prepare pnpm@10.32.1 --activate
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY apps/server/package.json apps/server/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY packages/contracts/package.json packages/contracts/package.json
+COPY packages/core/package.json packages/core/package.json
+COPY packages/source-transform/package.json packages/source-transform/package.json
+COPY packages/storage-sqlite/package.json packages/storage-sqlite/package.json
+COPY packages/test-fixtures/package.json packages/test-fixtures/package.json
+
+RUN --mount=type=cache,id=er-diagram-pnpm-store,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store && \
+    pnpm install --frozen-lockfile
+
+COPY . .
+
+RUN pnpm build
+RUN --mount=type=cache,id=er-diagram-pnpm-store,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store && \
+    pnpm --filter @er-diagram/server deploy --legacy --prod /opt/er-diagram/server
+
+FROM ${NODE_IMAGE} AS runtime
+
+ENV NODE_ENV=production
+WORKDIR /app/server
+
+COPY --from=builder /opt/er-diagram/server /app/server
+COPY --from=builder /workspace/apps/web/dist /app/web
+COPY --from=builder /workspace/LICENSE /app/LICENSE
+COPY --from=builder /workspace/NOTICE /app/NOTICE
+COPY --from=builder /workspace/THIRD_PARTY_NOTICES.md /app/THIRD_PARTY_NOTICES.md
+
+RUN install -d -m 0700 -o node -g node /data
+
+USER node
+EXPOSE 8080
+
+CMD ["node", "dist/production-entrypoint.js"]

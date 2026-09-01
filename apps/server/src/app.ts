@@ -6,8 +6,8 @@ import {
 } from "@er-diagram/contracts";
 import type {
   LayoutApplication,
-  ProjectBundleApplication,
   ProjectApplication,
+  ProjectBundleApplication,
   SqlExportApplication,
   SqlImportApplication,
   VisualCommandApplication,
@@ -21,8 +21,8 @@ import {
   type OperationalLogSink,
   registerOperationalLogging,
 } from "./operational-logging.js";
-import { registerProjectRoutes } from "./project-routes.js";
 import { registerProjectBundleRoutes } from "./project-bundle-routes.js";
+import { registerProjectRoutes } from "./project-routes.js";
 import {
   DEFAULT_SERVER_RESOURCE_LIMITS,
   parseServerResourceLimits,
@@ -32,6 +32,7 @@ import {
 import { registerSecurityHeaders } from "./security-headers.js";
 import { registerSqlExportRoutes } from "./sql-export-routes.js";
 import { registerSqlImportRoutes } from "./sql-import-routes.js";
+import { registerStaticWeb, type StaticWebOptions } from "./static-web.js";
 import { registerVisualCommandRoutes } from "./visual-command-routes.js";
 
 export interface CreateServerOptions {
@@ -44,6 +45,7 @@ export interface CreateServerOptions {
   readonly generateCorrelationId?: () => string;
   readonly operationalLogSink?: OperationalLogSink;
   readonly resourceLimits?: ServerResourceLimits;
+  readonly staticWeb?: StaticWebOptions;
 }
 
 export function createServer(options: CreateServerOptions): FastifyInstance {
@@ -65,7 +67,8 @@ export function createServer(options: CreateServerOptions): FastifyInstance {
     reply.header("x-correlation-id", request.id);
   });
 
-  registerHttpErrorHandlers(server);
+  if (options.staticWeb) registerStaticWeb(server, options.staticWeb);
+  registerHttpErrorHandlers(server, options.staticWeb);
 
   server.get("/health/live", async () => ({ status: "ok" }));
   server.get("/api/v1/runtime-config", async (_request, reply) => {

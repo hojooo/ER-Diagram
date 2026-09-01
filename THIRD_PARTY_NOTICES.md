@@ -14,6 +14,7 @@ effect and must be retained when that package is redistributed.
 | `@dbml/core` | `9.1.1` | `Apache-2.0` | `Apache-2.0` | [source](https://github.com/holistics/dbml/tree/master/packages/dbml-core) |
 | `@dbml/parse` | `9.1.1` | `Apache-2.0` | `Apache-2.0` | [source](https://github.com/holistics/dbml/tree/master/packages/dbml-parse) |
 | `@fastify/helmet` | `13.0.0` | `MIT` | `MIT` | [source](https://github.com/fastify/fastify-helmet) |
+| `@fastify/static` | `10.1.3` | `MIT` | `MIT` | [source](https://github.com/fastify/fastify-static) |
 | `@playwright/test` | `1.62.1` | `Apache-2.0` | `Apache-2.0` | [source](https://github.com/microsoft/playwright) |
 | `@radix-ui/react-dialog` | `1.1.23` | `MIT` | `MIT` | [source](https://github.com/radix-ui/primitives/tree/main/packages/react/dialog) |
 | `@tailwindcss/vite` | `4.3.3` | `MIT` | `MIT` | [source](https://github.com/tailwindlabs/tailwindcss/tree/main/packages/@tailwindcss-vite) |

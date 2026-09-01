@@ -18,7 +18,9 @@ const requiredFiles = [
   "docs/adr/0008-web-and-archive-security-boundaries.md",
   "docs/adr/0009-portable-project-bundle.md",
   "docs/adr/0010-sqlite-volume-recovery.md",
+  "docs/adr/0011-container-packaging.md",
   "docs/operations/backup-restore.md",
+  "docs/operations/container.md",
 ];
 const forbiddenMarkers = /PROPOSED|OPEN-|IMPLEMENTATION_BLOCKER/u;
 const ineffectivePnpmTestFilter =

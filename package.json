@@ -26,6 +26,7 @@
     "storage:migrate": "pnpm build:resource-workers && node apps/server/dist/volume-recovery-cli.js migrate",
     "storage:restore": "pnpm build:resource-workers && node apps/server/dist/volume-recovery-cli.js restore",
     "test": "vitest run",
+    "test:container": "node scripts/test-container.mjs",
     "test:e2e": "pnpm --filter @er-diagram/contracts build && pnpm --filter @er-diagram/core build && pnpm --filter @er-diagram/source-transform build && pnpm --filter @er-diagram/test-fixtures build && playwright test",
     "test:e2e:security": "pnpm build:resource-workers && playwright test --config playwright.security.config.ts",
     "test:integration": "pnpm build:resource-workers && vitest run --config vitest.integration.config.ts",

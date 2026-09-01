@@ -23,6 +23,16 @@ P0는 database 연결, SQL 실행, cross-dialect export, 인증, 실시간 공�
 - pnpm 10
 - Docker 또는 OrbStack은 container 검증 시 선택 사용
 
+## Container quickstart
+
+```sh
+docker compose up --build -d
+```
+
+Browser에서 `http://127.0.0.1:8080`을 연다. 기본 구성은 Web과 API를 같은 Fastify process에서 제공하고 SQLite를
+named volume에 저장하며 host에는 loopback으로만 공개한다. 운영·backup·optional bind mount 절차는
+[Container runbook](docs/operations/container.md)을 따른다.
+
 ## 개발과 검증
 
 ```sh
@@ -80,9 +90,12 @@ docs/
 - [ADR 0008: Web CSP, bounded ZIP과 redacted logging](docs/adr/0008-web-and-archive-security-boundaries.md)
 - [ADR 0009: Portable project bundle v1과 atomic re-key import](docs/adr/0009-portable-project-bundle.md)
 - [ADR 0010: SQLite whole-volume snapshot과 plan-hash recovery](docs/adr/0010-sqlite-volume-recovery.md)
+- [ADR 0011: Node 24 non-root container와 same-origin Web packaging](docs/adr/0011-container-packaging.md)
 
 운영 backup, restore dry-run/apply와 pre-migration 절차는
 [SQLite volume backup·restore runbook](docs/operations/backup-restore.md)을 따른다.
+Container build, localhost Compose와 named-volume 운영은
+[Container runbook](docs/operations/container.md)을 따른다.
 
 ## License
 
