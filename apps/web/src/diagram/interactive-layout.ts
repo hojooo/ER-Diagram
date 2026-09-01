@@ -127,17 +127,27 @@ function reuseStableProjectionElements(
   if (!previousProjection) return projection;
   const previousNodeById = new Map(previousProjection.nodes.map((node) => [node.id, node]));
   const previousEdgeById = new Map(previousProjection.edges.map((edge) => [edge.id, edge]));
+  const nodes = projection.nodes.map((node) => {
+    const previous = previousNodeById.get(node.id);
+    return previous && sameNode(previous, node) ? previous : node;
+  });
+  const edges = projection.edges.map((edge) => {
+    const previous = previousEdgeById.get(edge.id);
+    return previous && sameEdge(previous, edge) ? previous : edge;
+  });
   return {
     ...projection,
-    nodes: projection.nodes.map((node) => {
-      const previous = previousNodeById.get(node.id);
-      return previous && sameNode(previous, node) ? previous : node;
-    }),
-    edges: projection.edges.map((edge) => {
-      const previous = previousEdgeById.get(edge.id);
-      return previous && sameEdge(previous, edge) ? previous : edge;
-    }),
+    // React Flow treats a new collection as a graph update even when every element is the same.
+    // Keep the collection identity too when a view changes only its semantic label (for example,
+    // Global -> a source-defined full-schema view) so the transition does not re-adopt hundreds
+    // of unchanged nodes and edges.
+    nodes: sameElementSequence(nodes, previousProjection.nodes) ? previousProjection.nodes : nodes,
+    edges: sameElementSequence(edges, previousProjection.edges) ? previousProjection.edges : edges,
   };
+}
+
+function sameElementSequence<T>(left: readonly T[], right: readonly T[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function sameNode(left: SchemaDiagramNode, right: SchemaDiagramNode): boolean {

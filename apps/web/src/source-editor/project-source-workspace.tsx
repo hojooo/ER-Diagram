@@ -321,7 +321,7 @@ export function ProjectSourceWorkspace({
       }
       viewTransitionGenerationRef.current += 1;
       const generation = viewTransitionGenerationRef.current;
-      void controller.hydrate(viewKey, defaultLayout).then(() => {
+      void controller.hydrate(viewKey, defaultLayout, { publishLoading: false }).then(() => {
         if (viewTransitionGenerationRef.current !== generation) return;
         setActiveViewKey(viewKey);
       });

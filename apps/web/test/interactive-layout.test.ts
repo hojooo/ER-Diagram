@@ -84,6 +84,8 @@ describe("deterministic interactive diagram layout", () => {
     );
 
     expect(next.nodes[0]).toBe(previous.nodes[0]);
+    expect(next.nodes).toBe(previous.nodes);
+    expect(next.edges).toBe(previous.edges);
 
     const changed = diagram([table(tableId)]);
     if (changed.nodes[0]?.type !== "table") throw new Error("Expected a table node.");
