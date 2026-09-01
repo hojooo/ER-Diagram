@@ -1137,15 +1137,28 @@ P0 대표 fixture는 약 200 KB, 143 tables, 573 refs, 15 groups, 7 views다.
 
 ### 16.3 접근성·사용성
 
+- P0 baseline은 WCAG 2.2 AA이며 자동화 가능한 범위는 axe의 WCAG 2.0·2.1·2.2 A/AA violation
+  0건으로 fail closed한다. Selector blanket exclusion, rule disable과 violation snapshot 승인은 허용하지 않는다.
+- 모든 정상·loading·error route는 하나의 main landmark와 논리적인 `h1`을 제공한다. 첫 keyboard focus에는
+  skip link를 표시하고 client-side route 전환 뒤 document title과 page heading을 동기화한다.
 - source editor와 주요 command는 keyboard로 사용할 수 있어야 한다.
 - canvas 외에 outline/table list를 제공해 시각적 graph만으로 탐색을 강제하지 않는다.
+- 대형 graph의 모든 React Flow node·edge를 tab stop으로 만들지 않는다. Table·column·reference·group 선택과
+  source navigation은 outline을, mutation은 inspector를 canonical keyboard 대체 경로로 사용한다.
 - color만으로 PK/FK, error, group을 구분하지 않는다.
 - diagnostics와 form control은 label·focus order를 제공한다.
+- Inspector toolbar는 roving focus와 Arrow/Home/End를, current-view search는 input focus와 active descendant,
+  Enter·Escape를 제공한다. Dialog는 focus trap, Escape, trigger focus return과 destructive Cancel-first focus를
+  제공한다.
 - destructive visual command는 대상과 영향 ref를 확인한 뒤 실행한다.
 - Undo·redo button은 disabled state, stack depth와 진행·오류 상태를 보조 기술에 전달하고 결과를
   `aria-live`로 알린다.
 - Editor·diagram shortcut은 revision history를 사용하되 inspector의 form field와 restore dialog에서는
   native text undo와 안전한 Cancel-first focus를 보존한다.
+- 본질적인 2D canvas를 제외한 core controls는 200% zoom과 narrow viewport에서 action이나 content 손실 없이
+  reflow하고 focus indicator clipping을 만들지 않는다.
+- Axe는 전체 WCAG 적합성 인증으로 표현하지 않는다. Current stable Chromium의 versioned manual keyboard
+  checklist가 함께 PASS한 뒤에만 accessibility gate를 완료한다.
 
 ### 16.4 호환성
 
@@ -1516,6 +1529,7 @@ P0 release는 다음 조건을 모두 충족해야 한다.
 - OCI image, compose, healthcheck
 - offline asset packaging
 - upgrade migration
+- WCAG A/AA 자동 검사와 manual keyboard acceptance
 
 종료 조건: release Gate A~F 통과.
 

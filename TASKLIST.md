@@ -26,7 +26,7 @@
 | Contract | Zod 4.4.3 |
 | Client state | TanStack Query 5.102.4, Zustand 5.0.15 |
 | UI | Tailwind CSS 4.3.3, Radix Dialog 1.1.23, 필요한 접근성 widget만 Radix primitive 사용 |
-| Test | Vitest 4.1.11, React Testing Library 16.3.2, Playwright 1.62.1 |
+| Test | Vitest 4.1.11, React Testing Library 16.3.2, Playwright 1.62.1, `@axe-core/playwright` 4.13.0 |
 | P1 SQL AST | node-sql-parser 5.4.0 |
 | Quality | Biome format/lint, strict TypeScript, dependency-cruiser architecture check |
 
@@ -66,7 +66,7 @@
 | Zod 4.4.3 | HTTP, worker message, portable bundle, `VisualCommand`처럼 신뢰 경계를 넘는 입력을 runtime에서 검증하면서 TypeScript 타입을 함께 유지한다. | Zod parse 성공은 DBML reparse, semantic diff, 권한 또는 revision invariant 성공을 의미하지 않는다. domain 검증은 core/application에 남긴다. |
 | TanStack Query 5.102.4 + Zustand 5.0.15 | server project/revision/layout cache와 editor·selection·viewport·undo 같은 session UI state를 분리해 서로 다른 수명주기를 표현한다. | 동일 데이터를 두 store에 중복 정본화하지 않는다. TanStack Query는 server state, Zustand는 ephemeral client state로 사용하며 canonical source는 server revision에 둔다. |
 | Tailwind CSS 4.3.3 + Radix Dialog 1.1.23 | 초기 design token과 responsive layout을 빠르게 일관화하고, destructive confirmation과 form dialog의 focus trap·Escape·focus return만 검증된 접근성 primitive에 맡긴다. | Radix를 전면 component framework로 사용하지 않는다. semantic HTML과 keyboard flow를 우선하고 styling만으로 접근성을 충족했다고 간주하지 않는다. |
-| Vitest 4.1.11 + React Testing Library 16.3.2 + Playwright 1.62.1 | Vite/TypeScript와 같은 module 환경에서 parser·use case unit test, 사용자 관점 component test, 실제 browser E2E를 계층별로 구성한다. | mock interaction count보다 source·revision·layout의 관찰 가능한 결과를 검증한다. SQLite restart, container, backup/restore, performance는 browser unit test와 분리된 acceptance gate로 둔다. |
+| Vitest 4.1.11 + React Testing Library 16.3.2 + Playwright 1.62.1 + `@axe-core/playwright` 4.13.0 | Vite/TypeScript와 같은 module 환경에서 parser·use case unit test, 사용자 관점 component test, 실제 browser E2E와 WCAG A/AA 자동 검사를 계층별로 구성한다. | Axe가 탐지한 violation 0건은 자동화 가능한 회귀 증거이며 전체 WCAG 인증이 아니다. SQLite restart, container, backup/restore, manual keyboard와 performance는 별도 acceptance evidence로 둔다. |
 | node-sql-parser 5.4.0 | P1의 PostgreSQL·MySQL `SELECT`를 실행하지 않고 AST로 변환해 table-level lineage 후보를 추출할 수 있다. | P1 전용 adapter에 격리하고 AST를 core 밖으로 노출하지 않는다. 지원하지 않는 syntax와 ambiguity는 확정 edge가 아니라 diagnostic으로 반환하며 SQL 실행 기능을 추가하지 않는다. |
 | Biome + strict TypeScript + dependency-cruiser | format/lint/type error를 일관되게 검사하고 Fastify, React, SQLite가 framework-free package로 역류하는 것을 CI에서 차단한다. | 정적 검사는 behavior·source fidelity·runtime security 검증을 대체하지 않는다. architecture rule 변경은 ADR과 forbidden-dependency fixture를 함께 갱신한다. |
 
@@ -306,8 +306,10 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - readiness·trusted-proxy HSTS와 SIGTERM drain/flush/release 순서를 production runtime에 고정한다.
   - internal-only application network에서 SPA, parser/layout worker, autosave, restart와 crash recovery를 검증한다.
   - 검증: `pnpm test:runtime-lifecycle`
-- [ ] `M4-007` core-flow accessibility와 keyboard navigation
-  - 검증: Playwright axe + manual keyboard checklist
+- [x] `M4-007` core-flow accessibility와 keyboard navigation
+  - route focus·skip link, composite widget keyboard, outline-first diagram navigation과 native field undo를 보장한다.
+  - axe의 WCAG 2.0·2.1·2.2 A/AA violation 0건과 versioned manual keyboard evidence를 함께 요구한다.
+  - 검증: `pnpm test:accessibility`
 - [ ] `M4-008` parse/interactive/view switch/FPS performance acceptance
   - 검증: `pnpm test:perf`
 - [ ] `M4-009` tag-triggered amd64/arm64 GHCR release와 immutable digest
