@@ -137,6 +137,7 @@ export function ProjectSourceWorkspace({
   const proceededBlockedNavigationRef = useRef(false);
   const blockedNavigationReturnFocusRef = useRef<HTMLElement | null>(null);
   const focusRequestIdRef = useRef(0);
+  const viewTransitionGenerationRef = useRef(0);
   const layoutRequestIdRef = useRef(0);
   const previousGraphRef = useRef<SchemaGraph | null>(null);
   const skipNextClientRenameRecoveryRef = useRef(false);
@@ -193,13 +194,12 @@ export function ProjectSourceWorkspace({
     () => new Set(activeGraph?.groups.map((group) => group.key) ?? []),
     [activeGraph],
   );
-  const activeCollapsedGroupKeys = useMemo(
-    () =>
-      new Set(
-        activeLayout.collapsedGroupKeys.filter((groupKey) => availableGroupKeys.has(groupKey)),
-      ),
-    [activeLayout.collapsedGroupKeys, availableGroupKeys],
-  );
+  const activeCollapsedGroupKeys = useMemo(() => {
+    const collapsed = activeLayout.collapsedGroupKeys.filter((groupKey) =>
+      availableGroupKeys.has(groupKey),
+    );
+    return collapsed.length === 0 ? NO_COLLAPSED_GROUP_KEYS : new Set(collapsed);
+  }, [activeLayout.collapsedGroupKeys, availableGroupKeys]);
   const visibility = useMemo(
     () => (activeGraph ? createDiagramVisibility(activeGraph, resolvedViewKey) : null),
     [activeGraph, resolvedViewKey],
@@ -312,11 +312,21 @@ export function ProjectSourceWorkspace({
   const handleViewChange = useCallback(
     (viewKey: DiagramViewKey) => {
       if (layoutInteractionLocked) return;
-      setActiveViewKey(viewKey);
       setFocusRequest(null);
       setLayoutWorkflowError(null);
+      const controller = layoutSessionRef.current;
+      if (!controller) {
+        setActiveViewKey(viewKey);
+        return;
+      }
+      viewTransitionGenerationRef.current += 1;
+      const generation = viewTransitionGenerationRef.current;
+      void controller.hydrate(viewKey, defaultLayout).then(() => {
+        if (viewTransitionGenerationRef.current !== generation) return;
+        setActiveViewKey(viewKey);
+      });
     },
-    [layoutInteractionLocked],
+    [defaultLayout, layoutInteractionLocked],
   );
 
   const handleDetailLevelChange = useCallback(
@@ -464,6 +474,7 @@ export function ProjectSourceWorkspace({
 
   useEffect(() => {
     if (!projectId) return;
+    viewTransitionGenerationRef.current += 1;
     setActiveViewKey(GLOBAL_VIEW_KEY);
     setSearchQuery("");
     setFocusRequest(null);
@@ -1369,11 +1380,7 @@ function DiagramPanel({
               </div>
             }
           >
-            {layoutHydrating ? (
-              <div className="grid min-h-[32rem] place-items-center bg-slate-950 text-slate-300">
-                <p aria-live="polite">Loading layout…</p>
-              </div>
-            ) : layoutLoadFailed ? (
+            {layoutLoadFailed ? (
               <div className="grid min-h-[32rem] place-items-center bg-slate-950 p-6 text-center">
                 <div>
                   <p className="font-semibold text-red-100">Layout could not be loaded</p>
@@ -1403,6 +1410,7 @@ function DiagramPanel({
                 requestLayout={requestLayout}
                 layoutPositions={layoutPositions}
                 layoutViewport={layoutViewport}
+                layoutPending={layoutHydrating}
                 layoutRequest={layoutRequest}
                 interactionDisabled={
                   layoutBusy || layoutConflict !== null || visualInteractionDisabled

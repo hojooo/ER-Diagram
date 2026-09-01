@@ -89,6 +89,7 @@ test("persists per-view drag state and supports preview, reset, and explicit con
   const viewSelector = page.getByRole("combobox", { name: "Diagram view" });
   const detailSelector = page.getByRole("combobox", { name: "Detail level" });
   await viewSelector.selectOption({ label: "identity_only" });
+  await expect(viewSelector).not.toHaveValue("GLOBAL");
   const viewKey = await viewSelector.inputValue();
   await waitForDiagramLayout(page);
   await detailSelector.selectOption("NAME_ONLY");

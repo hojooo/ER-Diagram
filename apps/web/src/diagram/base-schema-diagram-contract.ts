@@ -24,6 +24,7 @@ export interface BaseSchemaDiagramProps {
   readonly requestLayout?: (projection: DiagramProjection) => Promise<DiagramProjection>;
   readonly layoutPositions?: Readonly<Record<SchemaElementKey, DiagramPosition>>;
   readonly layoutViewport?: DiagramViewport | null;
+  readonly layoutPending?: boolean;
   readonly layoutRequest?: DiagramLayoutRequest | null;
   readonly interactionDisabled?: boolean;
   readonly onPositionsCommit?: (

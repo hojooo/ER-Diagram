@@ -1,4 +1,4 @@
-import type { DiagramPosition } from "@er-diagram/contracts";
+import type { DiagramPosition, DiagramViewport } from "@er-diagram/contracts";
 
 import type {
   DiagramProjection,
@@ -33,6 +33,17 @@ interface GroupPlacement {
 export interface InteractiveLayoutOptions {
   readonly savedPositions?: Readonly<Record<string, DiagramPosition>>;
   readonly previousProjection?: DiagramProjection | null;
+}
+
+export interface InteractiveViewportSize {
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface InteractiveViewportOptions {
+  readonly padding?: number;
+  readonly minZoom?: number;
+  readonly maxZoom?: number;
 }
 
 /**
@@ -73,37 +84,140 @@ export function deriveInteractiveLayout(
 
   placeMissingRoots(projection.nodes, nodeById, rootPositions, rootSizes);
 
+  return reuseStableProjectionElements(
+    {
+      ...projection,
+      nodes: projection.nodes.map((node) => {
+        if (node.type === "group") {
+          const placement = groupPlacements.get(node.id);
+          const position = rootPositions.get(node.id);
+          if (!placement || !position)
+            throw new Error(`Missing interactive group layout: ${node.id}`);
+          return {
+            ...node,
+            position: { ...position },
+            style: {
+              ...node.style,
+              width: placement.size.width,
+              height: placement.size.height,
+            },
+          };
+        }
+
+        if (node.parentId && nodeById.has(node.parentId)) {
+          const position = groupPlacements.get(node.parentId)?.childPositions.get(node.id);
+          if (!position) throw new Error(`Missing interactive child layout: ${node.id}`);
+          return { ...node, position: { ...position } };
+        }
+
+        const position = rootPositions.get(node.id);
+        if (!position) throw new Error(`Missing interactive root layout: ${node.id}`);
+        return { ...node, position: { ...position } };
+      }),
+      edges: projection.edges.map((edge) => ({ ...edge, data: { ...edge.data } })),
+    },
+    options.previousProjection ?? null,
+  );
+}
+
+function reuseStableProjectionElements(
+  projection: DiagramProjection,
+  previousProjection: DiagramProjection | null,
+): DiagramProjection {
+  if (!previousProjection) return projection;
+  const previousNodeById = new Map(previousProjection.nodes.map((node) => [node.id, node]));
+  const previousEdgeById = new Map(previousProjection.edges.map((edge) => [edge.id, edge]));
   return {
     ...projection,
     nodes: projection.nodes.map((node) => {
-      if (node.type === "group") {
-        const placement = groupPlacements.get(node.id);
-        const position = rootPositions.get(node.id);
-        if (!placement || !position)
-          throw new Error(`Missing interactive group layout: ${node.id}`);
-        return {
-          ...node,
-          position: { ...position },
-          style: {
-            ...node.style,
-            width: placement.size.width,
-            height: placement.size.height,
-          },
-        };
-      }
-
-      if (node.parentId && nodeById.has(node.parentId)) {
-        const position = groupPlacements.get(node.parentId)?.childPositions.get(node.id);
-        if (!position) throw new Error(`Missing interactive child layout: ${node.id}`);
-        return { ...node, position: { ...position } };
-      }
-
-      const position = rootPositions.get(node.id);
-      if (!position) throw new Error(`Missing interactive root layout: ${node.id}`);
-      return { ...node, position: { ...position } };
+      const previous = previousNodeById.get(node.id);
+      return previous && sameNode(previous, node) ? previous : node;
     }),
-    edges: projection.edges.map((edge) => ({ ...edge, data: { ...edge.data } })),
+    edges: projection.edges.map((edge) => {
+      const previous = previousEdgeById.get(edge.id);
+      return previous && sameEdge(previous, edge) ? previous : edge;
+    }),
   };
+}
+
+function sameNode(left: SchemaDiagramNode, right: SchemaDiagramNode): boolean {
+  if (
+    left.type !== right.type ||
+    left.parentId !== right.parentId ||
+    left.extent !== right.extent ||
+    left.position.x !== right.position.x ||
+    left.position.y !== right.position.y ||
+    left.style?.width !== right.style?.width ||
+    left.style?.height !== right.style?.height ||
+    left.data.kind !== right.data.kind
+  ) {
+    return false;
+  }
+  if (left.type === "table" && right.type === "table") {
+    return (
+      left.data.tableKey === right.data.tableKey &&
+      left.data.schemaName === right.data.schemaName &&
+      left.data.name === right.data.name &&
+      left.data.lod === right.data.lod &&
+      sameColumns(left.data.columns, right.data.columns)
+    );
+  }
+  if (left.type !== "group" || right.type !== "group") return false;
+  return (
+    left.data.groupKey === right.data.groupKey &&
+    left.data.schemaName === right.data.schemaName &&
+    left.data.name === right.data.name &&
+    left.data.tableCount === right.data.tableCount &&
+    left.data.color === right.data.color &&
+    left.data.collapsed === right.data.collapsed &&
+    left.data.lod === right.data.lod &&
+    sameStrings(left.data.tableKeys, right.data.tableKeys)
+  );
+}
+
+function sameColumns(
+  left: TableDiagramNode["data"]["columns"],
+  right: TableDiagramNode["data"]["columns"],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((column, index) => {
+      const candidate = right[index];
+      return (
+        candidate !== undefined &&
+        column.key === candidate.key &&
+        column.name === candidate.name &&
+        column.type === candidate.type &&
+        column.primaryKey === candidate.primaryKey &&
+        column.foreignKey === candidate.foreignKey &&
+        column.partialName === candidate.partialName
+      );
+    })
+  );
+}
+
+function sameEdge(
+  left: DiagramProjection["edges"][number],
+  right: DiagramProjection["edges"][number],
+): boolean {
+  return (
+    left.source === right.source &&
+    left.target === right.target &&
+    left.label === right.label &&
+    left.ariaLabel === right.ariaLabel &&
+    left.selectable === right.selectable &&
+    left.data.aggregate === right.data.aggregate &&
+    left.data.count === right.data.count &&
+    left.data.referenceName === right.data.referenceName &&
+    left.data.inactive === right.data.inactive &&
+    left.data.sourceMultiplicity === right.data.sourceMultiplicity &&
+    left.data.targetMultiplicity === right.data.targetMultiplicity &&
+    sameStrings(left.data.referenceKeys, right.data.referenceKeys)
+  );
+}
+
+function sameStrings(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 export function collectAbsolutePositions(
@@ -134,6 +248,68 @@ export function collectAbsolutePositions(
 
   for (const node of projection.nodes) resolve(node);
   return result;
+}
+
+/**
+ * Fits the already-derived projection without waiting for React Flow to remeasure every node.
+ * The projection owns finite positions and dimensions, so the viewport is deterministic and can
+ * be applied directly while React Flow reconciles the visible node set.
+ */
+export function deriveInteractiveViewport(
+  projection: DiagramProjection,
+  size: InteractiveViewportSize,
+  options: InteractiveViewportOptions = {},
+): DiagramViewport | null {
+  if (
+    projection.nodes.length === 0 ||
+    !Number.isFinite(size.width) ||
+    !Number.isFinite(size.height) ||
+    size.width <= 0 ||
+    size.height <= 0
+  ) {
+    return null;
+  }
+  const padding = options.padding ?? 0.15;
+  const minZoom = options.minZoom ?? 0.15;
+  const maxZoom = options.maxZoom ?? 1.75;
+  if (
+    !Number.isFinite(padding) ||
+    padding < 0 ||
+    !Number.isFinite(minZoom) ||
+    minZoom <= 0 ||
+    !Number.isFinite(maxZoom) ||
+    maxZoom < minZoom
+  ) {
+    return null;
+  }
+
+  const absolutePositions = collectAbsolutePositions(projection);
+  let minimumX = Number.POSITIVE_INFINITY;
+  let minimumY = Number.POSITIVE_INFINITY;
+  let maximumX = Number.NEGATIVE_INFINITY;
+  let maximumY = Number.NEGATIVE_INFINITY;
+  for (const node of projection.nodes) {
+    const position = absolutePositions.get(node.id);
+    if (!position) return null;
+    const dimensions = nodeSize(node);
+    minimumX = Math.min(minimumX, position.x);
+    minimumY = Math.min(minimumY, position.y);
+    maximumX = Math.max(maximumX, position.x + dimensions.width);
+    maximumY = Math.max(maximumY, position.y + dimensions.height);
+  }
+  const boundsWidth = Math.max(1, maximumX - minimumX);
+  const boundsHeight = Math.max(1, maximumY - minimumY);
+  const paddedWidth = boundsWidth * (1 + padding * 2);
+  const paddedHeight = boundsHeight * (1 + padding * 2);
+  const zoom = Math.min(
+    maxZoom,
+    Math.max(minZoom, Math.min(size.width / paddedWidth, size.height / paddedHeight)),
+  );
+  return {
+    x: size.width / 2 - (minimumX + boundsWidth / 2) * zoom,
+    y: size.height / 2 - (minimumY + boundsHeight / 2) * zoom,
+    zoom,
+  };
 }
 
 function placeGroup(

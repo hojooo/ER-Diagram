@@ -134,6 +134,7 @@ vi.mock("@xyflow/react", async () => {
 });
 
 import { BaseSchemaDiagram } from "../src/diagram/base-schema-diagram.js";
+import { shouldShowDiagramEdgeLabels } from "../src/diagram/diagram-components.js";
 import { demoSchemaGraph } from "../src/diagram/demo-schema.js";
 import {
   createBaseDiagramProjection,
@@ -330,7 +331,10 @@ describe("diagram source navigation", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Focus public.accounts in diagram" }));
+    fireEvent.click(screen.getByText("public.accounts", { selector: "summary" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Focus public.accounts in diagram" }),
+    );
     expect(
       screen.getByRole("button", { name: "Focus public.accounts in diagram" }),
     ).toHaveAttribute("aria-current", "true");
@@ -387,6 +391,11 @@ describe("diagram source navigation", () => {
 });
 
 describe("base schema diagram canvas", () => {
+  it("keeps labels for focused diagrams and removes label DOM beyond the large-graph budget", () => {
+    expect(shouldShowDiagramEdgeLabels(100)).toBe(true);
+    expect(shouldShowDiagramEdgeLabels(101)).toBe(false);
+  });
+
   it("projects the selected view and LOD while keeping stable element identity", async () => {
     const identityView = demoSchemaGraph.views.find((view) => view.name === "identity_only");
     const identityGroup = demoSchemaGraph.groups.find((group) => group.name === "Identity");

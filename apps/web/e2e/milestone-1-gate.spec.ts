@@ -145,8 +145,10 @@ test("M1-GATE explores the fidelity workspace without source loss and recovers a
   await expect(page.getByText(/Showing last-valid revision 1/)).toBeVisible();
   await waitForLayoutReady(page);
   await expect(outline.getByText(GLOBAL_INVENTORY, { exact: true })).toBeVisible();
+  const firstTable = outline.locator("details").first();
+  await firstTable.locator("summary").click();
   await expect(
-    outline.locator('button[aria-label^="Open source for table at line"]').first(),
+    firstTable.locator('button[aria-label^="Open source for table at line"]'),
   ).toBeDisabled();
   expect(api.state.project.draftSource).toBe(INVALID_SOURCE);
   expect(api.state.project.draftHash).toBe(sha256FixtureSource(INVALID_SOURCE));

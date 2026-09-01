@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   collectAbsolutePositions,
   deriveInteractiveLayout,
+  deriveInteractiveViewport,
 } from "../src/diagram/interactive-layout.js";
 import type {
   DiagramProjection,
@@ -72,6 +73,39 @@ describe("deterministic interactive diagram layout", () => {
     expect(position(result, savedId)).toEqual({ x: 500, y: 600 });
     expect(position(result, missingId)).toEqual({ x: 0, y: 800 });
     expect(rootRectanglesOverlap(result)).toBe(false);
+  });
+
+  it("reuses unchanged node identities across view projections", () => {
+    const tableId = 'table:["public","shared"]';
+    const previous = deriveInteractiveLayout(diagram([table(tableId)]));
+    const next = deriveInteractiveLayout(
+      { ...diagram([table(tableId)]), viewKey: 'view:["public","focused"]' },
+      { previousProjection: previous },
+    );
+
+    expect(next.nodes[0]).toBe(previous.nodes[0]);
+
+    const changed = diagram([table(tableId)]);
+    if (changed.nodes[0]?.type !== "table") throw new Error("Expected a table node.");
+    changed.nodes[0].data.name = "renamed";
+    const changedResult = deriveInteractiveLayout(changed, { previousProjection: previous });
+    expect(changedResult.nodes[0]).not.toBe(previous.nodes[0]);
+  });
+
+  it("derives a deterministic viewport directly from compound projection bounds", () => {
+    const group = { ...groupNode('group:["public","domain"]'), position: { x: 100, y: 200 } };
+    const child = {
+      ...table('table:["public","member"]', group.id, 120),
+      position: { x: 40, y: 80 },
+    };
+    const projection = diagram([group, child]);
+
+    const first = deriveInteractiveViewport(projection, { width: 1_000, height: 500 });
+    const second = deriveInteractiveViewport(projection, { width: 1_000, height: 500 });
+
+    expect(second).toEqual(first);
+    expect(first).toEqual({ x: 27.5, y: -275, zoom: 1.75 });
+    expect(deriveInteractiveViewport(projection, { width: 0, height: 500 })).toBeNull();
   });
 });
 

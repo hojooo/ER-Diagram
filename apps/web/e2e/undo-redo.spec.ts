@@ -156,6 +156,7 @@ test("unifies source and visual revisions while keeping restore durable", async 
   await expect.poll(() => api.currentValidity()).toBe("INVALID");
   await expect(page.getByText(/Showing last-valid revision/)).toBeVisible({ timeout: 20_000 });
   expect(api.lastValidSource()).toBe(SOURCE_WITH_PHONE);
+  await openTableInOutline(page, "public.users");
   await expect(page.getByRole("region", { name: "Schema outline" })).toContainText("phone");
   const invalidRevisionNo = api.revisions[0]?.revisionNo;
   if (!invalidRevisionNo) throw new Error("Missing invalid revision.");
@@ -184,9 +185,10 @@ test("unifies source and visual revisions while keeping restore durable", async 
   await expect.poll(() => api.currentValidity()).toBe("INVALID");
   expect(api.lastValidSource()).toBe(SOURCE_WITH_PHONE);
   await expect(page.getByText(/Showing last-valid revision/)).toBeVisible({ timeout: 20_000 });
+  await history.getByRole("button", { name: "Close history" }).click();
+  await openTableInOutline(page, "public.users");
   await expect(page.getByRole("region", { name: "Schema outline" })).toContainText("phone");
   expect(api.revisions[0]?.origin).toBe("RESTORE");
-  await history.getByRole("button", { name: "Close history" }).click();
   await undo.click();
   await expect.poll(() => api.currentSource()).toBe(SOURCE_WITH_PHONE);
 
@@ -447,10 +449,15 @@ async function replaceEditorSource(
 }
 
 async function selectTableInOutline(page: Page, name: string): Promise<void> {
+  const details = await openTableInOutline(page, name);
+  await details.getByRole("button", { name: `Focus ${name} in diagram` }).click();
+}
+
+async function openTableInOutline(page: Page, name: string) {
   const outline = page.getByRole("region", { name: "Schema outline" });
   const details = outline.locator("details").filter({ hasText: name }).first();
   if (!(await details.getAttribute("open"))) await details.locator("summary").click();
-  await details.getByRole("button", { name: `Focus ${name} in diagram` }).click();
+  return details;
 }
 
 function layoutPositions(command: Record<string, unknown> | undefined) {

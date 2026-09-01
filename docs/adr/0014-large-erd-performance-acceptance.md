@@ -29,6 +29,14 @@ Derived position은 layout sidecar에 자동 저장하지 않으며 schema revis
 fit viewport 적용, drag·pan·zoom 활성화가 모두 끝난 뒤에만 표시한다. 그 이후 background ELK 결과로 node를
 이동하지 않는다.
 
+First-uncached view는 target layout hydration을 먼저 끝낸 뒤 projection과 viewport를 한 번에 commit한다.
+Rapid view 요청은 generation guard로 이전 hydration 결과를 폐기한다. Derived projection bounds에서 viewport를
+직접 계산해 React Flow의 전체 node 재측정을 기다리지 않으며, 동일한 node·edge는 이전 projection의 object
+identity를 재사용한다. 대형 outline은 heading과 inventory를 즉시 갱신하되 상세 목록은 전환이 500ms 안정된
+뒤 갱신한다. Relationship은 처음 50개를 표시하고 명시적 `Show all`로 확장한다. 100개를 초과하는 edge의
+path와 selection은 유지하되 겹쳐 읽을 수 없는 canvas label DOM은 생략하고 전체 이름·source navigation은
+canonical keyboard 경로인 Schema outline에서 계속 제공한다.
+
 ELK worker는 사용자가 명시한 Auto-layout Preview와 Reset에서만 실행한다. Preview의 generation guard,
 Apply·Cancel, timeout과 resource cap은 기존 durable layout 경계를 유지한다.
 
@@ -88,12 +96,12 @@ evidence와 architecture 결정을 동반해야 한다.
 
 | 항목 | Samples | min | median | p95 | max |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Parse (ms) | 20 | 433.20 | 451.90 | 495.10 | 690.60 |
-| Cold interactive (ms) | 20 | 1,271.55 | 1,339.47 | 1,362.20 | 1,372.97 |
-| View switch (ms) | 29 | 143.40 | 208.50 | 222.30 | 227.20 |
-| Drag frame interval (ms) | 600 | 16.50 | 16.70 | 16.80 | 16.80 |
-| Pan frame interval (ms) | 584 | 16.50 | 16.70 | 16.80 | 333.30 |
-| Zoom frame interval (ms) | 601 | 16.50 | 16.70 | 16.80 | 16.80 |
+| Parse (ms) | 20 | 431.20 | 447.10 | 463.20 | 464.40 |
+| Cold interactive (ms) | 20 | 870.90 | 1,112.20 | 1,180.30 | 1,193.40 |
+| View switch (ms) | 29 | 39.30 | 103.00 | 113.80 | 115.90 |
+| Drag frame interval (ms) | 600 | 16.50 | 16.70 | 16.70 | 16.80 |
+| Pan frame interval (ms) | 601 | 16.50 | 16.70 | 16.80 | 50.00 |
+| Zoom frame interval (ms) | 601 | 16.48 | 16.70 | 16.80 | 33.40 |
 
 Source input은 150 events에서 100 ms 초과 long task 0건이었고 view switch는 parser·ELK request와
 source/layout PUT 모두 0건이었다. Explicit Auto-layout은 ELK request 1건으로 검증했다.

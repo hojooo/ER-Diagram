@@ -1,5 +1,5 @@
 import type { ReferenceEdge, SchemaGraph, TableNode } from "@er-diagram/core";
-import { useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { useStore } from "zustand";
 
 import { createBaseDiagramProjection, formatMultiplicity } from "./projection.js";
@@ -7,16 +7,7 @@ import type { DiagramSelectionStore } from "./selection-store.js";
 import type { DiagramSelection } from "./source-navigation.js";
 import type { DiagramVisibility } from "./types.js";
 
-export function SchemaOutline({
-  graph,
-  visibility,
-  viewLabel,
-  collapsedGroupKeys,
-  selectionStore,
-  sourceNavigationEnabled,
-  onToggleGroup,
-  onNavigateSource,
-}: {
+interface SchemaOutlineProps {
   readonly graph: SchemaGraph;
   readonly visibility: DiagramVisibility;
   readonly viewLabel: string;
@@ -25,7 +16,72 @@ export function SchemaOutline({
   readonly sourceNavigationEnabled: boolean;
   readonly onToggleGroup: (groupKey: string) => void;
   readonly onNavigateSource: (selection: DiagramSelection) => void;
-}) {
+}
+
+const INITIAL_RELATIONSHIP_COUNT = 50;
+const LARGE_OUTLINE_ELEMENT_COUNT = 200;
+const LARGE_OUTLINE_STABILITY_DELAY_MS = 500;
+
+export function SchemaOutline({ visibility, viewLabel, ...contentProps }: SchemaOutlineProps) {
+  const [renderedVisibility, setRenderedVisibility] = useState(visibility);
+  const updating = renderedVisibility !== visibility;
+  useEffect(() => {
+    const large =
+      visibility.tableKeys.size + visibility.referenceKeys.size > LARGE_OUTLINE_ELEMENT_COUNT;
+    if (!large) {
+      setRenderedVisibility(visibility);
+      return;
+    }
+    const timer = window.setTimeout(
+      () => setRenderedVisibility(visibility),
+      LARGE_OUTLINE_STABILITY_DELAY_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [visibility]);
+  return (
+    <section
+      className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+      aria-label="Schema outline"
+      aria-busy={updating}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-semibold text-white">Schema outline · {viewLabel}</h2>
+        <span className="text-xs text-slate-400">
+          {formatInventory(
+            visibility.tableKeys.size,
+            visibility.groupKeys.size,
+            visibility.referenceKeys.size,
+          )}
+        </span>
+      </div>
+      <p className="mt-2 text-xs text-slate-400">
+        Focus an element in the diagram or use its line action to open the canonical source.
+      </p>
+      {updating ? (
+        <p className="mt-3 text-xs text-slate-400" role="status">
+          Updating outline details…
+        </p>
+      ) : null}
+      <div aria-hidden={updating || undefined} inert={updating || undefined}>
+        <SchemaOutlineContent
+          key={renderedVisibility.viewKey}
+          {...contentProps}
+          visibility={renderedVisibility}
+        />
+      </div>
+    </section>
+  );
+}
+
+const SchemaOutlineContent = memo(function SchemaOutlineContent({
+  graph,
+  visibility,
+  collapsedGroupKeys,
+  selectionStore,
+  sourceNavigationEnabled,
+  onToggleGroup,
+  onNavigateSource,
+}: Omit<SchemaOutlineProps, "viewLabel">) {
   const selection = useStore(selectionStore, (state) => state.selection);
   const projection = useMemo(() => createBaseDiagramProjection(graph), [graph]);
   const nodeByTableKey = useMemo(
@@ -51,11 +107,18 @@ export function SchemaOutline({
     () => graph.references.filter((reference) => visibility.referenceKeys.has(reference.key)),
     [graph.references, visibility.referenceKeys],
   );
-  const selectedTableDetailsRef = useRef<HTMLDetailsElement>(null);
+  const [showAllReferences, setShowAllReferences] = useState(false);
+  const renderedReferences = showAllReferences
+    ? visibleReferences
+    : visibleReferences.slice(0, INITIAL_RELATIONSHIP_COUNT);
+  const [openTableKeys, setOpenTableKeys] = useState<ReadonlySet<string>>(() => new Set());
 
   useEffect(() => {
-    if (!selection) return;
-    selectedTableDetailsRef.current?.setAttribute("open", "");
+    if (!selection || selection.tableKeys.length === 0) return;
+    setOpenTableKeys((current) => {
+      const missingKeys = selection.tableKeys.filter((tableKey) => !current.has(tableKey));
+      return missingKeys.length === 0 ? current : new Set([...current, ...missingKeys]);
+    });
   }, [selection]);
 
   const activate = (nextSelection: DiagramSelection): void => {
@@ -68,20 +131,7 @@ export function SchemaOutline({
   };
 
   return (
-    <section
-      className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
-      aria-label="Schema outline"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="font-semibold text-white">Schema outline · {viewLabel}</h2>
-        <span className="text-xs text-slate-400">
-          {formatInventory(visibleTables.length, visibleGroups.length, visibleReferences.length)}
-        </span>
-      </div>
-      <p className="mt-2 text-xs text-slate-400">
-        Focus an element in the diagram or use its line action to open the canonical source.
-      </p>
-
+    <>
       {visibleGroups.length > 0 ? (
         <div className="mt-5">
           <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
@@ -153,12 +203,23 @@ export function SchemaOutline({
             {visibleTables.map((table) => {
               const tableSelection = selectionForTable(table);
               const selectedTable = selection?.tableKeys.includes(table.key) ?? false;
+              const tableOpen = selectedTable || openTableKeys.has(table.key);
               const projectedTable = nodeByTableKey.get(table.key);
               return (
                 <li key={table.key}>
                   <details
-                    ref={selectedTable ? selectedTableDetailsRef : undefined}
+                    open={tableOpen}
                     className="rounded-lg border border-slate-700 bg-slate-950/60 p-3"
+                    onToggle={(event) => {
+                      const open = event.currentTarget.open;
+                      setOpenTableKeys((current) => {
+                        if (open === current.has(table.key)) return current;
+                        const next = new Set(current);
+                        if (open) next.add(table.key);
+                        else next.delete(table.key);
+                        return next;
+                      });
+                    }}
                   >
                     <summary className="cursor-pointer text-sm font-semibold text-slate-100">
                       {qualifiedTableName(table)}
@@ -166,64 +227,68 @@ export function SchemaOutline({
                         <span className="ml-2 text-xs text-cyan-300">Selected</span>
                       ) : null}
                     </summary>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <OutlineAction
-                        label={`Focus ${qualifiedTableName(table)} in diagram`}
-                        current={selection?.elementKey === table.key}
-                        onClick={() => activate(tableSelection)}
-                      >
-                        Diagram
-                      </OutlineAction>
-                      <SourceLineAction
-                        selection={tableSelection}
-                        graph={graph}
-                        enabled={sourceNavigationEnabled}
-                        onClick={navigate}
-                      />
-                    </div>
-                    <ol className="mt-3 space-y-1 border-l border-slate-700 pl-3">
-                      {table.columns.map((column) => {
-                        const columnSelection: DiagramSelection = {
-                          elementKey: column.key,
-                          kind: "column",
-                          tableKeys: [table.key],
-                        };
-                        const traits = projectedTable?.data.columns.find(
-                          (candidate) => candidate.key === column.key,
-                        );
-                        const labels = [
-                          traits?.primaryKey ? "PK" : null,
-                          traits?.foreignKey ? "FK" : null,
-                          traits?.partialName ? `Partial ${traits.partialName}` : null,
-                        ].filter((label): label is string => label !== null);
-                        return (
-                          <li
-                            className="flex flex-wrap items-center gap-2 rounded px-2 py-1 text-xs text-slate-300"
-                            key={column.key}
+                    {tableOpen ? (
+                      <>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <OutlineAction
+                            label={`Focus ${qualifiedTableName(table)} in diagram`}
+                            current={selection?.elementKey === table.key}
+                            onClick={() => activate(tableSelection)}
                           >
-                            <OutlineAction
-                              label={`Focus column ${column.name} in diagram`}
-                              current={selection?.elementKey === column.key}
-                              onClick={() => activate(columnSelection)}
-                            >
-                              {column.name}
-                            </OutlineAction>
-                            <code className="text-sky-300">{column.type.display}</code>
-                            {labels.map((label) => (
-                              <span className="font-bold text-amber-300" key={label}>
-                                {label}
-                              </span>
-                            ))}
-                            <SourceLineAction
-                              selection={columnSelection}
-                              graph={graph}
-                              enabled={sourceNavigationEnabled}
-                              onClick={navigate}
-                            />
-                          </li>
-                        );
-                      })}
-                    </ol>
+                            Diagram
+                          </OutlineAction>
+                          <SourceLineAction
+                            selection={tableSelection}
+                            graph={graph}
+                            enabled={sourceNavigationEnabled}
+                            onClick={navigate}
+                          />
+                        </div>
+                        <ol className="mt-3 space-y-1 border-l border-slate-700 pl-3">
+                          {table.columns.map((column) => {
+                            const columnSelection: DiagramSelection = {
+                              elementKey: column.key,
+                              kind: "column",
+                              tableKeys: [table.key],
+                            };
+                            const traits = projectedTable?.data.columns.find(
+                              (candidate) => candidate.key === column.key,
+                            );
+                            const labels = [
+                              traits?.primaryKey ? "PK" : null,
+                              traits?.foreignKey ? "FK" : null,
+                              traits?.partialName ? `Partial ${traits.partialName}` : null,
+                            ].filter((label): label is string => label !== null);
+                            return (
+                              <li
+                                className="flex flex-wrap items-center gap-2 rounded px-2 py-1 text-xs text-slate-300"
+                                key={column.key}
+                              >
+                                <OutlineAction
+                                  label={`Focus column ${column.name} in diagram`}
+                                  current={selection?.elementKey === column.key}
+                                  onClick={() => activate(columnSelection)}
+                                >
+                                  {column.name}
+                                </OutlineAction>
+                                <code className="text-sky-300">{column.type.display}</code>
+                                {labels.map((label) => (
+                                  <span className="font-bold text-amber-300" key={label}>
+                                    {label}
+                                  </span>
+                                ))}
+                                <SourceLineAction
+                                  selection={columnSelection}
+                                  graph={graph}
+                                  enabled={sourceNavigationEnabled}
+                                  onClick={navigate}
+                                />
+                              </li>
+                            );
+                          })}
+                        </ol>
+                      </>
+                    ) : null}
                   </details>
                 </li>
               );
@@ -239,7 +304,7 @@ export function SchemaOutline({
             <p className="mt-3 text-sm text-slate-400">No relationships.</p>
           ) : (
             <ol className="mt-3 space-y-2">
-              {visibleReferences.map((reference) => {
+              {renderedReferences.map((reference) => {
                 const referenceSelection = selectionForReference(reference);
                 return (
                   <li
@@ -275,11 +340,20 @@ export function SchemaOutline({
               })}
             </ol>
           )}
+          {!showAllReferences && visibleReferences.length > INITIAL_RELATIONSHIP_COUNT ? (
+            <button
+              className="mt-3 min-h-10 rounded-lg border border-slate-600 px-3 text-sm font-semibold text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+              type="button"
+              onClick={() => setShowAllReferences(true)}
+            >
+              Show all {visibleReferences.length} relationships
+            </button>
+          ) : null}
         </div>
       </div>
-    </section>
+    </>
   );
-}
+});
 
 function OutlineAction({
   label,
