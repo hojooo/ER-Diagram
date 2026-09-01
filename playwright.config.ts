@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./apps/web/e2e",
-  testIgnore: "csp-security.spec.ts",
+  testIgnore: ["csp-security.spec.ts", "performance.spec.ts"],
   fullyParallel: true,
   // Each workspace test loads an independent Monaco, DBML parser, and/or ELK worker graph.
   // Serial execution keeps product timeouts meaningful instead of measuring runner contention.

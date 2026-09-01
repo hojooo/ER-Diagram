@@ -1065,6 +1065,7 @@ export function ProjectSourceWorkspace({
             onRetryLocalLayout={() => void layoutSessionRef.current?.retryLocalLayout()}
             onLoadServerLayout={() => void layoutSessionRef.current?.loadServerLayout()}
             onReloadLayout={() => void handleReloadLayout()}
+            layoutInteractionDisabled={layoutInteractionLocked}
             visualCommandSession={visualCommandSession}
             visualInteractionDisabled={
               layoutInteractionLocked ||
@@ -1211,6 +1212,7 @@ function DiagramPanel({
   onRetryLocalLayout,
   onLoadServerLayout,
   onReloadLayout,
+  layoutInteractionDisabled,
   visualCommandSession,
   visualInteractionDisabled,
   onOpenVisualSource,
@@ -1257,6 +1259,7 @@ function DiagramPanel({
   readonly onRetryLocalLayout: () => void;
   readonly onLoadServerLayout: () => void;
   readonly onReloadLayout: () => void;
+  readonly layoutInteractionDisabled: boolean;
   readonly visualCommandSession: VisualCommandSessionController | null;
   readonly visualInteractionDisabled: boolean;
   readonly onOpenVisualSource: (range: import("@er-diagram/contracts").SourceRange | null) => void;
@@ -1298,7 +1301,13 @@ function DiagramPanel({
             onActivateSearchResult={onActivateSearchResult}
             onViewChange={onViewChange}
             onDetailLevelChange={onDetailLevelChange}
-            disabled={layoutBusy}
+            disabled={
+              layoutInteractionDisabled ||
+              layoutHydrating ||
+              layoutLoadFailed ||
+              layoutConflict !== null
+            }
+            searchDisabled={layoutBusy}
           />
           <LayoutToolbar
             viewKey={viewKey}

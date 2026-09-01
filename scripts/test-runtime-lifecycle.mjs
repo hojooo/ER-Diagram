@@ -255,6 +255,14 @@ async function assertOfflineBrowserRuntime(activeBrowser, projectId) {
       "Diagram layout ready",
     30_000,
   );
+  const previewAutoLayout = page.getByRole("button", { name: "Preview auto layout" });
+  await previewAutoLayout.click();
+  await page.getByText("Auto-layout preview ready").waitFor({
+    state: "visible",
+    timeout: 30_000,
+  });
+  await page.getByRole("button", { name: "Cancel preview" }).click();
+  await previewAutoLayout.waitFor({ state: "visible", timeout: 30_000 });
   assert.ok([...workerAssets].some((asset) => asset.includes("parser.worker-")));
   assert.ok(
     [...workerAssets].some(

@@ -168,10 +168,11 @@ export function BaseSchemaDiagram({
       return;
     }
     if (fittedLayoutRequestRef.current === settledLayoutRequestId) return;
-    fittedLayoutRequestRef.current = settledLayoutRequestId;
     const animationFrame = requestAnimationFrame(() => {
       const finishRenderedLayout = () => {
         if (activeLayoutRequestRef.current !== settledLayoutRequestId) return;
+        if (fittedLayoutRequestRef.current === settledLayoutRequestId) return;
+        fittedLayoutRequestRef.current = settledLayoutRequestId;
         if (layoutRequest) {
           const succeeded = layoutStatus !== "ERROR";
           if (succeeded) setLayoutStatus("READY");
@@ -391,6 +392,7 @@ export function BaseSchemaDiagram({
             const positions = projectionPositions(displayProjection);
             positions[node.id] = { ...node.position };
             onPositionsCommit?.(positions);
+            if (flowInstance) onViewportCommit?.(toDiagramViewport(flowInstance.getViewport()));
           }}
           onMoveEnd={(event, viewport) => {
             if (!event || interactionDisabled || layoutRequest) return;

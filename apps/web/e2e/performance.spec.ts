@@ -572,6 +572,7 @@ async function measureInteractionFrames(
   interaction: (typeof m4PerformanceProfile.frameRate.interactions)[number],
 ): Promise<number[]> {
   const durationMs = m4PerformanceProfile.frameRate.durationMs;
+  const box = await waitForInteractionTarget(page, interaction);
   const frameSample = page.evaluate(
     (duration) =>
       new Promise<number[]>((resolve) => {
@@ -588,21 +589,30 @@ async function measureInteractionFrames(
       }),
     durationMs,
   );
-  await performInteraction(page, interaction, durationMs);
+  await performInteraction(page, interaction, durationMs, box);
   return frameSample;
+}
+
+async function waitForInteractionTarget(
+  page: Page,
+  interaction: (typeof m4PerformanceProfile.frameRate.interactions)[number],
+): Promise<{ x: number; y: number; width: number; height: number }> {
+  const target =
+    interaction === "DRAG"
+      ? page.locator(".react-flow__node-table:visible").first()
+      : page.locator(".react-flow__pane");
+  await target.waitFor({ state: "visible" });
+  const box = await target.boundingBox();
+  if (!box) throw new Error("The performance interaction target is not visible.");
+  return box;
 }
 
 async function performInteraction(
   page: Page,
   interaction: (typeof m4PerformanceProfile.frameRate.interactions)[number],
   durationMs: number,
+  box: { readonly x: number; readonly y: number; readonly width: number; readonly height: number },
 ): Promise<void> {
-  const target =
-    interaction === "DRAG"
-      ? page.locator(".react-flow__node-table:visible").first()
-      : page.locator(".react-flow__pane");
-  const box = await target.boundingBox();
-  if (!box) throw new Error("The performance interaction target is not visible.");
   const startX = box.x + Math.min(box.width / 2, 120);
   const startY = box.y + Math.min(box.height / 2, 80);
   await page.mouse.move(startX, startY);

@@ -652,6 +652,8 @@ describe("base schema diagram canvas", () => {
     expect(onPositionsCommit).toHaveBeenCalledWith(
       expect.objectContaining({ [table.key]: { x: 700, y: 800 } }),
     );
+    expect(onViewportCommit).toHaveBeenCalledWith({ x: 10, y: 20, zoom: 0.75 });
+    onViewportCommit.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "Simulate programmatic pan" }));
     expect(onViewportCommit).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Simulate user pan" }));

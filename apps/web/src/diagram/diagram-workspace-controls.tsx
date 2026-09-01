@@ -21,6 +21,7 @@ export function DiagramWorkspaceControls({
   onViewChange,
   onDetailLevelChange,
   disabled = false,
+  searchDisabled = disabled,
 }: {
   readonly graph: SchemaGraph;
   readonly visibility: DiagramVisibility;
@@ -32,6 +33,7 @@ export function DiagramWorkspaceControls({
   readonly onViewChange: (viewKey: DiagramViewKey) => void;
   readonly onDetailLevelChange: (detailLevel: DiagramLod) => void;
   readonly disabled?: boolean;
+  readonly searchDisabled?: boolean;
 }) {
   const listboxId = useId();
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -83,7 +85,7 @@ export function DiagramWorkspaceControls({
           autoComplete="off"
           placeholder="Table, column, group, or schema"
           value={searchQuery}
-          disabled={disabled}
+          disabled={searchDisabled}
           aria-autocomplete="list"
           aria-expanded={showResults}
           aria-controls={showResults ? listboxId : undefined}
