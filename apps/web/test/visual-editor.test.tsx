@@ -1,21 +1,21 @@
 // @vitest-environment jsdom
 
-import { visualCommandSchema, type VisualCommand } from "@er-diagram/contracts";
+import { type VisualCommand, visualCommandSchema } from "@er-diagram/contracts";
 import { parseDbmlV2, type SchemaGraph } from "@er-diagram/core";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { createDiagramSelectionStore } from "../src/diagram/selection-store.js";
 import type { DiagramSelection } from "../src/diagram/source-navigation.js";
+import type {
+  VisualCommandSessionController,
+  VisualCommandSessionSnapshot,
+} from "../src/visual-editor/visual-command-session.js";
 import {
   createInitialVisualDraft,
   listVisualEditorActions,
 } from "../src/visual-editor/visual-editor-model.js";
 import { VisualSchemaInspector } from "../src/visual-editor/visual-schema-inspector.js";
-import type {
-  VisualCommandSessionController,
-  VisualCommandSessionSnapshot,
-} from "../src/visual-editor/visual-command-session.js";
 
 const COMMAND_ID = "550e8400-e29b-41d4-a716-446655440000";
 const SOURCE = `TablePartial audit_fields {
@@ -262,6 +262,43 @@ describe("accessible visual schema inspector", () => {
     expect(unknown.retrySafely).toHaveBeenCalledOnce();
   });
 
+  it("restores a same-graph selection and preserves the form draft for stale review", () => {
+    const users = requiredTable("users");
+    const store = createDiagramSelectionStore();
+    store.getState().setSelection(selection("table", users.key, [users.key]));
+    const commandSession = fakeCommandSession();
+    renderInspector(store, commandSession.controller);
+
+    fireEvent.click(screen.getByRole("button", { name: "Update table" }));
+    fireEvent.change(screen.getByLabelText("Table note"), {
+      target: { value: "preserved after conflict" },
+    });
+    act(() => {
+      store.getState().setSelection(null);
+      commandSession.setSnapshot({ status: "SUBMITTING" });
+    });
+    expect((screen.getByLabelText("Table note") as HTMLTextAreaElement).value).toBe(
+      "preserved after conflict",
+    );
+    act(() => {
+      commandSession.setSnapshot({
+        status: "STALE_REVIEW",
+        error: {
+          code: "VISUAL_COMMAND_SCHEMA_REVISION_CONFLICT",
+          message: "The schema changed.",
+          diagnostics: [],
+        },
+      });
+    });
+
+    expect(screen.getByText("Selected table public.users")).toBeTruthy();
+    expect((screen.getByLabelText("Table note") as HTMLTextAreaElement).value).toBe(
+      "preserved after conflict",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Review latest schema" }));
+    expect(commandSession.reviewLatestSchema).toHaveBeenCalledOnce();
+  });
+
   it("offers an explicit recovery action when authoritative layout reload fails", () => {
     const store = createDiagramSelectionStore();
     const reloadLayouts = vi.fn();
@@ -335,7 +372,7 @@ function renderInspector(
 }
 
 function fakeCommandSession(overrides: Partial<VisualCommandSessionSnapshot> = {}) {
-  const snapshot: VisualCommandSessionSnapshot = {
+  let snapshot: VisualCommandSessionSnapshot = {
     status: "IDLE",
     error: null,
     mutation: null,
@@ -348,15 +385,29 @@ function fakeCommandSession(overrides: Partial<VisualCommandSessionSnapshot> = {
   const retrySafely = vi.fn();
   const reviewLatestSchema = vi.fn();
   const reset = vi.fn();
+  const listeners = new Set<() => void>();
   const controller: VisualCommandSessionController = {
     getSnapshot: () => snapshot,
-    subscribe: () => () => undefined,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
     submit,
     retrySafely,
     reviewLatestSchema,
     reset,
   };
-  return { controller, submit, retrySafely, reviewLatestSchema, reset };
+  return {
+    controller,
+    submit,
+    retrySafely,
+    reviewLatestSchema,
+    reset,
+    setSnapshot(patch: Partial<VisualCommandSessionSnapshot>) {
+      snapshot = { ...snapshot, ...patch };
+      for (const listener of listeners) listener();
+    },
+  };
 }
 
 function requiredTable(name: string) {

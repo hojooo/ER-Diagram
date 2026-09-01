@@ -65,8 +65,10 @@ test("validates and autosaves Monaco source with revision-safe recovery", async 
   await leaveDialog.getByRole("button", { name: "Stay" }).click();
   await expect(page).toHaveURL(`/projects/${PROJECT_ID}`);
   await expect.poll(() => api.writes.length).toBe(3);
-  api.releaseSave();
-  await expect(sourcePanel.getByTestId("persistence-status")).toHaveText(/Saved/);
+  await api.releaseSave();
+  await expect(sourcePanel.getByTestId("persistence-status")).toHaveText(/Saved/, {
+    timeout: 10_000,
+  });
 
   await page.getByRole("link", { name: "Back to projects" }).click();
   await expect(page).toHaveURL("/");
@@ -114,6 +116,8 @@ async function installSourceApi(page: Page) {
   const layouts = createControlledLayoutApi(PROJECT_ID);
   let shouldHoldNextSave = false;
   let releasePendingSave: (() => void) | undefined;
+  let pendingSaveCompleted: Promise<void> | undefined;
+  let completePendingSave: (() => void) | undefined;
 
   await page.route("**/api/v1/projects**", async (route) => {
     const request = route.request();
@@ -146,6 +150,9 @@ async function installSourceApi(page: Page) {
       writes.push(command);
       if (shouldHoldNextSave) {
         shouldHoldNextSave = false;
+        pendingSaveCompleted = new Promise<void>((resolve) => {
+          completePendingSave = resolve;
+        });
         await new Promise<void>((resolve) => {
           releasePendingSave = resolve;
         });
@@ -164,6 +171,8 @@ async function installSourceApi(page: Page) {
         headers,
         body: JSON.stringify({ state, diagnostics, revisionCreated: true }),
       });
+      completePendingSave?.();
+      completePendingSave = undefined;
       return;
     }
 
@@ -183,9 +192,12 @@ async function installSourceApi(page: Page) {
     holdNextSave() {
       shouldHoldNextSave = true;
     },
-    releaseSave() {
+    async releaseSave() {
+      const completed = pendingSaveCompleted ?? Promise.resolve();
       releasePendingSave?.();
       releasePendingSave = undefined;
+      await completed;
+      pendingSaveCompleted = undefined;
     },
   };
 }

@@ -49,3 +49,16 @@ export {
   SQL_EXPORT_FIXTURE_VERSION,
   sqlExportFixtures,
 } from "./sql-export-fixtures.js";
+export type {
+  VisualCommandGateCase,
+  VisualCommandGateCommandKind,
+  VisualCommandGateFixture,
+  VisualCommandGateOutcome,
+  VisualCommandGateSemanticSummary,
+  VisualCommandGateStep,
+} from "./visual-command-gate-fixtures.js";
+export {
+  VISUAL_COMMAND_GATE_FIXTURE_SET_HASH,
+  VISUAL_COMMAND_GATE_FIXTURE_VERSION,
+  visualCommandGateFixture,
+} from "./visual-command-gate-fixtures.js";

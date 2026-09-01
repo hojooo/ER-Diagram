@@ -277,7 +277,10 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - undo/redo는 pruning 대상 `SOURCE_EDIT`, 명시적 revision restore는 `RESTORE` checkpoint로 저장한다. Source-changing restore만 undo step이며 layout은 복구하지 않는다.
   - source-free History, invalid revision restore와 accessible button·shortcut·상태를 제공한다.
   - 검증: `pnpm --filter @er-diagram/web test test/history-session.test.ts test/history-ui.test.tsx && pnpm test:e2e undo-redo`
-- [ ] `M3-GATE` unrelated source preservation, reparse, semantic diff, rollback 통과
+- [x] `M3-GATE` unrelated source preservation, reparse, semantic diff, rollback 통과
+  - versioned corpus의 20종 command를 모두 실행하고 target 밖 source byte, full reparse와 semantic closure를 검증한다.
+  - 실제 Fastify·file-backed SQLite restart와 Monaco/parser/React Flow/ELK browser acceptance를 분리해 검증한다.
+  - 검증: `pnpm test:m3-gate`
 
 ### Milestone 4 — Security, Recovery, Open-source Release
 

@@ -120,6 +120,7 @@ export function ProjectSourceWorkspace({
   const lastCursorPositionRef = useRef<SourceCursorPosition | null>(null);
   const flushedBlockedNavigationRef = useRef(false);
   const flushedBlockedLayoutNavigationRef = useRef(false);
+  const proceededBlockedNavigationRef = useRef(false);
   const focusRequestIdRef = useRef(0);
   const layoutRequestIdRef = useRef(0);
   const previousGraphRef = useRef<SchemaGraph | null>(null);
@@ -836,6 +837,7 @@ export function ProjectSourceWorkspace({
     if (navigationBlocker.state !== "blocked") {
       flushedBlockedNavigationRef.current = false;
       flushedBlockedLayoutNavigationRef.current = false;
+      proceededBlockedNavigationRef.current = false;
       return;
     }
     if (!sessionSnapshot) return;
@@ -847,7 +849,10 @@ export function ProjectSourceWorkspace({
       flushedBlockedLayoutNavigationRef.current = true;
       void layoutSessionRef.current?.flush();
     }
-    if (!hasUnsavedSource && !hasUnsavedLayout) navigationBlocker.proceed();
+    if (!hasUnsavedSource && !hasUnsavedLayout && !proceededBlockedNavigationRef.current) {
+      proceededBlockedNavigationRef.current = true;
+      navigationBlocker.proceed();
+    }
   }, [hasUnsavedLayout, hasUnsavedSource, navigationBlocker, sessionSnapshot]);
 
   useEffect(() => {
@@ -1094,6 +1099,9 @@ export function ProjectSourceWorkspace({
         snapshot={sessionSnapshot}
         hasUnsavedLayout={hasUnsavedLayout}
         requiresSavedWorkspace={requiresSavedWorkspace}
+        onStay={() => {
+          proceededBlockedNavigationRef.current = true;
+        }}
       />
     </>
   );
@@ -1768,19 +1776,25 @@ function UnsavedNavigationDialog({
   snapshot,
   hasUnsavedLayout,
   requiresSavedWorkspace,
+  onStay,
 }: {
   readonly blocker: ReturnType<typeof useBlocker>;
   readonly snapshot: SourceSessionSnapshot;
   readonly hasUnsavedLayout: boolean;
   readonly requiresSavedWorkspace: boolean;
+  readonly onStay: () => void;
 }) {
   const stayRef = useRef<HTMLButtonElement>(null);
   const open = blocker.state === "blocked";
+  const resetNavigation = () => {
+    onStay();
+    if (blocker.state === "blocked") blocker.reset();
+  };
   return (
     <Dialog.Root
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen && blocker.state === "blocked") blocker.reset();
+        if (!nextOpen) resetNavigation();
       }}
     >
       <Dialog.Portal>
@@ -1819,9 +1833,7 @@ function UnsavedNavigationDialog({
               ref={stayRef}
               className={secondaryButtonClass}
               type="button"
-              onClick={() => {
-                if (blocker.state === "blocked") blocker.reset();
-              }}
+              onClick={resetNavigation}
             >
               Stay
             </button>

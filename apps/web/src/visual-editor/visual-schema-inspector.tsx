@@ -4,6 +4,11 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import type { DiagramSelectionStore } from "../diagram/selection-store.js";
 import { VisualCommandForm } from "./visual-command-form.js";
+import type {
+  VisualCommandDraft,
+  VisualCommandSessionController,
+  VisualCommandSessionSnapshot,
+} from "./visual-command-session.js";
 import {
   createInitialVisualDraft,
   findColumn,
@@ -11,11 +16,6 @@ import {
   listVisualEditorActions,
   type VisualEditorAction,
 } from "./visual-editor-model.js";
-import type {
-  VisualCommandSessionController,
-  VisualCommandSessionSnapshot,
-  VisualCommandDraft,
-} from "./visual-command-session.js";
 
 export function VisualSchemaInspector({
   graph,
@@ -54,6 +54,7 @@ export function VisualSchemaInspector({
   );
   const [activeAction, setActiveAction] = useState<VisualEditorAction | null>(null);
   const [openedSchemaHash, setOpenedSchemaHash] = useState(graph.schemaHash);
+  const [openedSelection, setOpenedSelection] = useState(selection);
   const partialProvenance = findPartialProvenance(graph, selection);
   const activeDraft = activeAction
     ? createInitialVisualDraft(graph, selection, activeAction)
@@ -61,18 +62,38 @@ export function VisualSchemaInspector({
   const busy = isBusy(commandSnapshot) || interactionDisabled;
 
   useEffect(() => {
-    if (commandSnapshot.status === "SUCCEEDED") setActiveAction(null);
+    if (commandSnapshot.status === "SUCCEEDED") {
+      setActiveAction(null);
+      setOpenedSelection(null);
+    }
   }, [commandSnapshot.status]);
 
   useEffect(() => {
-    if (activeAction && !actions.some((action) => action.id === activeAction.id)) {
+    if (
+      activeAction &&
+      commandSnapshot.status === "IDLE" &&
+      !actions.some((action) => action.id === activeAction.id)
+    ) {
       setActiveAction(null);
+      setOpenedSelection(null);
     }
-  }, [actions, activeAction]);
+  }, [actions, activeAction, commandSnapshot.status]);
+
+  useEffect(() => {
+    if (
+      commandSnapshot.status !== "STALE_REVIEW" ||
+      !openedSelection ||
+      !graph.sourceMap[openedSelection.elementKey]
+    ) {
+      return;
+    }
+    selectionStore.getState().setSelection(openedSelection);
+  }, [commandSnapshot.status, graph.sourceMap, openedSelection, selectionStore]);
 
   const openAction = (action: VisualEditorAction) => {
     commandSession.reset();
     setOpenedSchemaHash(graph.schemaHash);
+    setOpenedSelection(selection);
     setActiveAction(action);
   };
 
@@ -137,6 +158,7 @@ export function VisualSchemaInspector({
           disabled={busy || commandSnapshot.status === "STALE_REVIEW"}
           onCancel={() => {
             setActiveAction(null);
+            setOpenedSelection(null);
             commandSession.reset();
           }}
           onSubmit={submit}
@@ -155,6 +177,12 @@ export function VisualSchemaInspector({
         onReloadLayouts={onReloadLayouts}
         onRetry={() => void commandSession.retrySafely()}
         onReview={() => {
+          if (openedSelection && graph.sourceMap[openedSelection.elementKey]) {
+            selectionStore.getState().setSelection(openedSelection);
+          } else {
+            setActiveAction(null);
+            setOpenedSelection(null);
+          }
           setOpenedSchemaHash(graph.schemaHash);
           commandSession.reviewLatestSchema();
         }}

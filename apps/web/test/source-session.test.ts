@@ -359,6 +359,41 @@ describe("source session autosave", () => {
     session.dispose();
   });
 
+  it("keeps the validated graph display-only while an authoritative state is reparsed", async () => {
+    let resolveAdoptedParse: ((result: DbmlWorkerParseResult) => void) | undefined;
+    const session = createSession({
+      parseSource: async (source) => {
+        if (source !== EDITED_SOURCE) return validParse(source);
+        return await new Promise<DbmlWorkerParseResult>((resolve) => {
+          resolveAdoptedParse = resolve;
+        });
+      },
+    });
+    session.start();
+    await settle();
+    const previousGraph = session.getSnapshot().activeGraph;
+
+    const adoption = session.adoptCommittedState(projectState(EDITED_SOURCE, 2, "VALID"));
+    await settle();
+    expect(session.getSnapshot()).toMatchObject({
+      source: EDITED_SOURCE,
+      activeGraph: previousGraph,
+      activeGraphSource: null,
+      canUseValidSchema: false,
+      validation: "VALIDATING",
+    });
+
+    resolveAdoptedParse?.(validParse(EDITED_SOURCE));
+    const adopted = await adoption;
+    expect(adopted).toMatchObject({
+      source: EDITED_SOURCE,
+      activeGraphSource: "CURRENT_DRAFT",
+      canUseValidSchema: true,
+      validation: "VALID",
+    });
+    session.dispose();
+  });
+
   it("keeps authoritative diagnostics when worker validation fails after state adoption", async () => {
     const serverDiagnostic: Diagnostic = {
       code: "DBML_PARSE_SYNTAX_UNEXPECTED_TOKEN",

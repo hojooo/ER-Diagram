@@ -397,6 +397,75 @@ describe("index source patches", () => {
     );
   });
 
+  it("anchors new table blocks only to a source-owned table Note", async () => {
+    const source = [
+      "TablePartial audit_fields {",
+      "  created_at timestamp",
+      '  Note: "Injected partial note"',
+      "}",
+      "",
+      "Table public.with_source_note {",
+      "  ~audit_fields",
+      "  id bigint",
+      '  Note: "Owned table note"',
+      "}",
+      "",
+      "Table public.with_injected_note {",
+      "  ~audit_fields",
+      "  id bigint",
+      "}",
+      "",
+    ].join("\r\n");
+    const graph = await graphOf(source);
+    const sourceNoteTable = graph.tables.find(({ name }) => name === "with_source_note");
+    const injectedNoteTable = graph.tables.find(({ name }) => name === "with_injected_note");
+    const sourceNoteId = sourceNoteTable?.columns.find(({ name }) => name === "id");
+    if (!sourceNoteTable || !injectedNoteTable || !sourceNoteId) {
+      throw new Error("expected source-owned and partial-note table inventory");
+    }
+
+    const indexed = await expectSuccess(
+      source,
+      command({
+        kind: "CREATE_INDEX",
+        targetTableKey: sourceNoteTable.key,
+        index: {
+          name: "source_note_idx",
+          terms: [{ kind: "COLUMN", columnKey: sourceNoteId.key }],
+          type: null,
+          unique: false,
+          primaryKey: false,
+          note: null,
+        },
+      }),
+    );
+    expect(indexed.source).toContain(
+      '  indexes {\r\n    id [name: "source_note_idx"]\r\n  }\r\n  Note: "Owned table note"',
+    );
+    expect(
+      indexed.edits.every(({ startOffset }) => startOffset >= sourceNoteTable.range.startOffset),
+    ).toBe(true);
+
+    const checked = await expectSuccess(
+      source,
+      command({
+        kind: "CREATE_CHECK",
+        targetTableKey: injectedNoteTable.key,
+        ownerColumnKey: null,
+        check: { name: "injected_note_check", expression: "id > 0" },
+      }),
+    );
+    expect(checked.source).toContain(
+      'Table public.with_injected_note {\r\n  ~audit_fields\r\n  id bigint\r\n  checks {\r\n    `id > 0` [name: "injected_note_check"]\r\n  }\r\n}',
+    );
+    expect(checked.source).toContain(
+      'TablePartial audit_fields {\r\n  created_at timestamp\r\n  Note: "Injected partial note"\r\n}',
+    );
+    expect(
+      checked.edits.every(({ startOffset }) => startOffset >= injectedNoteTable.range.startOffset),
+    ).toBe(true);
+  });
+
   it("updates and deletes only the selected index entry", async () => {
     const result = await expectSuccess(
       baseSource,

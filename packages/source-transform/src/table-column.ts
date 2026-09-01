@@ -438,10 +438,12 @@ function planCreateColumn(
   const columnIndent = inferTableChildIndent(source, table) ?? `${tableIndent}  `;
   const units = effectiveColumnSourceUnits(table);
   let insertionOffset: number;
+  let insertionIndent = columnIndent;
   if (units.length > 0) {
     const last = units.toSorted((left, right) => left.endOffset - right.endOffset).at(-1);
     if (!last) return invalidRange("The table column ranges could not be resolved.");
     insertionOffset = lineEndOffset(source, last.endOffset, true);
+    insertionIndent = lineIndentAt(source, last.startOffset) ?? columnIndent;
   } else {
     const following = [...table.indexes, ...table.checks]
       .map((element) => element.range.startOffset)
@@ -472,7 +474,7 @@ function planCreateColumn(
       {
         startOffset: insertionOffset,
         endOffset: insertionOffset,
-        newText: `${columnIndent}${declaration.declaration}${newline}`,
+        newText: `${insertionIndent}${declaration.declaration}${newline}`,
       },
     ],
   };

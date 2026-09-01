@@ -2,7 +2,7 @@
 
 DBML·SQL ERD Studio는 큰 DBML schema를 탐색하고 편집하며 PostgreSQL·MySQL DDL을 실행 없이 가져오고 내보내는 Apache-2.0 self-hosted ERD workspace다.
 
-Milestone 2 SQL interchange gate를 완료하고 Milestone 3 visual schema editing을 구현하는 단계다. 제품 범위와 구현 순서는 각각 [PRD](docs/product/PRD.md)와 [TASKLIST](TASKLIST.md)를 기준으로 한다. 현재 PostgreSQL·MySQL 보장 수준은 목표와 pinned parser fixture의 관찰 결과를 분리한 [SQL capability matrix ADR](docs/adr/0005-sql-capability-matrix.md)을 따른다.
+Milestone 3 visual editing integrity gate를 완료하고 Milestone 4 security·recovery·release를 구현하는 단계다. 제품 범위와 구현 순서는 각각 [PRD](docs/product/PRD.md)와 [TASKLIST](TASKLIST.md)를 기준으로 한다. 현재 PostgreSQL·MySQL 보장 수준은 목표와 pinned parser fixture의 관찰 결과를 분리한 [SQL capability matrix ADR](docs/adr/0005-sql-capability-matrix.md)을 따른다.
 
 ## P0 범위
 
@@ -31,11 +31,12 @@ pnpm test:unit
 pnpm build
 ```
 
-완료된 read-only workspace와 same-dialect SQL interchange gate는 다음 명령으로 재검증한다.
+완료된 Milestone 1~3 acceptance gate는 다음 명령으로 재검증한다.
 
 ```sh
 pnpm test:m1-gate
 pnpm test:m2-gate
+pnpm test:m3-gate
 ```
 
 Milestone 0 전체 gate는 다음 명령으로 확인한다.

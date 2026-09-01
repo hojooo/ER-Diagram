@@ -1037,9 +1037,10 @@ function insertTableBlockEntry(
   const closingBrace = table.range.endOffset - 1;
   if (source[closingBrace] !== "}") return invalidRange("The target table has no closing brace.");
   const otherBlock = blockName === "indexes" ? findDirectChildBlock(fragment, "checks") : null;
+  const noteAnchor = sourceOwnedTableNoteAnchor(source, table, closingBrace);
   const anchor = otherBlock
     ? table.range.startOffset + otherBlock.keywordStart
-    : (table.note?.range.startOffset ?? closingBrace);
+    : (noteAnchor ?? closingBrace);
   const insertionOffset = lineStartOffset(source, anchor);
   const blockText = `${childIndent}${blockName} {${newline}${childIndent}  ${entry}${newline}${childIndent}}${newline}`;
   return {
@@ -1048,12 +1049,25 @@ function insertTableBlockEntry(
   };
 }
 
+function sourceOwnedTableNoteAnchor(
+  source: string,
+  table: TableNode,
+  closingBrace: number,
+): number | null {
+  if (!table.note) return null;
+  const start = lineStartOffset(source, table.note.range.startOffset);
+  if (start <= table.range.startOffset || start >= closingBrace) return null;
+  const line = source.slice(start, lineEndOffset(source, start, false)).trimStart();
+  return /^Note\s*:/u.test(line) ? start : null;
+}
+
 function inferTableChildIndent(source: string, table: TableNode): string | null {
+  const noteAnchor = sourceOwnedTableNoteAnchor(source, table, table.range.endOffset - 1);
   const candidates = [
     ...table.columns.map((column) => column.injectedFrom?.injectionRange ?? column.range),
     ...table.indexes.map((index) => index.range),
     ...table.checks.map((check) => check.range),
-    ...(table.note ? [table.note.range] : []),
+    ...(noteAnchor === null ? [] : [{ startOffset: noteAnchor, endOffset: noteAnchor }]),
   ].toSorted((left, right) => left.startOffset - right.startOffset);
   for (const candidate of candidates) {
     const indent = lineIndentAt(source, candidate.startOffset);

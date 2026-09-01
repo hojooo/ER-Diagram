@@ -344,6 +344,12 @@ function planDiagramView(
 ): EditPlan {
   const view = requireView(graph, command.targetViewKey);
   const originalFragment = source.slice(view.range.startOffset, view.range.endOffset);
+  const desiredState = Object.fromEntries(
+    VIEW_FILTER_SPECS.map((spec) => [
+      spec.field,
+      command.changes[spec.field] === undefined ? spec.current(view) : command.changes[spec.field],
+    ]),
+  ) as Record<ViewFilterField, string[] | null>;
 
   for (const spec of VIEW_FILTER_SPECS) {
     const validation = validateViewFilterSource(originalFragment, graph, view, spec);
@@ -354,7 +360,15 @@ function planDiagramView(
   for (const spec of VIEW_FILTER_SPECS) {
     const desired = command.changes[spec.field];
     if (desired === undefined) continue;
-    const next = rewriteViewFilter(rewritten, graph, view, spec, desired);
+    const next =
+      desired !== null &&
+      desired.length === 0 &&
+      VIEW_FILTER_SPECS.some((candidate) => {
+        const value = desiredState[candidate.field];
+        return candidate.field !== spec.field && value !== null && value.length > 0;
+      })
+        ? removeViewFilterBlock(rewritten, spec)
+        : rewriteViewFilter(rewritten, graph, view, spec, desired);
     if (!next.ok) return invalidRange(next.message);
     rewritten = next.fragment;
   }
@@ -373,6 +387,18 @@ function planDiagramView(
   return edits
     ? { ok: true, edits }
     : invalidRange("The DiagramView source changes could not be reduced to safe text edits.");
+}
+
+function removeViewFilterBlock(
+  fragment: string,
+  spec: ViewFilterSpec,
+): { ok: true; fragment: string } | { ok: false; message: string } {
+  const block = findDirectChildBlock(fragment, spec.keyword);
+  if (!block) return { ok: true, fragment };
+  return {
+    ok: true,
+    fragment: `${fragment.slice(0, block.keywordStart)}${fragment.slice(block.endOffset)}`,
+  };
 }
 
 function acceptedOfficialDiagramViewSource(
@@ -439,7 +465,7 @@ function validateViewFilterSource(
 ): FilterValidation {
   const block = findDirectChildBlock(fragment, spec.keyword);
   if (!block) {
-    return spec.current(view) === null
+    return spec.current(view) === null || spec.current(view)?.length === 0
       ? { ok: true, items: [], block: null }
       : { ok: false, message: `The ${spec.keyword} filter block is missing from source.` };
   }
