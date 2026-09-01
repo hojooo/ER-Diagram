@@ -95,8 +95,19 @@ pnpm storage:migrate -- \
 ```
 
 Apply는 원본 checksum과 pre-migration backup을 다시 확인한다. Migration 또는 read-back 실패에서는 원본 database를
-교체하지 않는다. M4-006 production bootstrap이 이 절차를 startup lifecycle에 연결하기 전까지 operator가 수동으로
-실행한다.
+교체하지 않는다. Production startup은 기본 `MANUAL`이므로 이 수동 절차가 기본이다. 명시적인 maintenance 시작에서만
+`ER_DIAGRAM_STARTUP_MIGRATION=APPLY_WITH_BACKUP`과 absolute non-existing
+`ER_DIAGRAM_STARTUP_MIGRATION_BACKUP_OUTPUT`을 함께 설정해 동일 plan/backup/Apply primitive를 사용할 수 있다.
+
+## 실행 중 server와 lifecycle lock
+
+Production runtime은 database와 별도인 `<database>.lock` private sidecar에 operating-system-backed exclusive lease를
+유지한다. Restore·migration `--apply`가 `SQLITE_VOLUME_LOCKED`를 반환하면 server를 완전히 중지하고 새 dry-run을
+발급한다. Lock file을 삭제하거나 PID를 추측해 우회하지 않는다. Crash나 `SIGKILL` 뒤에는 OS가 lease를 해제하므로
+같은 volume에서 새 process를 시작하면 된다.
+
+Online backup과 restore/migration dry-run은 target을 바꾸지 않으므로 running server와 병행할 수 있다. Lock sidecar는
+whole-volume backup과 portable bundle에 포함되지 않는다.
 
 ## Rollback drill
 

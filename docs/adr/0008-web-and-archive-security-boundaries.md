@@ -21,7 +21,8 @@ request나 error object를 그대로 직렬화하면 DBML, SQL literal, note와 
 Fastify는 모든 HTTP response에 enforced Content Security Policy와 security header를 적용한다. Script와 worker,
 connection은 same-origin만 허용하고 inline script, script attribute, eval, object, frame과 외부 embedding을
 차단한다. Monaco와 React Flow 호환을 위해 style에만 `unsafe-inline`을 허용한다. 이 예외를 script policy로
-확장하지 않는다. Application은 HSTS를 설정하지 않으며 TLS와 reverse-proxy ownership은 M4-006에서 결정한다.
+확장하지 않는다. ADR 0012에 따라 HSTS 기본값은 off이며, 명시한 proxy IP/CIDR를 통과해 HTTPS로 판정된 response에만
+제한된 `max-age`를 추가한다. Application 자체 TLS는 제공하지 않는다.
 
 Production source에서는 `dangerouslySetInnerHTML`, HTML insertion API, `document.write`, `srcdoc`, `eval`과
 `Function`을 fail-closed 검사로 금지한다. Canonical DBML·SQL이나 사용자 text를 sanitize하거나 rewrite하지
@@ -76,7 +77,8 @@ Serializer 누락 하나로 source나 native error가 기록될 수 있다. Prod
 - Monaco와 diagram은 inline style을 사용하지만 script, worker와 remote resource policy는 엄격히 유지된다.
 - ZIP metadata와 content는 bounded stream으로 읽고 filesystem extraction surface를 만들지 않는다.
 - CRC는 bundle content integrity의 근거로 사용하지 않는다. M4-003 manifest SHA-256이 이를 검증한다.
-- Production log는 즉시 운영 가능하지만 level, environment override, listen과 graceful flush는 M4-006에 남는다.
+- Production log는 INFO/OFF allowlist 환경 설정을 사용한다. Lifecycle event에는 state와 static reason code만
+  추가하며 graceful shutdown은 pending JSONL write를 best-effort flush한다.
 - Production Browser→Fastify static serving은 M4-005 container acceptance에서 same-origin SPA/API, asset cache와
   실제 Monaco/parser/layout worker까지 검증한다. M4-002 browser harness는 built Web assets와 동일 CSP의 호환성을
   먼저 증명한 경계로 유지한다.

@@ -17,6 +17,7 @@ import BetterSqlite3 from "better-sqlite3";
 
 import { openSqliteStorage, SQLITE_STORAGE_SCHEMA_VERSION } from "./sqlite-storage.js";
 import { createSqliteVolumeBackup, fsyncDirectory } from "./volume-backup.js";
+import { acquireSqliteVolumeLock } from "./volume-lock.js";
 import {
   type ApplySqliteVolumeMigrationOptions,
   type ApplySqliteVolumeRestoreOptions,
@@ -74,8 +75,10 @@ export async function applySqliteVolumeRestore(
     "RESTORE",
     path.dirname(targetPath),
   );
+  let volumeLock: ReturnType<typeof acquireSqliteVolumeLock> | undefined;
   let safetyBackup = null;
   try {
+    volumeLock = acquireSqliteVolumeLock(targetPath);
     assertPlanHash(prepared.plan, options.planHash);
     if (targetExists) {
       assertOfflineTarget(targetPath);
@@ -98,6 +101,7 @@ export async function applySqliteVolumeRestore(
     );
     return { applied: true, plan: prepared.plan, safetyBackup };
   } finally {
+    volumeLock?.release();
     rmSync(prepared.candidateDirectory, { force: true, recursive: true });
   }
 }
@@ -136,49 +140,54 @@ export async function applySqliteVolumeMigration(
   options: ApplySqliteVolumeMigrationOptions,
 ): Promise<SqliteVolumeRecoveryResult> {
   const targetPath = normalizeExistingTargetPath(options.database);
-  const current = await ephemeralSnapshot(targetPath);
-  if (current.storageSchemaVersion === SQLITE_STORAGE_SCHEMA_VERSION) {
-    const plan = createPlan({
-      operation: "MIGRATE",
-      sourceBackupHash: current.sha256,
-      targetPath,
-      expectedTargetDatabaseSha256: current.sha256,
-      sourceStorageSchemaVersion: current.storageSchemaVersion,
-      candidateDatabaseSha256: current.sha256,
-    });
-    assertPlanHash(plan, options.planHash);
-    return { applied: false, plan, safetyBackup: null };
-  }
-
-  const prepared = await prepareRestore(
-    options.backupOutput,
-    targetPath,
-    "MIGRATE",
-    path.dirname(targetPath),
-  );
+  const volumeLock = acquireSqliteVolumeLock(targetPath);
   try {
-    assertPlanHash(prepared.plan, options.planHash);
-    assertOfflineTarget(targetPath);
-    const afterLock = await ephemeralSnapshot(targetPath);
-    if (
-      afterLock.sha256 !== prepared.plan.expectedTargetDatabaseSha256 ||
-      afterLock.sha256 !== prepared.backup.manifest.database.sha256
-    ) {
-      return planConflict();
+    const current = await ephemeralSnapshot(targetPath);
+    if (current.storageSchemaVersion === SQLITE_STORAGE_SCHEMA_VERSION) {
+      const plan = createPlan({
+        operation: "MIGRATE",
+        sourceBackupHash: current.sha256,
+        targetPath,
+        expectedTargetDatabaseSha256: current.sha256,
+        sourceStorageSchemaVersion: current.storageSchemaVersion,
+        candidateDatabaseSha256: current.sha256,
+      });
+      assertPlanHash(plan, options.planHash);
+      return { applied: false, plan, safetyBackup: null };
     }
-    await atomicallyReplaceDatabase(
+
+    const prepared = await prepareRestore(
+      options.backupOutput,
       targetPath,
-      prepared.candidatePath,
-      prepared.plan.candidateDatabaseSha256,
-      true,
+      "MIGRATE",
+      path.dirname(targetPath),
     );
-    return {
-      applied: true,
-      plan: prepared.plan,
-      safetyBackup: prepared.backup.manifest,
-    };
+    try {
+      assertPlanHash(prepared.plan, options.planHash);
+      assertOfflineTarget(targetPath);
+      const afterLock = await ephemeralSnapshot(targetPath);
+      if (
+        afterLock.sha256 !== prepared.plan.expectedTargetDatabaseSha256 ||
+        afterLock.sha256 !== prepared.backup.manifest.database.sha256
+      ) {
+        return planConflict();
+      }
+      await atomicallyReplaceDatabase(
+        targetPath,
+        prepared.candidatePath,
+        prepared.plan.candidateDatabaseSha256,
+        true,
+      );
+      return {
+        applied: true,
+        plan: prepared.plan,
+        safetyBackup: prepared.backup.manifest,
+      };
+    } finally {
+      rmSync(prepared.candidateDirectory, { force: true, recursive: true });
+    }
   } finally {
-    rmSync(prepared.candidateDirectory, { force: true, recursive: true });
+    volumeLock.release();
   }
 }
 

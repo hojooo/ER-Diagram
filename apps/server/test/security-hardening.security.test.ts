@@ -14,6 +14,7 @@ import {
   createResourceExecutor,
   createServer,
   DEFAULT_SERVER_RESOURCE_LIMITS,
+  flushOperationalLog,
   type HttpCompletionOperationalLog,
   type OperationalLogEvent,
   type OperationalLogSink,
@@ -155,6 +156,64 @@ describe("Fastify security headers and operational logs", () => {
       operation: "HEALTH_LIVE",
       statusCode: 200,
     });
+
+    let releaseWrite: (() => void) | undefined;
+    const pendingSink = createJsonLineOperationalLogSink(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseWrite = resolve;
+        }),
+    );
+    pendingSink.write({
+      logVersion: 1,
+      event: "SERVER_LIFECYCLE",
+      timestamp: "2026-08-31T00:00:00.000Z",
+      state: "STOPPED",
+    });
+    let flushed = false;
+    const flush = flushOperationalLog(pendingSink).then(() => {
+      flushed = true;
+    });
+    await Promise.resolve();
+    expect(flushed).toBe(false);
+    releaseWrite?.();
+    await flush;
+    expect(flushed).toBe(true);
+
+    await expect(
+      flushOperationalLog({
+        write: () => undefined,
+        flush: async () => {
+          throw new Error(SENTINEL);
+        },
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("adds HSTS only for HTTPS forwarded by an explicitly trusted proxy", async () => {
+    const trusted = trackedServer([], undefined, {
+      trustedProxyCidrs: ["127.0.0.1"],
+      hstsMaxAgeSeconds: 31_536_000,
+    });
+    const forwarded = await trusted.inject({
+      method: "GET",
+      url: "/health/live",
+      headers: { "x-forwarded-proto": "https" },
+      remoteAddress: "127.0.0.1",
+    });
+    expect(forwarded.headers["strict-transport-security"]).toBe("max-age=31536000");
+
+    const untrusted = trackedServer([], undefined, {
+      trustedProxyCidrs: ["10.0.0.0/8"],
+      hstsMaxAgeSeconds: 31_536_000,
+    });
+    const spoofed = await untrusted.inject({
+      method: "GET",
+      url: "/health/live",
+      headers: { "x-forwarded-proto": "https" },
+      remoteAddress: "127.0.0.1",
+    });
+    expect(spoofed.headers["strict-transport-security"]).toBeUndefined();
   });
 
   it("emits one redacted allowlist event per resource operation", async () => {
@@ -218,6 +277,10 @@ describe("Fastify security headers and operational logs", () => {
 function trackedServer(
   events: OperationalLogEvent[],
   sink: OperationalLogSink = collectingSink(events),
+  security: {
+    readonly trustedProxyCidrs?: readonly string[];
+    readonly hstsMaxAgeSeconds?: number;
+  } = {},
 ): ReturnType<typeof createServer> {
   const projectApplication = {
     listProjects: async () => {
@@ -255,6 +318,7 @@ function trackedServer(
       maxGeneratedOutputBytes: 512,
       maxRequestBodyBytes: 512,
     },
+    ...security,
   });
   servers.add(server);
   return server;

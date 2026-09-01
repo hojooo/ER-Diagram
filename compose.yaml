@@ -16,6 +16,18 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:8080/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    stop_signal: SIGTERM
+    stop_grace_period: 35s
 
 volumes:
   er-diagram-data:
