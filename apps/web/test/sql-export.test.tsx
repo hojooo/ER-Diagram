@@ -2,7 +2,11 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import type { ProjectState, SqlExportResponse } from "@er-diagram/contracts";
+import {
+  DEFAULT_RUNTIME_RESOURCE_LIMITS,
+  type ProjectState,
+  type SqlExportResponse,
+} from "@er-diagram/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryRouter } from "react-router-dom";
@@ -125,6 +129,10 @@ function exportResponse(overrides: Partial<SqlExportResponse> = {}): SqlExportRe
 
 function fakeApi(state: ProjectState, exported: SqlExportResponse): ProjectApi {
   return {
+    getRuntimeConfig: vi.fn(async () => ({
+      configVersion: 1 as const,
+      resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS,
+    })),
     listProjects: vi.fn(async () => ({ projects: [] })),
     getProject: vi.fn(async () => ({ state })),
     listRevisions: vi.fn(async () => ({ revisions: [] })),

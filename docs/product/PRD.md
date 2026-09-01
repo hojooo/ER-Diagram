@@ -1174,6 +1174,28 @@ P0 대표 fixture는 약 200 KB, 143 tables, 573 refs, 15 groups, 7 views다.
 13. remote access를 지원할 경우 operator가 access control을 구성해야 하며, 제품 내 authentication 추가는 별도 scope다.
 14. DML이 포함된 SQL import는 row data를 기본 보존하지 않고 DDL-only 적용 여부를 별도로 확인한다.
 
+### 17.2.1 P0 runtime resource profile
+
+Server는 versioned runtime config를 `/api/v1/runtime-config`에서 `no-store`로 제공하고 Web은 이 contract를
+검증하기 전에는 project API와 parser/layout worker를 시작하지 않는다. 기본값은 source 5 MiB UTF-8,
+generated output 16 MiB, raw JSON body 32 MiB다. DBML parse와 visual transform은 5초, SQL conversion은
+15초, layout은 10초를 사용한다. Node schema worker는 2개, FIFO waiting queue는 8개, queue wait는 5초이며
+worker V8 old/young/stack budget은 256/32/4 MiB다.
+
+Graph는 table 2,000개, reference 10,000개와 전체 schema element 100,000개, layout projection은 node
+2,500개와 edge 10,000개를 기본 상한으로 둔다. Bundle contract는 archive 256 MiB, expanded 1 GiB, entry
+16 MiB와 2,048 entries를 기본값으로 고정하며 bounded archive reader는 M4-002·M4-003에서 이 값을 사용한다.
+Operator override는 M4-006 bootstrap에서 같은 strict contract를 검증한 뒤 적용한다.
+
+Browser는 file byte를 읽기 전에 검사하고 Monaco/SQL local buffer가 초과하면 내용을 보존한 채 parse와
+mutation을 중지한다. Server route와 worker는 같은 제한을 독립적으로 재검사한다. 기존 DB에 상한보다 큰
+source가 있으면 read·backup 응답은 자르지 않지만 parse, mutation과 export는 차단한다. Resource failure는
+transaction 전에 종료되어 revision, artifact, receipt와 layout을 만들지 않는다.
+
+Decoded source 초과와 raw body 초과는 각각 `RESOURCE_SOURCE_TOO_LARGE`, `REQUEST_BODY_TOO_LARGE` 413으로
+구분한다. Graph/output 초과는 422, worker busy·timeout·crash는 503이며 queue pressure에는
+`Retry-After: 1`을 제공한다. Error/log에는 source, SQL literal, native worker message와 stack을 넣지 않는다.
+
 ### 17.3 보존
 
 - DBML·SQL에는 실제 schema name과 업무 정보가 포함될 수 있으므로 project data는 외부 전송하지 않는다.
@@ -1212,6 +1234,7 @@ P0 대표 fixture는 약 200 KB, 143 tables, 573 refs, 15 groups, 7 views다.
 | `VISUAL_CONFLICT_*` | source revision 또는 symbol conflict | stale browser tab |
 | `VISUAL_VERIFY_*` | expected semantic diff 불일치 | column rename 외 ref 손실 |
 | `LAYOUT_*` | layout 실패 | ELK timeout |
+| `RESOURCE_*` | runtime budget 실패 | source·graph·worker queue/timeout |
 | `STORE_*` | durable save·migration 실패 | volume read-only |
 
 ### 19.2 운영 로그

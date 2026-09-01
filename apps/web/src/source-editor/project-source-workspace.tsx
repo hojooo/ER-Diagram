@@ -7,6 +7,7 @@ import type {
   ProjectsResponse,
   VisualCommand,
 } from "@er-diagram/contracts";
+import { utf8ByteLength } from "@er-diagram/contracts";
 import { diffSchemaGraphs, recoverLayoutStableKeys, type SchemaGraph } from "@er-diagram/core";
 import * as Dialog from "@radix-ui/react-dialog";
 import type { QueryClient } from "@tanstack/react-query";
@@ -14,12 +15,14 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useBlocker } from "react-router-dom";
 
 import type {
+  BaseSchemaDiagramProps,
   BaseSchemaDiagramComponent,
   DiagramLayoutRequest,
   DiagramLayoutRequestResult,
 } from "../diagram/base-schema-diagram-contract.js";
 import { toggleCollapsedGroup } from "../diagram/collapse-state.js";
 import { DiagramWorkspaceControls } from "../diagram/diagram-workspace-controls.js";
+import { requestWorkerLayout } from "../diagram/layout-worker-client.js";
 import {
   createDefaultLayoutValue,
   createLayoutSession,
@@ -57,6 +60,7 @@ import {
 } from "../history/history-session.js";
 import type { ProjectApi } from "../projects/project-api.js";
 import { projectQueryKeys } from "../projects/project-queries.js";
+import { useRuntimeResourceLimits } from "../runtime-config.js";
 import {
   createVisualCommandSession,
   type VisualCommandSessionController,
@@ -105,6 +109,7 @@ export function ProjectSourceWorkspace({
   readonly queryClient: QueryClient;
   readonly adapters?: ProjectWorkspaceAdapters;
 }) {
+  const runtimeLimits = useRuntimeResourceLimits();
   const [sessionSnapshot, setSessionSnapshot] = useState<SourceSessionSnapshot | null>(null);
   const sessionRef = useRef<SourceSessionController | null>(null);
   const [layoutSnapshot, setLayoutSnapshot] = useState<LayoutSessionSnapshot | null>(null);
@@ -148,6 +153,15 @@ export function ProjectSourceWorkspace({
   const initialStateRef = useRef(initialState);
   const EditorComponent = adapters?.SourceEditor ?? LazyMonacoDbmlEditor;
   const DiagramComponent = adapters?.SchemaDiagram ?? LazyBaseSchemaDiagram;
+  const requestBoundedLayout = useCallback(
+    (projection: Parameters<typeof requestWorkerLayout>[0]) =>
+      requestWorkerLayout(projection, {
+        timeoutMs: runtimeLimits.layoutTimeoutMs,
+        maxNodes: runtimeLimits.maxLayoutNodes,
+        maxEdges: runtimeLimits.maxLayoutEdges,
+      }),
+    [runtimeLimits.layoutTimeoutMs, runtimeLimits.maxLayoutEdges, runtimeLimits.maxLayoutNodes],
+  );
   const activeGraph = sessionSnapshot?.activeGraph ?? null;
   const sourceNavigationEnabled = sessionSnapshot?.activeGraphSource === "CURRENT_DRAFT";
   const resolvedViewKey = activeGraph
@@ -459,10 +473,27 @@ export function ProjectSourceWorkspace({
   }, [api, projectId, queryClient]);
 
   useEffect(() => {
-    const parserClient = (adapters?.createParserClient ?? createDbmlParserWorkerClient)();
+    const parserClient = adapters?.createParserClient
+      ? adapters.createParserClient()
+      : createDbmlParserWorkerClient({
+          timeoutMs: runtimeLimits.dbmlParserTimeoutMs,
+          limits: {
+            maxSourceBytes: runtimeLimits.maxSourceBytes,
+            maxTables: runtimeLimits.maxTables,
+            maxReferences: runtimeLimits.maxReferences,
+            maxSchemaElements: runtimeLimits.maxSchemaElements,
+          },
+        });
     const session = createSourceSession({
       initialState: initialStateRef.current,
       parseSource: (source) => parserClient.parse(source),
+      validateSource: (source) =>
+        utf8ByteLength(source) > runtimeLimits.maxSourceBytes
+          ? {
+              code: "RESOURCE_SOURCE_TOO_LARGE",
+              message: `Source exceeds the configured ${runtimeLimits.maxSourceBytes} byte limit. Reduce it before validation or saving.`,
+            }
+          : null,
       saveDraft: (input) => api.saveDraft(input),
       loadProject: async () => {
         const response = await api.getProject(projectId);
@@ -507,7 +538,7 @@ export function ProjectSourceWorkspace({
       parserClient.dispose();
       if (sessionRef.current === session) sessionRef.current = null;
     };
-  }, [adapters, api, projectId, queryClient]);
+  }, [adapters, api, projectId, queryClient, runtimeLimits]);
 
   useEffect(() => {
     if (!visualSessionsReady) return;
@@ -974,6 +1005,7 @@ export function ProjectSourceWorkspace({
             searchQuery={searchQuery}
             selectionStore={selectionStore}
             DiagramComponent={DiagramComponent}
+            requestLayout={requestBoundedLayout}
             sourceNavigationEnabled={sourceNavigationEnabled}
             layoutView={activeLayoutView}
             layoutConflict={layoutSnapshot?.conflict ?? null}
@@ -1118,6 +1150,7 @@ function DiagramPanel({
   searchQuery,
   selectionStore,
   DiagramComponent,
+  requestLayout,
   sourceNavigationEnabled,
   layoutView,
   layoutConflict,
@@ -1160,6 +1193,7 @@ function DiagramPanel({
   readonly searchQuery: string;
   readonly selectionStore: ReturnType<typeof createDiagramSelectionStore>;
   readonly DiagramComponent: BaseSchemaDiagramComponent;
+  readonly requestLayout: NonNullable<BaseSchemaDiagramProps["requestLayout"]>;
   readonly sourceNavigationEnabled: boolean;
   readonly layoutView: LayoutViewSnapshot | null;
   readonly layoutConflict: LayoutConflictState | null;
@@ -1289,6 +1323,7 @@ function DiagramPanel({
                 sourceNavigationEnabled={sourceNavigationEnabled}
                 onToggleGroup={onToggleGroup}
                 onNavigateSource={onNavigateSource}
+                requestLayout={requestLayout}
                 layoutPositions={layoutPositions}
                 layoutViewport={layoutViewport}
                 layoutRequest={layoutRequest}

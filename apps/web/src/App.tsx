@@ -1,5 +1,6 @@
 import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ComponentProps } from "react";
+import type { RuntimeConfigResponse } from "@er-diagram/contracts";
+import { type ComponentProps, useEffect, useState } from "react";
 import {
   isRouteErrorResponse,
   Link,
@@ -13,6 +14,7 @@ import type { ProjectApi } from "./projects/project-api.js";
 import { ProjectApiProvider } from "./projects/project-api-context.js";
 import { ProjectHomePage } from "./projects/project-home-page.js";
 import { RootErrorBoundary } from "./root-error-boundary.js";
+import { RuntimeConfigProvider } from "./runtime-config.js";
 import type { ProjectWorkspaceAdapters } from "./source-editor/project-source-workspace.js";
 import type { SqlImportPageAdapters } from "./sql-import/sql-import-page.js";
 import type { SqlExportPageAdapters } from "./sql-export/sql-export-page.js";
@@ -26,14 +28,71 @@ export interface AppProps {
 }
 
 export function App({ api, queryClient, router }: AppProps) {
+  const [attempt, setAttempt] = useState(0);
+  const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfigResponse | null>(null);
+  const [startupError, setStartupError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setStartupError(false);
+    if (attempt > 0) setRuntimeConfig(null);
+    void api.getRuntimeConfig().then(
+      (config) => {
+        if (active) setRuntimeConfig(config);
+      },
+      () => {
+        if (active) setStartupError(true);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [api, attempt]);
+
   return (
     <RootErrorBoundary>
-      <ProjectApiProvider api={api}>
-        <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
-        </QueryClientProvider>
-      </ProjectApiProvider>
+      {runtimeConfig ? (
+        <RuntimeConfigProvider config={runtimeConfig}>
+          <ProjectApiProvider api={api}>
+            <QueryClientProvider client={queryClient}>
+              <RouterProvider router={router} />
+            </QueryClientProvider>
+          </ProjectApiProvider>
+        </RuntimeConfigProvider>
+      ) : startupError ? (
+        <StartupConfigError onRetry={() => setAttempt((current) => current + 1)} />
+      ) : (
+        <StartupConfigLoading />
+      )}
     </RootErrorBoundary>
+  );
+}
+
+function StartupConfigLoading() {
+  return (
+    <main className="grid min-h-screen place-items-center bg-slate-950 p-6 text-slate-300">
+      <p aria-live="polite">Loading runtime configuration…</p>
+    </main>
+  );
+}
+
+function StartupConfigError({ onRetry }: { readonly onRetry: () => void }) {
+  return (
+    <main className="grid min-h-screen place-items-center bg-slate-950 p-6 text-slate-100">
+      <section className="max-w-xl rounded-2xl border border-red-900 bg-slate-900 p-8 text-center">
+        <h1 className="text-2xl font-semibold">Runtime configuration unavailable</h1>
+        <p className="mt-3 text-slate-300" role="alert">
+          The workspace cannot safely start until its resource limits are loaded.
+        </p>
+        <button
+          className="mt-6 min-h-11 rounded-lg bg-cyan-300 px-5 font-semibold text-slate-950"
+          onClick={onRetry}
+          type="button"
+        >
+          Retry
+        </button>
+      </section>
+    </main>
   );
 }
 

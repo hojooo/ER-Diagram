@@ -2,6 +2,7 @@
 
 import "@testing-library/jest-dom/vitest";
 
+import { DEFAULT_RUNTIME_RESOURCE_LIMITS } from "@er-diagram/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter } from "react-router-dom";
@@ -101,6 +102,10 @@ class FakeProjectApi implements ProjectApi {
   readonly duplicateInputs: DuplicateProjectInput[] = [];
   readonly deleteInputs: DeleteProjectInput[] = [];
   readonly saveDraftInputs: SaveDraftInput[] = [];
+
+  async getRuntimeConfig() {
+    return { configVersion: 1 as const, resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS };
+  }
 
   async listProjects() {
     if (this.listError) throw this.listError;

@@ -50,6 +50,9 @@ importers:
       '@er-diagram/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@er-diagram/source-transform':
+        specifier: workspace:*
+        version: link:../../packages/source-transform
       '@er-diagram/storage-sqlite':
         specifier: workspace:*
         version: link:../../packages/storage-sqlite
@@ -57,9 +60,6 @@ importers:
         specifier: 5.12.1
         version: 5.12.1
     devDependencies:
-      '@er-diagram/source-transform':
-        specifier: workspace:*
-        version: link:../../packages/source-transform
       '@er-diagram/test-fixtures':
         specifier: workspace:*
         version: link:../../packages/test-fixtures

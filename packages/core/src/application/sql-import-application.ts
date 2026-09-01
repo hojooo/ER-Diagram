@@ -37,6 +37,7 @@ import {
   type SqlImportPreviewEvidence,
   type SqlImportPreviewMutation,
   type SqlImportStandalonePreviewMutation,
+  type SqlImportConverter,
 } from "./sql-import.js";
 
 class ExpectedSqlImportFailure extends Error {
@@ -49,11 +50,12 @@ class ExpectedSqlImportFailure extends Error {
 export function createSqlImportApplication(
   options: CreateSqlImportApplicationOptions,
 ): SqlImportApplication {
+  const convert = options.convert ?? convertSqlImport;
   return {
-    previewStandalone: (command) => previewStandaloneSqlImport(command),
-    createProjectFromPreview: (command) => createProjectFromSqlImport(options, command),
-    preview: (command) => previewSqlImport(options, command),
-    apply: (command) => applySqlImport(options, command),
+    previewStandalone: (command) => previewStandaloneSqlImport(convert, command),
+    createProjectFromPreview: (command) => createProjectFromSqlImport(options, convert, command),
+    preview: (command) => previewSqlImport(options, convert, command),
+    apply: (command) => applySqlImport(options, convert, command),
   };
 }
 
@@ -109,14 +111,16 @@ interface PreparedStandalonePreview {
 }
 
 async function previewStandaloneSqlImport(
+  convert: SqlImportConverter,
   command: PreviewStandaloneSqlImportCommand,
 ): Promise<SqlImportApplicationResult<SqlImportStandalonePreviewMutation>> {
-  const prepared = await prepareStandalonePreview(command);
+  const prepared = await prepareStandalonePreview(convert, command);
   return success(toStandalonePreviewMutation(prepared));
 }
 
 async function createProjectFromSqlImport(
   options: CreateSqlImportApplicationOptions,
+  convert: SqlImportConverter,
   command: CreateProjectFromSqlImportCommand,
 ): Promise<SqlImportApplicationResult<SqlImportApplyMutation>> {
   const name = normalizeProjectName(command.name);
@@ -127,7 +131,7 @@ async function createProjectFromSqlImport(
     });
   }
 
-  const prepared = await prepareStandalonePreview({
+  const prepared = await prepareStandalonePreview(convert, {
     dialect: command.primaryDialect,
     source: command.source,
     ...(command.filepath === undefined ? {} : { filepath: command.filepath }),
@@ -226,10 +230,11 @@ async function createProjectFromSqlImport(
 }
 
 async function prepareStandalonePreview(
+  convert: SqlImportConverter,
   command: PreviewStandaloneSqlImportCommand,
 ): Promise<PreparedStandalonePreview> {
   const originalSqlRetention = command.originalSqlRetention ?? "DISCARD";
-  const conversion = await convertSqlImport(command);
+  const conversion = await convert(command);
   const previewPolicy = evaluateSqlImportDataPolicy(conversion);
   const evidence: SqlImportCreatePreviewEvidence = {
     dialect: command.dialect,
@@ -265,6 +270,7 @@ function toStandalonePreviewMutation(
 
 async function previewSqlImport(
   options: CreateSqlImportApplicationOptions,
+  convert: SqlImportConverter,
   command: PreviewSqlImportCommand,
 ): Promise<SqlImportApplicationResult<SqlImportPreviewMutation>> {
   const preflight = readResult(command.projectId, () => {
@@ -276,7 +282,7 @@ async function previewSqlImport(
   if (!preflight.ok) return preflight;
 
   const retention = command.originalSqlRetention ?? "DISCARD";
-  const conversion = await convertSqlImport(command);
+  const conversion = await convert(command);
   const previewPolicy = evaluateSqlImportDataPolicy(conversion);
   const evidence = createEvidence(
     command.projectId,
@@ -323,6 +329,7 @@ async function previewSqlImport(
 
 async function applySqlImport(
   options: CreateSqlImportApplicationOptions,
+  convert: SqlImportConverter,
   command: ApplySqlImportCommand,
 ): Promise<SqlImportApplicationResult<SqlImportApplyMutation>> {
   const preflight = readResult(command.projectId, () => {
@@ -359,7 +366,7 @@ async function applySqlImport(
     return failure(previewMismatch(command.projectId, command.artifactId));
   }
 
-  const conversion = await convertSqlImport({
+  const conversion = await convert({
     dialect: artifact.dialect,
     source: command.source,
     filepath: artifact.envelope.evidence.report.sourceFilepath,

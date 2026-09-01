@@ -284,7 +284,7 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
 
 ### Milestone 4 — Security, Recovery, Open-source Release
 
-- [ ] `M4-001` source/bundle/worker size와 timeout limit
+- [x] `M4-001` source/bundle/worker size와 timeout limit
   - 검증: `pnpm test:security limits-timeouts`
 - [ ] `M4-002` CSP, text escaping, archive traversal/bomb/symlink 방어, redacted logging
   - 검증: `pnpm test:security`

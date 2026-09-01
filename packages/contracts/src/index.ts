@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { dbmlParserWorkerLimitsSchema } from "./resource-limits.js";
+
+export * from "./resource-limits.js";
 
 export const contractPackage = "@er-diagram/contracts";
 
@@ -67,6 +70,7 @@ export const dbmlParserWorkerRequestSchema = z
     filepath: z.literal("/main.dbml"),
     source: z.string(),
     sourceHash: sha256HexSchema,
+    limits: dbmlParserWorkerLimitsSchema,
   })
   .strict();
 export type DbmlParserWorkerRequest = z.infer<typeof dbmlParserWorkerRequestSchema>;

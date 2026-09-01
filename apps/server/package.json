@@ -6,17 +6,17 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
-    "test:integration": "vitest run --config ../../vitest.integration.config.ts",
+    "test:integration": "pnpm -w build:resource-workers && vitest run --config ../../vitest.integration.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@er-diagram/contracts": "workspace:*",
     "@er-diagram/core": "workspace:*",
+    "@er-diagram/source-transform": "workspace:*",
     "@er-diagram/storage-sqlite": "workspace:*",
     "fastify": "5.12.1"
   },
   "devDependencies": {
-    "@er-diagram/source-transform": "workspace:*",
     "@er-diagram/test-fixtures": "workspace:*",
     "typescript": "7.0.2",
     "vitest": "4.1.11"

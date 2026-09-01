@@ -22,11 +22,14 @@ import {
   sendProjectApplicationError,
   sendSqlImportApplicationError,
 } from "./http-errors.js";
+import { assertSourceWithinLimit } from "./request-resource-limits.js";
+import type { ServerResourceLimits } from "./resource-limits.js";
 
 export function registerProjectRoutes(
   server: FastifyInstance,
   application: ProjectApplication,
   sqlImportApplication: SqlImportApplication,
+  resourceLimits: ServerResourceLimits,
 ): void {
   server.get("/api/v1/projects", async (request, reply) => {
     const result = await application.listProjects();
@@ -38,6 +41,7 @@ export function registerProjectRoutes(
     const command = parseRequest(createProjectRequestSchema, request.body);
     echoCommandId(reply, command.commandId);
     if (command.operation === "CREATE_FROM_SQL_IMPORT") {
+      assertSourceWithinLimit(command.source, resourceLimits);
       const result = await sqlImportApplication.createProjectFromPreview({
         name: command.name,
         primaryDialect: command.primaryDialect,
@@ -58,7 +62,7 @@ export function registerProjectRoutes(
         ? await application.createProject({
             name: command.name,
             primaryDialect: command.primaryDialect,
-            source: command.source,
+            source: checkedSource(command.source, resourceLimits),
           })
         : await application.duplicateProject({
             sourceProjectId: command.sourceProjectId,
@@ -104,6 +108,7 @@ export function registerProjectRoutes(
     const { projectId } = parseRequest(projectParamsSchema, request.params);
     const command = parseRequest(saveDraftRequestSchema, request.body);
     echoCommandId(reply, command.commandId);
+    assertSourceWithinLimit(command.source, resourceLimits);
     return sendMutation(
       request,
       reply,
@@ -145,6 +150,11 @@ export function registerProjectRoutes(
       );
     },
   );
+}
+
+function checkedSource(source: string, resourceLimits: ServerResourceLimits): string {
+  assertSourceWithinLimit(source, resourceLimits);
+  return source;
 }
 
 function sendMutation(

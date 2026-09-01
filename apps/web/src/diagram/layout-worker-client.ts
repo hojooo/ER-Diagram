@@ -1,3 +1,4 @@
+import { DEFAULT_RUNTIME_RESOURCE_LIMITS } from "@er-diagram/contracts";
 import type {
   DiagramLayoutDirection,
   LayoutWorkerErrorListener,
@@ -10,7 +11,11 @@ import type { DiagramProjection } from "./types.js";
 
 export class LayoutClientError extends Error {
   constructor(
-    readonly code: "LAYOUT_ERROR" | "LAYOUT_TIMEOUT" | "LAYOUT_WORKER_ERROR",
+    readonly code:
+      | "LAYOUT_ERROR"
+      | "LAYOUT_RESOURCE_LIMIT"
+      | "LAYOUT_TIMEOUT"
+      | "LAYOUT_WORKER_ERROR",
     message: string,
   ) {
     super(message);
@@ -22,6 +27,8 @@ export interface WorkerLayoutOptions {
   direction?: DiagramLayoutDirection;
   timeoutMs?: number;
   workerFactory?: () => LayoutWorkerLike;
+  maxNodes?: number;
+  maxEdges?: number;
 }
 
 let nextRequestNumber = 1;
@@ -31,8 +38,18 @@ export function requestWorkerLayout(
   options: WorkerLayoutOptions = {},
 ): Promise<DiagramProjection> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_LAYOUT_TIMEOUT_MS;
+  const maxNodes = options.maxNodes ?? DEFAULT_RUNTIME_RESOURCE_LIMITS.maxLayoutNodes;
+  const maxEdges = options.maxEdges ?? DEFAULT_RUNTIME_RESOURCE_LIMITS.maxLayoutEdges;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     return Promise.reject(new RangeError("layout worker timeout must be a finite positive number"));
+  }
+  if (projection.nodes.length > maxNodes || projection.edges.length > maxEdges) {
+    return Promise.reject(
+      new LayoutClientError(
+        "LAYOUT_RESOURCE_LIMIT",
+        "The diagram exceeds the configured layout projection limit.",
+      ),
+    );
   }
 
   const worker = (options.workerFactory ?? createBrowserLayoutWorker)();
@@ -73,6 +90,7 @@ export function requestWorkerLayout(
     const request: LayoutWorkerRequest = {
       requestId,
       projection,
+      limits: { maxNodes, maxEdges },
       ...(options.direction ? { options: { direction: options.direction } } : {}),
     };
 

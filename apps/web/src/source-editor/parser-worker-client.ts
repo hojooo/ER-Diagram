@@ -1,8 +1,11 @@
 import {
+  DEFAULT_RUNTIME_RESOURCE_LIMITS,
+  type DbmlParserWorkerLimits,
   type DbmlParserWorkerRequest,
   type DbmlParserWorkerResponse,
   dbmlParserWorkerRequestSchema,
   dbmlParserWorkerResponseSchema,
+  utf8ByteLength,
 } from "@er-diagram/contracts";
 import type { DBML_PARSER_VERSION, SchemaGraph } from "@er-diagram/core";
 
@@ -30,6 +33,7 @@ export class DbmlParserWorkerClientError extends Error {
       | "PARSER_WORKER_CRASH"
       | "PARSER_WORKER_DISPOSED"
       | "PARSER_WORKER_PROTOCOL_ERROR"
+      | "PARSER_WORKER_RESOURCE_LIMIT"
       | "PARSER_WORKER_TIMEOUT",
     message: string,
   ) {
@@ -48,6 +52,7 @@ interface CreateDbmlParserWorkerClientOptions {
   readonly timeoutMs?: number;
   readonly generateRequestId?: () => string;
   readonly hashSource?: (source: string) => Promise<string>;
+  readonly limits?: DbmlParserWorkerLimits;
 }
 
 interface PendingRequest {
@@ -68,6 +73,12 @@ export function createDbmlParserWorkerClient(
   const workerFactory = options.workerFactory ?? createBrowserParserWorker;
   const generateRequestId = options.generateRequestId ?? generateBrowserUuid;
   const hashSource = options.hashSource ?? hashDbmlSource;
+  const limits = options.limits ?? {
+    maxSourceBytes: DEFAULT_RUNTIME_RESOURCE_LIMITS.maxSourceBytes,
+    maxTables: DEFAULT_RUNTIME_RESOURCE_LIMITS.maxTables,
+    maxReferences: DEFAULT_RUNTIME_RESOURCE_LIMITS.maxReferences,
+    maxSchemaElements: DEFAULT_RUNTIME_RESOURCE_LIMITS.maxSchemaElements,
+  };
   const pending = new Map<string, PendingRequest>();
   let worker: DbmlParserWorkerLike | undefined;
   let disposed = false;
@@ -148,6 +159,13 @@ export function createDbmlParserWorkerClient(
         );
       }
 
+      if (utf8ByteLength(source) > limits.maxSourceBytes) {
+        throw new DbmlParserWorkerClientError(
+          "PARSER_WORKER_RESOURCE_LIMIT",
+          `DBML source exceeds the configured ${limits.maxSourceBytes} byte limit.`,
+        );
+      }
+
       const sourceHash = await hashSource(source);
       if (disposed) {
         throw new DbmlParserWorkerClientError(
@@ -162,6 +180,7 @@ export function createDbmlParserWorkerClient(
         filepath: "/main.dbml",
         source,
         sourceHash,
+        limits,
       });
       const activeWorker = ensureWorker();
 

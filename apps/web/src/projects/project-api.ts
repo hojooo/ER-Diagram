@@ -21,6 +21,8 @@ import {
   projectResponseSchema,
   projectRevisionsResponseSchema,
   projectsResponseSchema,
+  type RuntimeConfigResponse,
+  runtimeConfigResponseSchema,
   renameProjectRequestSchema,
   restoreRevisionRequestSchema,
   revisionParamsSchema,
@@ -45,6 +47,7 @@ import {
   type VisualCommandPartialImpact,
   visualCommandMutationResponseSchema,
   visualCommandRequestSchema,
+  utf8ByteLength,
 } from "@er-diagram/contracts";
 
 export interface CreateProjectInput {
@@ -135,6 +138,7 @@ export interface ApplyVisualCommandInput {
 }
 
 export interface ProjectApi {
+  getRuntimeConfig(): Promise<RuntimeConfigResponse>;
   listProjects(): Promise<ProjectsResponse>;
   getProject(projectId: string): Promise<ProjectResponse>;
   listRevisions(projectId: string): Promise<ProjectRevisionsResponse>;
@@ -215,8 +219,42 @@ export function createHttpProjectApi(options: HttpProjectApiOptions = {}): Proje
   const fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
   const basePath = normalizeBasePath(options.basePath ?? DEFAULT_BASE_PATH);
   const generateCommandId = options.generateCommandId ?? generateBrowserUuid;
+  let runtimeConfig: RuntimeConfigResponse | undefined;
+  let runtimeConfigRequest: Promise<RuntimeConfigResponse> | undefined;
+
+  const getRuntimeConfig = (): Promise<RuntimeConfigResponse> => {
+    if (runtimeConfig) return Promise.resolve(runtimeConfig);
+    if (runtimeConfigRequest) return runtimeConfigRequest;
+    runtimeConfigRequest = request(fetcher, basePath, {
+      method: "GET",
+      path: "/runtime-config",
+      expectedStatus: 200,
+      responseSchema: runtimeConfigResponseSchema,
+    }).then(
+      (response) => {
+        runtimeConfig = response;
+        return response;
+      },
+      (error: unknown) => {
+        runtimeConfigRequest = undefined;
+        throw error;
+      },
+    );
+    return runtimeConfigRequest;
+  };
+
+  const assertSourceWithinConfiguredLimit = (source: string): void => {
+    const limit = runtimeConfig?.resourceLimits.maxSourceBytes;
+    if (limit !== undefined && utf8ByteLength(source) > limit) {
+      throw new ProjectApiError(`Source exceeds the configured ${limit} byte limit.`, {
+        status: null,
+        code: "RESOURCE_SOURCE_TOO_LARGE",
+      });
+    }
+  };
 
   return {
+    getRuntimeConfig,
     listProjects: () =>
       request(fetcher, basePath, {
         method: "GET",
@@ -243,6 +281,7 @@ export function createHttpProjectApi(options: HttpProjectApiOptions = {}): Proje
       });
     },
     createProject: (input) => {
+      assertSourceWithinConfiguredLimit(input.source);
       const commandId = generateCommandId();
       const body = parseClientInput(createProjectRequestSchema, {
         operation: "CREATE",
@@ -296,6 +335,7 @@ export function createHttpProjectApi(options: HttpProjectApiOptions = {}): Proje
       });
     },
     saveDraft: (input) => {
+      assertSourceWithinConfiguredLimit(input.source);
       const projectId = parseClientInput(projectIdSchema, input.projectId);
       const commandId = input.commandId ?? generateCommandId();
       const body = parseClientInput(saveDraftRequestSchema, {
@@ -375,6 +415,7 @@ export function createHttpProjectApi(options: HttpProjectApiOptions = {}): Proje
       });
     },
     previewStandaloneSqlImport: (input) => {
+      assertSourceWithinConfiguredLimit(input.source);
       const commandId = generateCommandId();
       const body = parseClientInput(sqlImportStandalonePreviewRequestSchema, {
         commandId,
@@ -394,6 +435,7 @@ export function createHttpProjectApi(options: HttpProjectApiOptions = {}): Proje
       });
     },
     createProjectFromSqlImport: (input) => {
+      assertSourceWithinConfiguredLimit(input.source);
       const commandId = generateCommandId();
       const body = parseClientInput(createProjectRequestSchema, {
         operation: "CREATE_FROM_SQL_IMPORT",
@@ -419,6 +461,7 @@ export function createHttpProjectApi(options: HttpProjectApiOptions = {}): Proje
       });
     },
     previewProjectSqlImport: (input) => {
+      assertSourceWithinConfiguredLimit(input.source);
       const projectId = parseClientInput(projectIdSchema, input.projectId);
       const commandId = generateCommandId();
       const body = parseClientInput(sqlImportPreviewRequestSchema, {
@@ -440,6 +483,7 @@ export function createHttpProjectApi(options: HttpProjectApiOptions = {}): Proje
       });
     },
     applyProjectSqlImport: (input) => {
+      assertSourceWithinConfiguredLimit(input.source);
       const projectId = parseClientInput(projectIdSchema, input.projectId);
       const commandId = generateCommandId();
       const body = parseClientInput(sqlImportApplyRequestSchema, {

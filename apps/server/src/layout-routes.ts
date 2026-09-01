@@ -8,10 +8,13 @@ import type { LayoutApplication } from "@er-diagram/core";
 import type { FastifyInstance, FastifyReply } from "fastify";
 
 import { parseRequest, parseResponse, sendLayoutApplicationError } from "./http-errors.js";
+import { assertLayoutWithinLimit } from "./request-resource-limits.js";
+import type { ServerResourceLimits } from "./resource-limits.js";
 
 export function registerLayoutRoutes(
   server: FastifyInstance,
   application: LayoutApplication,
+  resourceLimits: ServerResourceLimits,
 ): void {
   server.get("/api/v1/projects/:projectId/layouts/:viewKey", async (request, reply) => {
     const { projectId, viewKey } = parseRequest(layoutParamsSchema, request.params);
@@ -24,6 +27,7 @@ export function registerLayoutRoutes(
     const { projectId, viewKey } = parseRequest(layoutParamsSchema, request.params);
     const command = parseRequest(saveLayoutRequestSchema, request.body);
     echoCommandId(reply, command.commandId);
+    assertLayoutWithinLimit(command.layout.positions, resourceLimits);
     const result = await application.saveLayout({
       projectId,
       viewKey,

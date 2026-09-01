@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { correlationIdSchema } from "@er-diagram/contracts";
+import {
+  correlationIdSchema,
+  RESOURCE_LIMITS_VERSION,
+  runtimeConfigResponseSchema,
+} from "@er-diagram/contracts";
 import type {
   LayoutApplication,
   ProjectApplication,
@@ -15,6 +19,12 @@ import { registerProjectRoutes } from "./project-routes.js";
 import { registerSqlImportRoutes } from "./sql-import-routes.js";
 import { registerSqlExportRoutes } from "./sql-export-routes.js";
 import { registerVisualCommandRoutes } from "./visual-command-routes.js";
+import {
+  DEFAULT_SERVER_RESOURCE_LIMITS,
+  parseServerResourceLimits,
+  type ServerResourceLimits,
+  toRuntimeResourceLimits,
+} from "./resource-limits.js";
 
 export interface CreateServerOptions {
   readonly projectApplication: ProjectApplication;
@@ -23,11 +33,16 @@ export interface CreateServerOptions {
   readonly sqlExportApplication: SqlExportApplication;
   readonly visualCommandApplication: VisualCommandApplication;
   readonly generateCorrelationId?: () => string;
+  readonly resourceLimits?: ServerResourceLimits;
 }
 
 export function createServer(options: CreateServerOptions): FastifyInstance {
   const generateCorrelationId = options.generateCorrelationId ?? randomUUID;
+  const resourceLimits = parseServerResourceLimits(
+    options.resourceLimits ?? DEFAULT_SERVER_RESOURCE_LIMITS,
+  );
   const server = Fastify({
+    bodyLimit: resourceLimits.maxRequestBodyBytes,
     logger: false,
     requestIdHeader: false,
     genReqId: () => correlationIdSchema.parse(generateCorrelationId()),
@@ -40,9 +55,23 @@ export function createServer(options: CreateServerOptions): FastifyInstance {
   registerHttpErrorHandlers(server);
 
   server.get("/health/live", async () => ({ status: "ok" }));
-  registerProjectRoutes(server, options.projectApplication, options.sqlImportApplication);
-  registerLayoutRoutes(server, options.layoutApplication);
-  registerSqlImportRoutes(server, options.sqlImportApplication);
+  server.get("/api/v1/runtime-config", async (_request, reply) => {
+    reply.header("cache-control", "no-store");
+    return reply.send(
+      runtimeConfigResponseSchema.parse({
+        configVersion: RESOURCE_LIMITS_VERSION,
+        resourceLimits: toRuntimeResourceLimits(resourceLimits),
+      }),
+    );
+  });
+  registerProjectRoutes(
+    server,
+    options.projectApplication,
+    options.sqlImportApplication,
+    resourceLimits,
+  );
+  registerLayoutRoutes(server, options.layoutApplication, resourceLimits);
+  registerSqlImportRoutes(server, options.sqlImportApplication, resourceLimits);
   registerSqlExportRoutes(server, options.sqlExportApplication);
   registerVisualCommandRoutes(server, options.visualCommandApplication);
 

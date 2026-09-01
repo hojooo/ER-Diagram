@@ -10,6 +10,10 @@ export interface SerializableDiagramLayoutOptions {
 export interface LayoutWorkerRequest {
   requestId: string;
   projection: DiagramProjection;
+  limits: {
+    maxNodes: number;
+    maxEdges: number;
+  };
   options?: SerializableDiagramLayoutOptions;
 }
 
@@ -23,7 +27,7 @@ export type LayoutWorkerResponse =
       requestId: string;
       ok: false;
       error: {
-        code: "LAYOUT_ERROR";
+        code: "LAYOUT_ERROR" | "LAYOUT_RESOURCE_LIMIT";
         message: string;
       };
     };

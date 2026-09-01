@@ -3,7 +3,12 @@
 import "@testing-library/jest-dom/vitest";
 
 import { createHash } from "node:crypto";
-import type { Diagnostic, ProjectMutationResponse, ProjectState } from "@er-diagram/contracts";
+import {
+  DEFAULT_RUNTIME_RESOURCE_LIMITS,
+  type Diagnostic,
+  type ProjectMutationResponse,
+  type ProjectState,
+} from "@er-diagram/contracts";
 import { parseDbmlV2 } from "@er-diagram/core";
 import { QueryClient } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -714,6 +719,10 @@ class SourceProjectApi implements ProjectApi {
   nextSave: Promise<ProjectMutationResponse> | null = null;
 
   constructor(public state: ProjectState) {}
+
+  async getRuntimeConfig() {
+    return { configVersion: 1 as const, resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS };
+  }
 
   async listProjects() {
     return {

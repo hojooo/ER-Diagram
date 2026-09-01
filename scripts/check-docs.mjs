@@ -14,6 +14,7 @@ const requiredFiles = [
   "docs/adr/0004-fastify-adapter-boundary.md",
   "docs/adr/0005-sql-capability-matrix.md",
   "docs/adr/0006-session-history-and-durable-restore.md",
+  "docs/adr/0007-runtime-resource-budgets-and-worker-isolation.md",
 ];
 const forbiddenMarkers = /PROPOSED|OPEN-|IMPLEMENTATION_BLOCKER/u;
 const ineffectivePnpmTestFilter =

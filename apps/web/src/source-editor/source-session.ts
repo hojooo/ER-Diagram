@@ -65,6 +65,7 @@ export interface CreateSourceSessionOptions {
   readonly onAdoptCommittedSource?: (source: string) => void;
   readonly debounceMs?: number;
   readonly hashSource?: (source: string) => Promise<string>;
+  readonly validateSource?: (source: string) => SourceSessionError | null;
 }
 
 interface QueuedSave {
@@ -116,6 +117,11 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
   function start(): void {
     if (started || disposed) return;
     started = true;
+    const resourceError = options.validateSource?.(snapshot.source) ?? null;
+    if (resourceError) {
+      publish({ validation: "ERROR", validationError: resourceError });
+      return;
+    }
     void validateCurrentSource(snapshot.source, generation);
     const { currentRevision, lastValidRevision } = options.initialState;
     if (
@@ -143,6 +149,11 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
       persistenceError: snapshot.persistence === "CONFLICT" ? snapshot.persistenceError : null,
       validationError: null,
     });
+    const resourceError = options.validateSource?.(source) ?? null;
+    if (resourceError) {
+      publish({ validation: "ERROR", validationError: resourceError });
+      return;
+    }
     debounceTimer = setTimeout(runDebouncedWork, debounceMs);
   }
 
@@ -150,6 +161,11 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
     debounceTimer = undefined;
     const source = snapshot.source;
     const currentGeneration = generation;
+    const resourceError = options.validateSource?.(source) ?? null;
+    if (resourceError) {
+      publish({ validation: "ERROR", validationError: resourceError });
+      return Promise.resolve();
+    }
     const validation = validateCurrentSource(source, currentGeneration);
     if (snapshot.persistence !== "CONFLICT") queueSave(source, currentGeneration);
     return validation;
@@ -413,6 +429,11 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
 
   function retryValidation(): void {
     if (disposed) return;
+    const resourceError = options.validateSource?.(snapshot.source) ?? null;
+    if (resourceError) {
+      publish({ validation: "ERROR", validationError: resourceError });
+      return;
+    }
     void validateCurrentSource(snapshot.source, generation);
   }
 

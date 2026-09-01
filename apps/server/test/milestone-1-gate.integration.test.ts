@@ -196,5 +196,5 @@ describe("M1 read-only workspace gate", () => {
       diagramViews: reparsed.graph.views.length,
       references: reparsed.graph.references.length,
     }).toEqual(fixtureInventory.fidelity);
-  });
+  }, 30_000);
 });

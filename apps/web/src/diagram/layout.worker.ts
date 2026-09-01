@@ -12,6 +12,21 @@ workerScope.addEventListener("message", async (event: MessageEvent<LayoutWorkerR
   const { requestId, projection, options } = event.data;
   let response: LayoutWorkerResponse;
   try {
+    if (
+      projection.nodes.length > event.data.limits.maxNodes ||
+      projection.edges.length > event.data.limits.maxEdges
+    ) {
+      response = {
+        requestId,
+        ok: false,
+        error: {
+          code: "LAYOUT_RESOURCE_LIMIT",
+          message: "The diagram exceeds the configured layout projection limit.",
+        },
+      };
+      workerScope.postMessage(response);
+      return;
+    }
     response = {
       requestId,
       ok: true,

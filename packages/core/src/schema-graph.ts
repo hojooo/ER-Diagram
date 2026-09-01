@@ -240,6 +240,51 @@ export interface SchemaGraph {
   sourceMap: SourceMap;
 }
 
+export interface SchemaGraphMetrics {
+  readonly tables: number;
+  readonly references: number;
+  readonly totalElements: number;
+}
+
+export function measureSchemaGraph(graph: SchemaGraph): SchemaGraphMetrics {
+  let columns = 0;
+  let indexes = 0;
+  let checks = 0;
+  for (const table of graph.tables) {
+    columns += table.columns.length;
+    indexes += table.indexes.length;
+    checks += table.checks.length;
+    for (const column of table.columns) checks += column.checks.length;
+  }
+
+  let enumValues = 0;
+  for (const schemaEnum of graph.enums) enumValues += schemaEnum.values.length;
+
+  let partialElements = 0;
+  for (const partial of graph.partials) {
+    partialElements += partial.columns.length + partial.indexes.length + partial.checks.length;
+    for (const column of partial.columns) partialElements += column.checks.length;
+  }
+
+  return {
+    tables: graph.tables.length,
+    references: graph.references.length,
+    totalElements:
+      graph.tables.length +
+      columns +
+      indexes +
+      checks +
+      graph.enums.length +
+      enumValues +
+      graph.references.length +
+      graph.groups.length +
+      graph.partials.length +
+      partialElements +
+      graph.views.length +
+      graph.notes.length,
+  };
+}
+
 export function qualifiedElementKey(
   kind: SchemaElementKind,
   ...segments: SchemaKeySegment[]
