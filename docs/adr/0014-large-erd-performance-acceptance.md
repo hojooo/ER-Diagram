@@ -33,8 +33,13 @@ ELK worker는 사용자가 명시한 Auto-layout Preview와 Reset에서만 실�
 Apply·Cancel, timeout과 resource cap은 기존 durable layout 경계를 유지한다.
 
 `@er-diagram/core`는 import-time side effect를 contract로 사용하지 않으므로 package metadata에서
-side-effect-free로 선언한다. Production Web main bundle은 사용하지 않는 DBML parser re-export를 제거하고,
-실제 `parseDbmlV2()` import가 있는 parser worker chunk에만 pinned parser implementation을 포함한다.
+side-effect-free로 선언한다. Production Web main bundle은 사용하지 않는 DBML parser re-export를 제거한다.
+Browser parser worker는 내부 전용 `@er-diagram/core/internal/browser-parser` entry에서 DBML v2 compiler인
+`@dbml/parse`만 로드한다. SQL dialect parser와 exporter가 필요한 Core SQL adapter는 `@dbml/core`를 계속
+사용하되 browser worker graph와 동일한 normalized `SchemaGraph`를 생성하는지 fidelity·partial fixture로
+검증한다. 이 경계는 parser worker가 PostgreSQL·MySQL parser 전체를 포함하는 회귀를 막으면서 공개 Core
+계약과 pinned parser version을 변경하지 않는다. Reference production build에서 parser worker는
+15,634.14 kB에서 528.48 kB로 줄었다.
 
 ### Versioned measurement profile
 
@@ -76,12 +81,12 @@ evidence와 architecture 결정을 동반해야 한다.
 
 | 항목 | Samples | min | median | p95 | max |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Parse (ms) | 20 | 416.50 | 423.90 | 444.80 | 445.40 |
-| Cold interactive (ms) | 20 | 1,832.56 | 1,847.95 | 2,021.42 | 2,241.09 |
-| View switch (ms) | 29 | 147.00 | 211.90 | 243.90 | 249.60 |
-| Drag frame interval (ms) | 599 | 16.50 | 16.70 | 16.70 | 16.80 |
-| Pan frame interval (ms) | 603 | 16.50 | 16.70 | 16.70 | 16.80 |
-| Zoom frame interval (ms) | 602 | 16.50 | 16.70 | 16.70 | 16.80 |
+| Parse (ms) | 20 | 433.20 | 451.90 | 495.10 | 690.60 |
+| Cold interactive (ms) | 20 | 1,271.55 | 1,339.47 | 1,362.20 | 1,372.97 |
+| View switch (ms) | 29 | 143.40 | 208.50 | 222.30 | 227.20 |
+| Drag frame interval (ms) | 600 | 16.50 | 16.70 | 16.80 | 16.80 |
+| Pan frame interval (ms) | 584 | 16.50 | 16.70 | 16.80 | 333.30 |
+| Zoom frame interval (ms) | 601 | 16.50 | 16.70 | 16.80 | 16.80 |
 
 Source input은 150 events에서 100 ms 초과 long task 0건이었고 view switch는 parser·ELK request와
 source/layout PUT 모두 0건이었다. Explicit Auto-layout은 ELK request 1건으로 검증했다.
