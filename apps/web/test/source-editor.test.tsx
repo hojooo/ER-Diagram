@@ -397,8 +397,9 @@ describe("DBML source workspace", () => {
 
     fireEvent.change(editor, { target: { value: SECOND_VALID_SOURCE } });
     await act(() => vi.advanceTimersByTimeAsync(750));
-    await settleReact();
-    expect(screen.getByText(/Showing the current valid draft/)).toBeVisible();
+    await vi.waitFor(() => {
+      expect(screen.getByText(/Showing the current valid draft/)).toBeVisible();
+    });
     fireEvent.click(screen.getByRole("button", { name: "Select first diagram table" }));
     expect(revealSourceRange).toHaveBeenCalledTimes(navigationCalls + 1);
   });
