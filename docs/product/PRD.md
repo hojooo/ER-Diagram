@@ -1203,6 +1203,20 @@ project evidence hash를 다시 계산한다. Original SQL은 별도 확인이 �
 metadata를 복구하지 않는다. 이 identity와 whole SQLite volume을 그대로 복구하는 기능은 M4-004 backup/restore가
 담당한다.
 
+Whole-volume backup은 HTTP·Web에 노출하지 않는 operator CLI다. 실행 중 backup은 SQLite online backup API로
+일관된 snapshot을 만들고, mode `0700` directory의 `manifest.json`과 `database.sqlite`만 허용한다. Snapshot은
+project, retained revision, layout, SQL import artifact와 retained original SQL, visual command receipt,
+`app_metadata`와 migration journal을 내부 ID와 timestamp까지 보존한다. 이 artifact는 암호화되지 않은 민감 data이며
+자동 retention·삭제·upload를 제공하지 않는다. Portable bundle archive budget은 raw volume snapshot을 자르는 데
+사용하지 않으며 legacy oversized source도 byte-identical하게 보존한다.
+
+Restore와 pre-migration은 기본 dry-run이며 backup root hash, target snapshot checksum, normalized target path와
+bundled migration set, staged candidate checksum을 묶은 plan hash를 발급한다. Apply는 server가 중지된 offline
+상태에서 같은 evidence와 plan hash를 다시 확인한다. Existing target restore는 별도 safety backup output이 필수다.
+Candidate는 target과 같은 filesystem에서 fsync 후 atomic rename하고 close/reopen full integrity 검증에 실패하면 기존
+target을 자동 복구한다. Supported older schema만 staging copy에서 migrate하며 future version 또는 divergent migration
+history는 차단한다. Production startup 전에 이 preparation API를 호출하는 lifecycle 연결은 M4-006에서 수행한다.
+
 Production SQLite composition은 allowlist operational event를 newline-delimited JSON으로 stdout에 기록한다.
 UTC timestamp, correlation ID, static operation, method/status/latency, opaque project ID, safe byte·element count, version과
 diagnostic/error code만 허용한다. Raw URL·query·header·body, source, SQL literal, note, command payload,

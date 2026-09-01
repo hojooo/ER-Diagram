@@ -17,6 +17,8 @@ const requiredFiles = [
   "docs/adr/0007-runtime-resource-budgets-and-worker-isolation.md",
   "docs/adr/0008-web-and-archive-security-boundaries.md",
   "docs/adr/0009-portable-project-bundle.md",
+  "docs/adr/0010-sqlite-volume-recovery.md",
+  "docs/operations/backup-restore.md",
 ];
 const forbiddenMarkers = /PROPOSED|OPEN-|IMPLEMENTATION_BLOCKER/u;
 const ineffectivePnpmTestFilter =
