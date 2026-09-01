@@ -32,6 +32,10 @@ fit viewport 적용, drag·pan·zoom 활성화가 모두 끝난 뒤에만 표시
 ELK worker는 사용자가 명시한 Auto-layout Preview와 Reset에서만 실행한다. Preview의 generation guard,
 Apply·Cancel, timeout과 resource cap은 기존 durable layout 경계를 유지한다.
 
+`@er-diagram/core`는 import-time side effect를 contract로 사용하지 않으므로 package metadata에서
+side-effect-free로 선언한다. Production Web main bundle은 사용하지 않는 DBML parser re-export를 제거하고,
+실제 `parseDbmlV2()` import가 있는 parser worker chunk에만 pinned parser implementation을 포함한다.
+
 ### Versioned measurement profile
 
 `M4_PERFORMANCE_PROFILE_VERSION=1`은 다음 source evidence를 고정한다.
@@ -72,12 +76,12 @@ evidence와 architecture 결정을 동반해야 한다.
 
 | 항목 | Samples | min | median | p95 | max |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Parse (ms) | 20 | 420.50 | 430.50 | 449.70 | 465.50 |
-| Cold interactive (ms) | 20 | 2,327.43 | 2,338.87 | 2,380.92 | 2,547.79 |
-| View switch (ms) | 29 | 129.10 | 200.20 | 217.10 | 225.50 |
-| Drag frame interval (ms) | 599 | 16.50 | 16.70 | 16.80 | 33.40 |
-| Pan frame interval (ms) | 604 | 16.50 | 16.70 | 16.70 | 16.80 |
-| Zoom frame interval (ms) | 601 | 16.50 | 16.70 | 16.70 | 16.80 |
+| Parse (ms) | 20 | 416.50 | 423.90 | 444.80 | 445.40 |
+| Cold interactive (ms) | 20 | 1,832.56 | 1,847.95 | 2,021.42 | 2,241.09 |
+| View switch (ms) | 29 | 147.00 | 211.90 | 243.90 | 249.60 |
+| Drag frame interval (ms) | 599 | 16.50 | 16.70 | 16.70 | 16.80 |
+| Pan frame interval (ms) | 603 | 16.50 | 16.70 | 16.70 | 16.80 |
+| Zoom frame interval (ms) | 602 | 16.50 | 16.70 | 16.70 | 16.80 |
 
 Source input은 150 events에서 100 ms 초과 long task 0건이었고 view switch는 parser·ELK request와
 source/layout PUT 모두 0건이었다. Explicit Auto-layout은 ELK request 1건으로 검증했다.

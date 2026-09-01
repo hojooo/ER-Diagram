@@ -599,10 +599,15 @@ async function waitForInteractionTarget(
 ): Promise<{ x: number; y: number; width: number; height: number }> {
   const target =
     interaction === "DRAG"
-      ? page.locator(".react-flow__node-table:visible").first()
+      ? page.locator('.react-flow__node-table[data-id*="node_199"]')
       : page.locator(".react-flow__pane");
-  await target.waitFor({ state: "visible" });
-  const box = await target.boundingBox();
+  let box = await target.boundingBox();
+  await expect
+    .poll(async () => {
+      box = await target.boundingBox();
+      return box !== null;
+    })
+    .toBe(true);
   if (!box) throw new Error("The performance interaction target is not visible.");
   return box;
 }
