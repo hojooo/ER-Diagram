@@ -4,7 +4,11 @@ import {
   dbmlParserWorkerResponseSchema,
   utf8ByteLength,
 } from "@er-diagram/contracts";
-import { DBML_PARSER_VERSION, measureSchemaGraph, parseDbmlV2 } from "@er-diagram/core";
+import {
+  DBML_PARSER_VERSION,
+  measureSchemaGraph,
+  parseDbmlV2,
+} from "@er-diagram/core/internal/browser-parser";
 
 import { hashDbmlSource } from "./source-hash.js";
 

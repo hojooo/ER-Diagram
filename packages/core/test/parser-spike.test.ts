@@ -11,6 +11,7 @@ import {
   runSameDialectSqlSmoke,
   sha256Utf8,
 } from "../src/index.js";
+import { parseDbmlV2ForAdapter } from "../src/dbml-parser-adapter.js";
 
 const fidelitySource = `// keep this exact comment: TableGroup should not be stripped
 Project synthetic_catalog {
@@ -183,6 +184,45 @@ DiagramView shared_overview {
       diagramViews: result.graph.views.length,
       references: result.graph.references.length,
     }).toEqual(inventory);
+  });
+
+  it.each([
+    ["fidelity", generateFidelityFixture()],
+    [
+      "injected reference",
+      `Table users {
+  id int [pk]
+}
+
+TablePartial ownership {
+  user_id int [ref: > users.id]
+}
+
+Table posts {
+  id int [pk]
+  ~ownership
+}`,
+    ],
+    [
+      "schema-qualified enum array",
+      `Enum "app"."mood" {
+  "happy"
+  "sad"
+}
+
+Table "app"."samples" {
+  "moods" app."app.mood[]"
+}`,
+    ],
+  ])("keeps the model-free %s graph identical to the internal adapter", async (_name, source) => {
+    const [modelFree, adapter] = await Promise.all([
+      parseDbmlV2(source),
+      parseDbmlV2ForAdapter(source),
+    ]);
+
+    expect(modelFree.ok && adapter.ok).toBe(true);
+    if (!modelFree.ok || !adapter.ok) return;
+    expect(modelFree.graph).toEqual(adapter.graph);
   });
 
   it.each([

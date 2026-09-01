@@ -1,6 +1,6 @@
 import { ModelExporter, Parser, type Database } from "@dbml/core";
 import type { Diagnostic, PrimaryDialect, SourceRange } from "@er-diagram/contracts";
-import { parseDbmlV2ForAdapter, type DbmlAdapterParseResult } from "./dbml-parser.js";
+import { parseDbmlV2ForAdapter, type DbmlAdapterParseResult } from "./dbml-parser-adapter.js";
 import { isSourceRangeValid, resolvePublicFilepath } from "./dbml-source-range.js";
 import { sha256Utf8 } from "./hash.js";
 import {

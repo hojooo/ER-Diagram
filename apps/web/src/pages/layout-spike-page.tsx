@@ -13,6 +13,7 @@ import {
   DiagramInteractionContext,
   GroupDiagramNodeComponent,
   ReferenceDiagramEdgeComponent,
+  shouldShowDiagramEdgeLabels,
   TableDiagramNodeComponent,
 } from "../diagram/diagram-components.js";
 import { requestWorkerLayout } from "../diagram/layout-worker-client.js";
@@ -85,6 +86,7 @@ export function LayoutSpikePage() {
   const interactions = useMemo(
     () => ({
       activateElement: () => undefined,
+      showEdgeLabels: shouldShowDiagramEdgeLabels(displayProjection.edges.length),
       toggleGroup: (groupKey: string) => {
         setCollapsedGroupKeys((current) => {
           const next = new Set(current);
@@ -94,7 +96,7 @@ export function LayoutSpikePage() {
         });
       },
     }),
-    [],
+    [displayProjection.edges.length],
   );
 
   return (

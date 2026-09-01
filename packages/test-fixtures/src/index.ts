@@ -1,20 +1,21 @@
 export const testFixturesPackage = "@er-diagram/test-fixtures";
 
+export type {
+  M4PerformanceProfile,
+  PerformanceFixtureEvidence,
+} from "./performance-profile.js";
+export {
+  M4_PERFORMANCE_PROFILE_HASH,
+  M4_PERFORMANCE_PROFILE_VERSION,
+  m4PerformanceProfile,
+} from "./performance-profile.js";
+
 export type { ProjectBundleFixture } from "./project-bundle-fixtures.js";
 export {
   PROJECT_BUNDLE_FIXTURE_SET_HASH,
   PROJECT_BUNDLE_FIXTURE_VERSION,
   projectBundleFixture,
 } from "./project-bundle-fixtures.js";
-
-export type { FixtureInventory, FixtureKind } from "./synthetic-fixtures.js";
-export {
-  DEFAULT_FIXTURE_SEED,
-  fixtureInventory,
-  generateFidelityFixture,
-  generateScaleFixture,
-  sha256FixtureSource,
-} from "./synthetic-fixtures.js";
 export type {
   SqlCapabilityFixture,
   SqlFixtureCapabilityId,
@@ -30,6 +31,15 @@ export {
   sqlCapabilityFixtures,
   sqlParserErrorFixtures,
 } from "./sql-capability-fixtures.js";
+export type {
+  SqlExportFixture,
+  SqlExportFixtureStatus,
+} from "./sql-export-fixtures.js";
+export {
+  SQL_EXPORT_FIXTURE_SET_HASH,
+  SQL_EXPORT_FIXTURE_VERSION,
+  sqlExportFixtures,
+} from "./sql-export-fixtures.js";
 export type {
   SqlImportFixtureClause,
   SqlImportFixtureStatement,
@@ -47,15 +57,14 @@ export {
   SQL_INTERCHANGE_GATE_FIXTURE_VERSION,
   sqlInterchangeGateFixtures,
 } from "./sql-interchange-gate-fixtures.js";
-export type {
-  SqlExportFixture,
-  SqlExportFixtureStatus,
-} from "./sql-export-fixtures.js";
+export type { FixtureInventory, FixtureKind } from "./synthetic-fixtures.js";
 export {
-  SQL_EXPORT_FIXTURE_SET_HASH,
-  SQL_EXPORT_FIXTURE_VERSION,
-  sqlExportFixtures,
-} from "./sql-export-fixtures.js";
+  DEFAULT_FIXTURE_SEED,
+  fixtureInventory,
+  generateFidelityFixture,
+  generateScaleFixture,
+  sha256FixtureSource,
+} from "./synthetic-fixtures.js";
 export type {
   VisualCommandGateCase,
   VisualCommandGateCommandKind,

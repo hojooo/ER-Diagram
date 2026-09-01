@@ -79,7 +79,7 @@ describe("workspace layout persistence", () => {
     );
     const { parserClient } = renderWorkspace(api);
 
-    expect(await screen.findByTestId("layout-position")).toHaveTextContent("11,12");
+    await waitFor(() => expect(screen.getByTestId("layout-position")).toHaveTextContent("11,12"));
     expect(screen.getByTestId("layout-detail")).toHaveTextContent("KEYS_ONLY");
     expect(screen.getByTestId("layout-collapse-count")).toHaveTextContent("1");
 

@@ -397,8 +397,9 @@ describe("DBML source workspace", () => {
 
     fireEvent.change(editor, { target: { value: SECOND_VALID_SOURCE } });
     await act(() => vi.advanceTimersByTimeAsync(750));
-    await settleReact();
-    expect(screen.getByText(/Showing the current valid draft/)).toBeVisible();
+    await vi.waitFor(() => {
+      expect(screen.getByText(/Showing the current valid draft/)).toBeVisible();
+    });
     fireEvent.click(screen.getByRole("button", { name: "Select first diagram table" }));
     expect(revealSourceRange).toHaveBeenCalledTimes(navigationCalls + 1);
   });
@@ -410,6 +411,37 @@ describe("DBML source workspace", () => {
     expect(await screen.findByText("No valid diagram yet")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Focus source editor" }));
     expect(focusSource).toHaveBeenCalledOnce();
+  });
+
+  it("hydrates an uncached view before committing one diagram projection transition", async () => {
+    const api = new SourceProjectApi(projectState(VIEW_SOURCE, 1, "VALID"));
+    renderWorkspace(api);
+    await screen.findByText("Canonical DBML source");
+    await findWorkspaceStatus("Draft valid");
+    await waitFor(() => expect(api.getLayoutInputs).toHaveLength(1));
+    await waitFor(() =>
+      expect(screen.getByTestId("fake-diagram-layout-pending")).toHaveTextContent("ready"),
+    );
+
+    const pendingLayout = deferred<Awaited<ReturnType<ProjectApi["getLayout"]>>>();
+    api.nextLayout = pendingLayout.promise;
+    const viewSelector = screen.getByRole("combobox", { name: "Diagram view" });
+    const viewKey = within(viewSelector)
+      .getByRole("option", { name: "identity_only" })
+      .getAttribute("value");
+    if (!viewKey) throw new Error("Expected the source-defined view key.");
+
+    fireEvent.change(viewSelector, { target: { value: viewKey } });
+    await waitFor(() => expect(api.getLayoutInputs).toHaveLength(2));
+    expect(api.getLayoutInputs[1]).toEqual({ projectId: PROJECT_ID, viewKey });
+    expect(screen.getByTestId("fake-diagram-view")).toHaveTextContent("Global");
+    expect(screen.getByRole("application", { name: "ER diagram canvas" })).toBeVisible();
+
+    pendingLayout.resolve({ layout: null, currentLayoutRevisionNo: 0 });
+    await waitFor(() =>
+      expect(screen.getByTestId("fake-diagram-view")).toHaveTextContent("identity_only"),
+    );
+    expect(screen.getByTestId("fake-diagram-layout-pending")).toHaveTextContent("ready");
   });
 
   it("keeps view-specific collapse and LOD state while requiring explicit Global navigation", async () => {
@@ -583,6 +615,36 @@ describe("Monaco DBML adapter", () => {
     expect(runtime.model.dispose).toHaveBeenCalledOnce();
     expect(runtime.setModelMarkers).toHaveBeenLastCalledWith(runtime.model, DBML_MARKER_OWNER, []);
   });
+
+  it("adopts authoritative source received before the Monaco runtime is ready", async () => {
+    const runtime = new FakeMonacoRuntime();
+    const editorHandle = createRef<SourceEditorHandle>();
+    const onReady = vi.fn();
+    let resolveRuntime: ((value: MonacoRuntime) => void) | undefined;
+    const runtimePromise = new Promise<MonacoRuntime>((resolve) => {
+      resolveRuntime = resolve;
+    });
+
+    render(
+      <MonacoDbmlEditor
+        ref={editorHandle}
+        projectId={PROJECT_ID}
+        initialSource="Table stale { id int }"
+        diagnostics={[]}
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+        onReady={onReady}
+        loadRuntime={() => runtimePromise}
+      />,
+    );
+
+    act(() => editorHandle.current?.replaceSource("Table authoritative { id int }"));
+    act(() => resolveRuntime?.(runtime.value));
+
+    await waitFor(() => expect(runtime.createModel).toHaveBeenCalledOnce());
+    expect(runtime.model.getValue()).toBe("Table authoritative { id int }");
+    expect(onReady).toHaveBeenCalledOnce();
+  });
 });
 
 const FakeSourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(
@@ -677,6 +739,7 @@ function FakeSchemaDiagram({
   detailLevel,
   collapsedGroupKeys,
   layoutPositions,
+  layoutPending,
   selectionStore,
   sourceNavigationEnabled,
   onToggleGroup,
@@ -701,6 +764,9 @@ function FakeSchemaDiagram({
         {Object.keys(layoutPositions ?? {})
           .sort()
           .join(",")}
+      </output>
+      <output data-testid="fake-diagram-layout-pending">
+        {layoutPending ? "pending" : "ready"}
       </output>
       {graph.groups[0] ? (
         <button type="button" onClick={() => onToggleGroup(graph.groups[0]?.key ?? "")}>
@@ -732,6 +798,7 @@ class SourceProjectApi implements ProjectApi {
   readonly getLayoutInputs: Array<{ projectId: string; viewKey: string }> = [];
   conflictOnce: ProjectState | null = null;
   nextSave: Promise<ProjectMutationResponse> | null = null;
+  nextLayout: Promise<Awaited<ReturnType<ProjectApi["getLayout"]>>> | null = null;
 
   constructor(public state: ProjectState) {}
 
@@ -773,6 +840,11 @@ class SourceProjectApi implements ProjectApi {
 
   async getLayout(input: { projectId: string; viewKey: string }) {
     this.getLayoutInputs.push(input);
+    if (this.nextLayout) {
+      const response = await this.nextLayout;
+      this.nextLayout = null;
+      return response;
+    }
     const revisionNo = this.state.project.layoutRevisionNo;
     return {
       layout:

@@ -4,7 +4,7 @@ import "@testing-library/jest-dom/vitest";
 
 import { parseDbmlV2, type SchemaGraph } from "@er-diagram/core";
 import { fixtureInventory, generateFidelityFixture } from "@er-diagram/test-fixtures";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 const flowSpies = vi.hoisted(() => ({
@@ -506,15 +506,10 @@ describe("TableGroup navigation and collapse interactions", () => {
     ).toBeDisabled();
   });
 
-  it("discards an expanded layout result that settles after a collapse layout", async () => {
+  it("switches collapse projections without invoking implicit worker layout", async () => {
     const group = graph.groups[0];
     if (!group) throw new Error("Expected a group.");
-    const expandedLayout = deferred<DiagramProjection>();
-    const collapsedLayout = deferred<DiagramProjection>();
-    const requestLayout = vi
-      .fn()
-      .mockImplementationOnce(() => expandedLayout.promise)
-      .mockImplementationOnce(() => collapsedLayout.promise);
+    const requestLayout = vi.fn(async (projection: DiagramProjection) => projection);
     const rendered = render(
       <BaseSchemaDiagram
         graph={graph}
@@ -542,17 +537,10 @@ describe("TableGroup navigation and collapse interactions", () => {
         requestLayout={requestLayout}
       />,
     );
-    await act(() => {
-      collapsedLayout.resolve(createGroupedDiagramProjection(graph, new Set([group.key])));
-      return collapsedLayout.promise;
-    });
-    await act(() => {
-      expandedLayout.resolve(createGroupedDiagramProjection(graph, new Set()));
-      return expandedLayout.promise;
-    });
 
     expect(screen.getByRole("button", { name: "Expand public.도메인<script>😀" })).toBeVisible();
     expect(screen.queryByLabelText("Table public.alpha")).not.toBeInTheDocument();
+    expect(requestLayout).not.toHaveBeenCalled();
   });
 });
 
@@ -587,14 +575,4 @@ function summaryEdgeIds(projection: DiagramProjection): string[] {
     .filter((edge) => edge.data.aggregate)
     .map((edge) => edge.id)
     .sort();
-}
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (error: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
 }

@@ -396,6 +396,45 @@ describe("accessible view, search, and detail controls", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("progressively discloses large relationship inventories", () => {
+    const template = demoSchemaGraph.references[0];
+    if (!template) throw new Error("Expected a reference fixture.");
+    const graph: SchemaGraph = {
+      ...demoSchemaGraph,
+      references: Array.from({ length: 51 }, (_, index) => ({
+        ...template,
+        key: `reference:["public","outline_${index.toString().padStart(2, "0")}"]`,
+        name: `outline_${index.toString().padStart(2, "0")}`,
+      })),
+      views: [],
+    };
+
+    render(
+      <SchemaOutline
+        graph={graph}
+        visibility={createDiagramVisibility(graph, GLOBAL_VIEW_KEY)}
+        viewLabel="Global"
+        collapsedGroupKeys={new Set()}
+        selectionStore={createDiagramSelectionStore()}
+        sourceNavigationEnabled
+        onToggleGroup={vi.fn()}
+        onNavigateSource={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Focus relationship outline_49 in diagram" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Focus relationship outline_50 in diagram" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show all 51 relationships" }));
+    expect(
+      screen.getByRole("button", { name: "Focus relationship outline_50 in diagram" }),
+    ).toBeVisible();
+  });
+
   it("renders script-like search labels as inert text", () => {
     const user = requiredTable(demoSchemaGraph, "user");
     const graph: SchemaGraph = {

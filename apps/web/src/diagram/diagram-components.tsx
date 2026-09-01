@@ -3,25 +3,36 @@ import {
   EdgeLabelRenderer,
   type EdgeProps,
   getSmoothStepPath,
+  getStraightPath,
   Handle,
   type NodeProps,
   Position,
 } from "@xyflow/react";
-import { type CSSProperties, createContext, useContext } from "react";
+import { type CSSProperties, createContext, memo, useContext } from "react";
 import type { DiagramSelection } from "./source-navigation.js";
 import type { GroupDiagramNode, SchemaDiagramEdge, TableDiagramNode } from "./types.js";
 
 export interface DiagramInteractions {
   toggleGroup(groupKey: string): void;
   activateElement(selection: DiagramSelection): void;
+  showEdgeLabels: boolean;
 }
 
 export const DiagramInteractionContext = createContext<DiagramInteractions>({
   toggleGroup: () => undefined,
   activateElement: () => undefined,
+  showEdgeLabels: true,
 });
 
-export function GroupDiagramNodeComponent({ data }: NodeProps<GroupDiagramNode>) {
+const DIAGRAM_EDGE_LABEL_RENDER_LIMIT = 100;
+
+export function shouldShowDiagramEdgeLabels(edgeCount: number): boolean {
+  return edgeCount <= DIAGRAM_EDGE_LABEL_RENDER_LIMIT;
+}
+
+export const GroupDiagramNodeComponent = memo(function GroupDiagramNodeComponent({
+  data,
+}: NodeProps<GroupDiagramNode>) {
   const { toggleGroup } = useContext(DiagramInteractionContext);
   const action = data.collapsed ? "Expand" : "Collapse";
   const qualifiedName = `${data.schemaName}.${data.name}`;
@@ -59,9 +70,11 @@ export function GroupDiagramNodeComponent({ data }: NodeProps<GroupDiagramNode>)
       <Handle type="source" position={Position.Right} />
     </section>
   );
-}
+});
 
-export function TableDiagramNodeComponent({ data }: NodeProps<TableDiagramNode>) {
+export const TableDiagramNodeComponent = memo(function TableDiagramNodeComponent({
+  data,
+}: NodeProps<TableDiagramNode>) {
   const { activateElement } = useContext(DiagramInteractionContext);
   const displayedColumns =
     data.lod === "FULL"
@@ -135,10 +148,18 @@ export function TableDiagramNodeComponent({ data }: NodeProps<TableDiagramNode>)
       <Handle type="source" position={Position.Right} />
     </article>
   );
-}
+});
 
-export function ReferenceDiagramEdgeComponent(props: EdgeProps<SchemaDiagramEdge>) {
-  const [edgePath, labelX, labelY] = getSmoothStepPath(props);
+export const ReferenceDiagramEdgeComponent = memo(function ReferenceDiagramEdgeComponent(
+  props: EdgeProps<SchemaDiagramEdge>,
+) {
+  const { showEdgeLabels } = useContext(DiagramInteractionContext);
+  // Dense overview projections keep every relationship visible, but avoid calculating hundreds
+  // of orthogonal routes that cannot be distinguished at the fitted overview zoom. Focused views
+  // retain the labeled smooth-step route.
+  const [edgePath, labelX, labelY] = showEdgeLabels
+    ? getSmoothStepPath(props)
+    : getStraightPath(props);
   const count = props.data?.count ?? 1;
   const label =
     count > 1
@@ -160,7 +181,7 @@ export function ReferenceDiagramEdgeComponent(props: EdgeProps<SchemaDiagramEdge
         {...(props.markerEnd ? { markerEnd: props.markerEnd } : {})}
         {...(props.style ? { style: props.style } : {})}
       />
-      {label ? (
+      {label && showEdgeLabels ? (
         <EdgeLabelRenderer>
           <span
             className="diagram-edge-label nodrag nopan"
@@ -172,7 +193,7 @@ export function ReferenceDiagramEdgeComponent(props: EdgeProps<SchemaDiagramEdge
       ) : null}
     </>
   );
-}
+});
 
 function safeGroupColor(color: string | null): string | null {
   return color && /^#[\da-f]{6}$/i.test(color) ? color : null;

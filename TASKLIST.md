@@ -310,7 +310,9 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - route focus·skip link, composite widget keyboard, outline-first diagram navigation과 native field undo를 보장한다.
   - axe의 WCAG 2.0·2.1·2.2 A/AA violation 0건과 versioned manual keyboard evidence를 함께 요구한다.
   - 검증: `pnpm test:accessibility`
-- [ ] `M4-008` parse/interactive/view switch/FPS performance acceptance
+- [x] `M4-008` parse/interactive/view switch/FPS performance acceptance
+  - deterministic Derived layout으로 일반 진입·view·LOD·collapse 변경에서 implicit ELK와 background node 이동을 제거한다.
+  - versioned fidelity·scale evidence로 production Chrome의 parse, cold interactive, first-uncached view switch, FPS와 long task를 fail-closed 검증한다.
   - 검증: `pnpm test:perf`
 - [ ] `M4-009` tag-triggered amd64/arm64 GHCR release와 immutable digest
   - 검증: release dry run과 image inspect

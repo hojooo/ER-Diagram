@@ -1,5 +1,6 @@
 import type { Database } from "@dbml/core";
 import { parseCardinality, type RelationCardinality } from "@dbml/parse";
+import { prepareCompilerDatabase } from "./compiler-database.js";
 import { isSourceRangeValid, resolvePublicFilepath } from "./dbml-source-range.js";
 import {
   type CheckNode,
@@ -291,6 +292,16 @@ export async function normalizeSchemaGraph(
   options: NormalizeSchemaGraphOptions,
 ): Promise<SchemaGraph> {
   return new SchemaGraphNormalizer(database as unknown as DatabaseLike, options).normalize();
+}
+
+export async function normalizeCompilerSchemaGraph(
+  database: unknown,
+  options: NormalizeSchemaGraphOptions,
+): Promise<SchemaGraph> {
+  return new SchemaGraphNormalizer(
+    prepareCompilerDatabase(database) as DatabaseLike,
+    options,
+  ).normalize();
 }
 
 class SchemaGraphNormalizer {

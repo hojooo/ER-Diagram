@@ -74,8 +74,12 @@ test("renders the active graph and keeps source navigation revision-safe", async
 
   await replaceEditorSource(editor, RECOVERED_SOURCE);
   await expect.poll(() => api.writes.length).toBe(2);
+  expect(api.writes[1]?.source).toBe(RECOVERED_SOURCE);
   await expect(page.getByText(/Showing the current valid draft/)).toBeVisible();
-  await expect(page.locator(".diagram-table__column-action")).toHaveCount(4, { timeout: 10_000 });
+  await expect(page.getByRole("button", { name: "title, varchar" })).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(page.getByRole("button", { name: "Focus column title in diagram" })).toBeVisible();
   await expect(
     page.getByRole("button", { name: /Open source for table at line/ }).first(),
   ).toBeEnabled();

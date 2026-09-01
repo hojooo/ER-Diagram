@@ -1,10 +1,12 @@
-import { Parser, type Database } from "@dbml/core";
-import { Filepath } from "@dbml/parse";
+import { Compiler, Filepath, MemoryProjectLayout } from "@dbml/parse";
 import { diagnosticSchema, type Diagnostic } from "@er-diagram/contracts";
 import { normalizeDbmlDiagnostics } from "./dbml-diagnostics.js";
 import type { DbmlSourceContext } from "./dbml-source-range.js";
 import { sha256Utf8 } from "./hash.js";
-import { normalizeSchemaGraph, SchemaGraphNormalizationError } from "./normalize-schema-graph.js";
+import {
+  normalizeCompilerSchemaGraph,
+  SchemaGraphNormalizationError,
+} from "./normalize-schema-graph.js";
 import type { SchemaGraph } from "./schema-graph.js";
 import { buildCompilerSourceTextIndex } from "./source-text-index.js";
 
@@ -44,48 +46,30 @@ export interface DbmlProjectParseFailure {
 
 export type DbmlProjectParseResult = DbmlProjectParseSuccess | DbmlProjectParseFailure;
 
-interface RegisteredSourceFile {
+export interface RegisteredSourceFile {
   publicFilepath: string;
   compilerFilepath: Filepath;
   source: string;
 }
 
-type CompilationResult =
-  | {
-      ok: true;
-      graph: SchemaGraph;
-      database: Database;
-      sourceContext: Required<DbmlSourceContext>;
-    }
+type GraphCompilationResult =
+  | { ok: true; graph: SchemaGraph }
   | { ok: false; diagnostics: Diagnostic[] };
 
-export type DbmlAdapterParseResult =
-  | (DbmlParseSuccess & {
-      database: Database;
+export type DbmlInterpretationResult =
+  | {
+      ok: true;
+      rawDatabase: unknown;
+      diagnostics: Diagnostic[];
       sourceContext: Required<DbmlSourceContext>;
-    })
-  | DbmlParseFailure;
+      sourceText: ReturnType<typeof buildCompilerSourceTextIndex>;
+    }
+  | { ok: false; diagnostics: Diagnostic[] };
 
 export async function parseDbmlV2(
   source: string,
   filepath = DEFAULT_FILEPATH,
 ): Promise<DbmlParseResult> {
-  const result = await parseDbmlV2ForAdapter(source, filepath);
-  return result.ok
-    ? {
-        ok: true,
-        sourceHash: result.sourceHash,
-        parserInputHash: result.parserInputHash,
-        graph: result.graph,
-      }
-    : result;
-}
-
-/** Package-internal adapter entrypoint. Parser models must never leave `packages/core`. */
-export async function parseDbmlV2ForAdapter(
-  source: string,
-  filepath = DEFAULT_FILEPATH,
-): Promise<DbmlAdapterParseResult> {
   const sourceHash = await sha256Utf8(source);
   const parserInputHash = sourceHash;
   if (filepath.length === 0) {
@@ -99,25 +83,20 @@ export async function parseDbmlV2ForAdapter(
     };
   }
 
-  const parser = new Parser();
   const file: RegisteredSourceFile = {
     publicFilepath: filepath,
     compilerFilepath: SINGLE_FILE_COMPILER_PATH,
     source,
   };
-  parser.setDbmlSource(file.compilerFilepath, source);
-  const compiled = await compileDbml(parser, file, [file]);
-
-  return compiled.ok
+  const result = await compileDbmlGraph(createCompiler([file]), file, [file]);
+  return result.ok
     ? {
         ok: true,
         sourceHash,
         parserInputHash,
-        graph: compiled.graph,
-        database: compiled.database,
-        sourceContext: compiled.sourceContext,
+        graph: result.graph,
       }
-    : { ok: false, sourceHash, parserInputHash, diagnostics: compiled.diagnostics };
+    : { ok: false, sourceHash, parserInputHash, diagnostics: result.diagnostics };
 }
 
 export async function parseDbmlProjectV2(input: {
@@ -166,26 +145,61 @@ export async function parseDbmlProjectV2(input: {
     };
   }
 
-  const parser = new Parser();
-  for (const file of registered.files) {
-    parser.setDbmlSource(file.compilerFilepath, file.source);
-  }
-  const compiled = await compileDbml(parser, entrypoint, registered.files);
+  const compiled = await compileDbmlGraph(
+    createCompiler(registered.files),
+    entrypoint,
+    registered.files,
+  );
 
   return compiled.ok
     ? { ok: true, sourceHashes, parserInputHashes, graph: compiled.graph }
     : { ok: false, sourceHashes, parserInputHashes, diagnostics: compiled.diagnostics };
 }
 
-async function compileDbml(
-  parser: Parser,
+async function compileDbmlGraph(
+  compiler: Compiler,
   entrypoint: RegisteredSourceFile,
   files: readonly RegisteredSourceFile[],
-): Promise<CompilationResult> {
-  const context = sourceContext(entrypoint.publicFilepath, files);
-  let report: ReturnType<Parser["DBMLCompiler"]["interpretFile"]>;
+): Promise<GraphCompilationResult> {
+  const interpreted = interpretDbml(compiler, entrypoint, files);
+  if (!interpreted.ok) return interpreted;
+
   try {
-    report = parser.DBMLCompiler.interpretFile(entrypoint.compilerFilepath);
+    const graph = await normalizeCompilerSchemaGraph(interpreted.rawDatabase, {
+      fallbackFilepath: entrypoint.publicFilepath,
+      forceFilepath: false,
+      publicFilepathByCompilerPath: interpreted.sourceContext.publicFilepathByCompilerPath,
+      sourceByPublicFilepath: interpreted.sourceContext.sourceByPublicFilepath,
+      sourceText: interpreted.sourceText,
+    });
+    return { ok: true, graph: { ...graph, diagnostics: interpreted.diagnostics } };
+  } catch (error) {
+    return {
+      ok: false,
+      diagnostics: [
+        error instanceof SchemaGraphNormalizationError || error instanceof TypeError
+          ? errorDiagnostic(
+              "DBML_PARSE_INTERNAL_NORMALIZATION_FAILURE",
+              "DBML was compiled but could not be normalized.",
+            )
+          : errorDiagnostic(
+              "DBML_PARSE_INTERNAL_COMPILER_VALUE",
+              "DBML compiler returned an invalid database.",
+            ),
+      ],
+    };
+  }
+}
+
+export function interpretDbml(
+  compiler: Compiler,
+  entrypoint: RegisteredSourceFile,
+  files: readonly RegisteredSourceFile[],
+): DbmlInterpretationResult {
+  const context = sourceContext(entrypoint.publicFilepath, files);
+  let report: ReturnType<Compiler["interpretFile"]>;
+  try {
+    report = compiler.interpretFile(entrypoint.compilerFilepath);
   } catch {
     return {
       ok: false,
@@ -224,38 +238,30 @@ async function compileDbml(
   }
 
   try {
-    const database = Parser.parseJSONToDatabase(
-      rawDatabase as unknown as Parameters<typeof Parser.parseJSONToDatabase>[0],
-    );
-    const graph = await normalizeSchemaGraph(database, {
-      fallbackFilepath: entrypoint.publicFilepath,
-      forceFilepath: false,
-      publicFilepathByCompilerPath: context.publicFilepathByCompilerPath,
-      sourceByPublicFilepath: context.sourceByPublicFilepath,
-      sourceText: buildCompilerSourceTextIndex(parser.DBMLCompiler, files),
-    });
     return {
       ok: true,
-      graph: { ...graph, diagnostics },
-      database,
+      rawDatabase,
+      diagnostics,
       sourceContext: context,
+      sourceText: buildCompilerSourceTextIndex(compiler, files),
     };
-  } catch (error) {
+  } catch {
     return {
       ok: false,
       diagnostics: [
-        error instanceof SchemaGraphNormalizationError
-          ? errorDiagnostic(
-              "DBML_PARSE_INTERNAL_NORMALIZATION_FAILURE",
-              "DBML was compiled but could not be normalized.",
-            )
-          : errorDiagnostic(
-              "DBML_PARSE_INTERNAL_COMPILER_VALUE",
-              "DBML compiler returned an invalid database.",
-            ),
+        errorDiagnostic(
+          "DBML_PARSE_INTERNAL_COMPILER_VALUE",
+          "DBML compiler returned an invalid source index.",
+        ),
       ],
     };
   }
+}
+
+function createCompiler(files: readonly RegisteredSourceFile[]): Compiler {
+  const layout = new MemoryProjectLayout();
+  for (const file of files) layout.setSource(file.compilerFilepath, file.source);
+  return new Compiler(layout);
 }
 
 function registerProjectFiles(

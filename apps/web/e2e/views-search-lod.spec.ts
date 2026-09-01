@@ -80,6 +80,7 @@ test("switches DiagramViews, searches the current view, and preserves revision-s
   const detailSelector = page.getByRole("combobox", { name: "Detail level" });
   await expect(viewSelector.locator("option")).toHaveCount(3);
   await viewSelector.selectOption({ label: "identity_only" });
+  await expect(viewSelector).not.toHaveValue("GLOBAL");
   const identityViewValue = await viewSelector.inputValue();
   await waitForDiagramLayout(page);
   await expect(page.locator(".react-flow__node-group")).toHaveCount(1);
@@ -143,8 +144,13 @@ test("switches DiagramViews, searches the current view, and preserves revision-s
   await expect.poll(() => api.writes.length).toBe(1);
   await expect(page.getByText(/Showing last-valid revision 1/)).toBeVisible();
   await expect(viewSelector).toHaveValue(identityViewValue);
+  const firstVisibleTable = page
+    .getByRole("region", { name: "Schema outline" })
+    .locator("details")
+    .first();
+  await firstVisibleTable.locator("summary").click();
   await expect(
-    page.getByRole("button", { name: /Open source for table at line/ }).first(),
+    firstVisibleTable.getByRole("button", { name: /Open source for table at line/ }),
   ).toBeDisabled();
   await search.fill("profiles");
   await expect(page.getByRole("option", { name: "table public.profiles" })).toBeVisible();

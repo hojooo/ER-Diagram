@@ -34,10 +34,22 @@ export interface LayoutSessionSnapshot {
   readonly hasUnsavedChanges: boolean;
 }
 
+export interface LayoutHydrationOptions {
+  /**
+   * Inactive views can be loaded before activation without forcing the whole workspace through an
+   * intermediate LOADING render. Failures and the final hydrated state are always published.
+   */
+  readonly publishLoading?: boolean;
+}
+
 export interface LayoutSessionController {
   getSnapshot(): LayoutSessionSnapshot;
   subscribe(listener: () => void): () => void;
-  hydrate(viewKey: string, fallback: DiagramLayoutValue): Promise<void>;
+  hydrate(
+    viewKey: string,
+    fallback: DiagramLayoutValue,
+    options?: LayoutHydrationOptions,
+  ): Promise<void>;
   edit(viewKey: string, layout: DiagramLayoutValue): void;
   replaceAndFlush(viewKey: string, layout: DiagramLayoutValue): Promise<void>;
   flush(): Promise<void>;
@@ -135,7 +147,11 @@ export function createLayoutSession(options: CreateLayoutSessionOptions): Layout
     }, LAYOUT_AUTOSAVE_DEBOUNCE_MS);
   }
 
-  async function hydrate(viewKey: string, fallback: DiagramLayoutValue): Promise<void> {
+  async function hydrate(
+    viewKey: string,
+    fallback: DiagramLayoutValue,
+    hydrationOptions: LayoutHydrationOptions = {},
+  ): Promise<void> {
     const existing = views.get(viewKey);
     if (existing && existing.status !== "ERROR") return;
     const view: MutableViewState = existing ?? {
@@ -153,7 +169,7 @@ export function createLayoutSession(options: CreateLayoutSessionOptions): Layout
     view.status = "LOADING";
     view.error = null;
     views.set(viewKey, view);
-    notify();
+    if (hydrationOptions.publishLoading !== false) notify();
     try {
       const response = await options.loadLayout(viewKey);
       if (disposed) return;

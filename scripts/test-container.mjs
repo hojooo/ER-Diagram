@@ -301,6 +301,14 @@ async function assertBrowserRuntime(activeBrowser, projectId) {
   const layoutStatus = page.getByTestId("base-diagram-layout-status");
   await layoutStatus.waitFor({ state: "visible", timeout: 30_000 });
   await waitFor(async () => (await layoutStatus.textContent()) === "Diagram layout ready", 30_000);
+  const previewAutoLayout = page.getByRole("button", { name: "Preview auto layout" });
+  await previewAutoLayout.click();
+  await page.getByText("Auto-layout preview ready").waitFor({
+    state: "visible",
+    timeout: 30_000,
+  });
+  await page.getByRole("button", { name: "Cancel preview" }).click();
+  await previewAutoLayout.waitFor({ state: "visible", timeout: 30_000 });
   assert.ok(
     [...workerAssets].some((pathname) => pathname.includes("parser.worker-")),
     "The packaged parser worker must load",

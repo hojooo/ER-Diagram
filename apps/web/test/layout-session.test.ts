@@ -33,6 +33,33 @@ function response(
 }
 
 describe("layout session", () => {
+  it("publishes an inactive view only after pre-activation hydration completes", async () => {
+    let resolveLayout: ((value: LayoutResponse) => void) | undefined;
+    const pendingLayout = new Promise<LayoutResponse>((resolve) => {
+      resolveLayout = resolve;
+    });
+    const session = createLayoutSession({
+      projectId: PROJECT_ID,
+      initialLayoutRevisionNo: 0,
+      loadLayout: () => pendingLayout,
+      saveLayout: vi.fn(),
+    });
+    const publishedStatuses: Array<string | undefined> = [];
+    session.subscribe(() => {
+      publishedStatuses.push(session.getSnapshot().views.get("view")?.status);
+    });
+
+    const hydration = session.hydrate("view", layout(), { publishLoading: false });
+    expect(session.getSnapshot().views.get("view")?.status).toBe("LOADING");
+    expect(publishedStatuses).toEqual([]);
+
+    resolveLayout?.(response(0, "view", null));
+    await hydration;
+
+    expect(publishedStatuses).toEqual(["SAVED"]);
+    expect(session.getSnapshot().views.get("view")?.hydrated).toBe(true);
+  });
+
   it("adopts a visual-command layout revision and reloads only hydrated views", async () => {
     const loadLayout = vi.fn(async (viewKey: string) =>
       response(3, viewKey, layout({ positions: { [`table:${viewKey}`]: { x: 30, y: 40 } } })),

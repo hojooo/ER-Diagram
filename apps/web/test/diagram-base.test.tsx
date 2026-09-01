@@ -134,8 +134,13 @@ vi.mock("@xyflow/react", async () => {
 });
 
 import { BaseSchemaDiagram } from "../src/diagram/base-schema-diagram.js";
+import { shouldShowDiagramEdgeLabels } from "../src/diagram/diagram-components.js";
 import { demoSchemaGraph } from "../src/diagram/demo-schema.js";
-import { createBaseDiagramProjection, createDiagramVisibility } from "../src/diagram/projection.js";
+import {
+  createBaseDiagramProjection,
+  createDiagramProjection,
+  createDiagramVisibility,
+} from "../src/diagram/projection.js";
 import { SchemaOutline } from "../src/diagram/schema-outline.js";
 import { createDiagramSelectionStore } from "../src/diagram/selection-store.js";
 import {
@@ -326,7 +331,10 @@ describe("diagram source navigation", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Focus public.accounts in diagram" }));
+    fireEvent.click(screen.getByText("public.accounts", { selector: "summary" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Focus public.accounts in diagram" }),
+    );
     expect(
       screen.getByRole("button", { name: "Focus public.accounts in diagram" }),
     ).toHaveAttribute("aria-current", "true");
@@ -383,11 +391,21 @@ describe("diagram source navigation", () => {
 });
 
 describe("base schema diagram canvas", () => {
+  it("keeps labels for focused diagrams and removes label DOM beyond the large-graph budget", () => {
+    expect(shouldShowDiagramEdgeLabels(100)).toBe(true);
+    expect(shouldShowDiagramEdgeLabels(101)).toBe(false);
+  });
+
   it("projects the selected view and LOD while keeping stable element identity", async () => {
     const identityView = demoSchemaGraph.views.find((view) => view.name === "identity_only");
     const identityGroup = demoSchemaGraph.groups.find((group) => group.name === "Identity");
     if (!identityView || !identityGroup) throw new Error("Missing identity view fixture.");
     const requestLayout = vi.fn(async (projection: DiagramProjection) => projection);
+    const fullProjection = createDiagramProjection(demoSchemaGraph, {
+      viewKey: identityView.key,
+      collapsedGroupKeys: new Set(),
+      lod: "FULL",
+    });
     const rendered = render(
       <BaseSchemaDiagram
         graph={demoSchemaGraph}
@@ -401,10 +419,14 @@ describe("base schema diagram canvas", () => {
         requestLayout={requestLayout}
       />,
     );
-    await waitFor(() => expect(requestLayout).toHaveBeenCalledTimes(1));
-    const fullProjection = requestLayout.mock.calls[0]?.[0];
-    expect(fullProjection?.nodes.filter((node) => node.type === "table")).toHaveLength(2);
-    expect(fullProjection?.edges).toHaveLength(1);
+    await waitFor(() =>
+      expect(screen.getByTestId("base-diagram-layout-status")).toHaveTextContent(
+        "Diagram layout ready",
+      ),
+    );
+    expect(requestLayout).not.toHaveBeenCalled();
+    expect(fullProjection.nodes.filter((node) => node.type === "table")).toHaveLength(2);
+    expect(fullProjection.edges).toHaveLength(1);
 
     rendered.rerender(
       <BaseSchemaDiagram
@@ -424,16 +446,25 @@ describe("base schema diagram canvas", () => {
         requestLayout={requestLayout}
       />,
     );
-    await waitFor(() => expect(requestLayout).toHaveBeenCalledTimes(2));
-    const nameProjection = requestLayout.mock.calls[1]?.[0];
-    expect(nameProjection?.nodes.map((node) => node.id)).toEqual(
-      fullProjection?.nodes.map((node) => node.id),
+    const nameProjection = createDiagramProjection(demoSchemaGraph, {
+      viewKey: identityView.key,
+      collapsedGroupKeys: new Set(),
+      lod: "NAME_ONLY",
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("base-diagram-layout-status")).toHaveTextContent(
+        "Diagram layout ready",
+      ),
     );
-    expect(nameProjection?.edges.map((edge) => edge.id)).toEqual(
-      fullProjection?.edges.map((edge) => edge.id),
+    expect(requestLayout).not.toHaveBeenCalled();
+    expect(nameProjection.nodes.map((node) => node.id)).toEqual(
+      fullProjection.nodes.map((node) => node.id),
+    );
+    expect(nameProjection.edges.map((edge) => edge.id)).toEqual(
+      fullProjection.edges.map((edge) => edge.id),
     );
     expect(
-      nameProjection?.nodes
+      nameProjection.nodes
         .filter((node) => node.type === "table")
         .every((node) => node.data.lod === "NAME_ONLY"),
     ).toBe(true);
@@ -521,6 +552,7 @@ describe("base schema diagram canvas", () => {
         onToggleGroup={vi.fn()}
         onNavigateSource={onNavigateSource}
         requestLayout={requestLayout}
+        layoutRequest={{ requestId: 1, mode: "PREVIEW" }}
       />,
     );
 
@@ -535,6 +567,7 @@ describe("base schema diagram canvas", () => {
         onToggleGroup={vi.fn()}
         onNavigateSource={onNavigateSource}
         requestLayout={requestLayout}
+        layoutRequest={{ requestId: 2, mode: "PREVIEW" }}
       />,
     );
     await act(() => {
@@ -548,6 +581,7 @@ describe("base schema diagram canvas", () => {
 
     expect(screen.getByRole("button", { name: "Canvas table second" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Canvas table first" })).not.toBeInTheDocument();
+    expect(requestLayout).toHaveBeenCalledTimes(2);
 
     fireEvent.click(screen.getByRole("button", { name: "Canvas table second" }));
     expect(selectionStore.getState().selection).toMatchObject({ kind: "table" });
@@ -555,13 +589,9 @@ describe("base schema diagram canvas", () => {
     await waitFor(() => expect(flowSpies.fitView).toHaveBeenCalled());
   });
 
-  it("keeps deterministic fallback positions private and retries a failed layout", async () => {
+  it("derives deterministic positions without invoking the layout worker", async () => {
     const graph = await parseGraph("Table fallback { id int [pk] }");
-    const projection = createBaseDiagramProjection(graph);
-    const requestLayout = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("source contents must stay private"))
-      .mockResolvedValueOnce(projection);
+    const requestLayout = vi.fn().mockRejectedValue(new Error("must not be called"));
 
     render(
       <BaseSchemaDiagram
@@ -577,15 +607,15 @@ describe("base schema diagram canvas", () => {
       />,
     );
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Automatic layout failed. Fallback positions are shown.",
-    );
-    expect(screen.queryByText(/source contents/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Retry layout" }));
     expect(await screen.findByTestId("base-diagram-layout-status")).toHaveTextContent(
       "Diagram layout ready",
     );
-    expect(requestLayout).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("button", { name: "Canvas table fallback" })).toHaveAttribute(
+      "data-position",
+      "0,0",
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(requestLayout).not.toHaveBeenCalled();
   });
 
   it("overlays saved positions, restores viewport, and emits only user layout changes", async () => {
@@ -618,6 +648,7 @@ describe("base schema diagram canvas", () => {
 
     const tableButton = await screen.findByRole("button", { name: "Canvas table positioned" });
     await waitFor(() => expect(tableButton).toHaveAttribute("data-position", "400,500"));
+    expect(requestLayout).not.toHaveBeenCalled();
     expect(flowSpies.setViewport).toHaveBeenCalledWith({ x: 5, y: 6, zoom: 0.8 });
     await waitFor(() =>
       expect(onRenderedLayoutReady).toHaveBeenCalledWith(
@@ -630,6 +661,8 @@ describe("base schema diagram canvas", () => {
     expect(onPositionsCommit).toHaveBeenCalledWith(
       expect.objectContaining({ [table.key]: { x: 700, y: 800 } }),
     );
+    expect(onViewportCommit).toHaveBeenCalledWith({ x: 10, y: 20, zoom: 0.75 });
+    onViewportCommit.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "Simulate programmatic pan" }));
     expect(onViewportCommit).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Simulate user pan" }));

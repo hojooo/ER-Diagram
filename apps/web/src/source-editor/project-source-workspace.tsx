@@ -137,6 +137,7 @@ export function ProjectSourceWorkspace({
   const proceededBlockedNavigationRef = useRef(false);
   const blockedNavigationReturnFocusRef = useRef<HTMLElement | null>(null);
   const focusRequestIdRef = useRef(0);
+  const viewTransitionGenerationRef = useRef(0);
   const layoutRequestIdRef = useRef(0);
   const previousGraphRef = useRef<SchemaGraph | null>(null);
   const skipNextClientRenameRecoveryRef = useRef(false);
@@ -161,6 +162,11 @@ export function ProjectSourceWorkspace({
   } | null>(null);
   const projectId = initialState.project.id;
   const initialStateRef = useRef(initialState);
+  const prioritizeInitialDiagram =
+    adapters?.SourceEditor === undefined && initialState.currentRevision.validity === "VALID";
+  const [initialDiagramReady, setInitialDiagramReady] = useState(!prioritizeInitialDiagram);
+  const [sourceEditorLoadReady, setSourceEditorLoadReady] = useState(!prioritizeInitialDiagram);
+  const [sourceEditorReady, setSourceEditorReady] = useState(adapters?.SourceEditor !== undefined);
   const EditorComponent = adapters?.SourceEditor ?? LazyMonacoDbmlEditor;
   const DiagramComponent = adapters?.SchemaDiagram ?? LazyBaseSchemaDiagram;
   const requestBoundedLayout = useCallback(
@@ -174,6 +180,7 @@ export function ProjectSourceWorkspace({
   );
   const activeGraph = sessionSnapshot?.activeGraph ?? null;
   const sourceNavigationEnabled = sessionSnapshot?.activeGraphSource === "CURRENT_DRAFT";
+  const sourceNavigationReady = sourceNavigationEnabled && sourceEditorReady;
   const resolvedViewKey = activeGraph
     ? resolveDiagramViewKey(activeGraph, activeViewKey)
     : GLOBAL_VIEW_KEY;
@@ -187,13 +194,12 @@ export function ProjectSourceWorkspace({
     () => new Set(activeGraph?.groups.map((group) => group.key) ?? []),
     [activeGraph],
   );
-  const activeCollapsedGroupKeys = useMemo(
-    () =>
-      new Set(
-        activeLayout.collapsedGroupKeys.filter((groupKey) => availableGroupKeys.has(groupKey)),
-      ),
-    [activeLayout.collapsedGroupKeys, availableGroupKeys],
-  );
+  const activeCollapsedGroupKeys = useMemo(() => {
+    const collapsed = activeLayout.collapsedGroupKeys.filter((groupKey) =>
+      availableGroupKeys.has(groupKey),
+    );
+    return collapsed.length === 0 ? NO_COLLAPSED_GROUP_KEYS : new Set(collapsed);
+  }, [activeLayout.collapsedGroupKeys, availableGroupKeys]);
   const visibility = useMemo(
     () => (activeGraph ? createDiagramVisibility(activeGraph, resolvedViewKey) : null),
     [activeGraph, resolvedViewKey],
@@ -221,6 +227,28 @@ export function ProjectSourceWorkspace({
     visualWorkspaceLocked ||
     visualCommandSnapshot?.layoutRefreshFailed === true;
   const visualSessionsReady = sessionSnapshot !== null && layoutSnapshot !== null;
+  const sourceEditorRecoveryRequired =
+    sessionSnapshot?.validation === "INVALID" ||
+    sessionSnapshot?.validation === "ERROR" ||
+    (sessionSnapshot?.validation === "VALID" && activeGraph?.tables.length === 0) ||
+    activeLayoutView?.status === "ERROR";
+
+  useEffect(() => {
+    if (!sourceEditorRecoveryRequired) return;
+    setInitialDiagramReady(true);
+    setSourceEditorLoadReady(true);
+  }, [sourceEditorRecoveryRequired]);
+
+  useEffect(() => {
+    if (!initialDiagramReady || sourceEditorLoadReady) return;
+    const loadEditor = () => setSourceEditorLoadReady(true);
+    if (typeof window.requestIdleCallback === "function") {
+      const callbackId = window.requestIdleCallback(loadEditor, { timeout: 2_000 });
+      return () => window.cancelIdleCallback(callbackId);
+    }
+    const timeoutId = window.setTimeout(loadEditor, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [initialDiagramReady, sourceEditorLoadReady]);
 
   const editActiveLayout = useCallback(
     (update: (current: DiagramLayoutValue) => DiagramLayoutValue) => {
@@ -235,7 +263,7 @@ export function ProjectSourceWorkspace({
 
   const handleCursorPositionChange = useCallback(
     (position: SourceCursorPosition) => {
-      if (!sourceNavigationEnabled || !navigationIndex) {
+      if (!sourceNavigationReady || !navigationIndex) {
         selectionStore.getState().setSelection(null);
         setHiddenSourceSelection(null);
         return;
@@ -255,16 +283,16 @@ export function ProjectSourceWorkspace({
       selectionStore.getState().setSelection(null);
       setHiddenSourceSelection({ selection, viewLabel });
     },
-    [navigationIndex, selectionStore, sourceNavigationEnabled, viewLabel, visibility],
+    [navigationIndex, selectionStore, sourceNavigationReady, viewLabel, visibility],
   );
 
   const handleNavigateSource = useCallback(
     (selection: DiagramSelection) => {
-      if (!sourceNavigationEnabled || !activeGraph) return;
+      if (!sourceNavigationReady || !activeGraph) return;
       const range = activeGraph.sourceMap[selection.elementKey];
       if (range) editorRef.current?.revealSourceRange(range);
     },
-    [activeGraph, sourceNavigationEnabled],
+    [activeGraph, sourceNavigationReady],
   );
 
   const handleToggleGroup = useCallback(
@@ -284,11 +312,21 @@ export function ProjectSourceWorkspace({
   const handleViewChange = useCallback(
     (viewKey: DiagramViewKey) => {
       if (layoutInteractionLocked) return;
-      setActiveViewKey(viewKey);
       setFocusRequest(null);
       setLayoutWorkflowError(null);
+      const controller = layoutSessionRef.current;
+      if (!controller) {
+        setActiveViewKey(viewKey);
+        return;
+      }
+      viewTransitionGenerationRef.current += 1;
+      const generation = viewTransitionGenerationRef.current;
+      void controller.hydrate(viewKey, defaultLayout, { publishLoading: false }).then(() => {
+        if (viewTransitionGenerationRef.current !== generation) return;
+        setActiveViewKey(viewKey);
+      });
     },
-    [layoutInteractionLocked],
+    [defaultLayout, layoutInteractionLocked],
   );
 
   const handleDetailLevelChange = useCallback(
@@ -426,16 +464,17 @@ export function ProjectSourceWorkspace({
   }, [activeGraph, resolvedViewKey]);
 
   useEffect(() => {
-    if (!sourceNavigationEnabled) {
+    if (!sourceNavigationReady) {
       setHiddenSourceSelection(null);
       return;
     }
     const position = lastCursorPositionRef.current;
     if (position) handleCursorPositionChange(position);
-  }, [handleCursorPositionChange, sourceNavigationEnabled]);
+  }, [handleCursorPositionChange, sourceNavigationReady]);
 
   useEffect(() => {
     if (!projectId) return;
+    viewTransitionGenerationRef.current += 1;
     setActiveViewKey(GLOBAL_VIEW_KEY);
     setSearchQuery("");
     setFocusRequest(null);
@@ -735,6 +774,7 @@ export function ProjectSourceWorkspace({
         positions,
         viewport,
       };
+      setInitialDiagramReady(true);
     },
     [resolvedViewKey],
   );
@@ -1001,26 +1041,33 @@ export function ProjectSourceWorkspace({
                 </button>
               </div>
             </div>
-            <Suspense
-              fallback={
-                <div className="grid min-h-[32rem] place-items-center bg-slate-950 text-slate-300">
-                  <p aria-live="polite">Loading local editor assets…</p>
-                </div>
-              }
-            >
-              <EditorComponent
-                ref={editorRef}
-                projectId={projectId}
-                initialSource={initialStateRef.current.project.draftSource}
-                diagnostics={sessionSnapshot.diagnostics}
-                onChange={(source) => sessionRef.current?.edit(source)}
-                onSave={() => sessionRef.current?.flush()}
-                onUndo={handleHistoryUndo}
-                onRedo={handleHistoryRedo}
-                onCursorPositionChange={handleCursorPositionChange}
-                readOnly={visualWorkspaceLocked}
-              />
-            </Suspense>
+            {sourceEditorLoadReady ? (
+              <Suspense
+                fallback={
+                  <div className="grid min-h-[32rem] place-items-center bg-slate-950 text-slate-300">
+                    <p aria-live="polite">Loading local editor assets…</p>
+                  </div>
+                }
+              >
+                <EditorComponent
+                  ref={editorRef}
+                  projectId={projectId}
+                  initialSource={sessionSnapshot.source}
+                  diagnostics={sessionSnapshot.diagnostics}
+                  onChange={(source) => sessionRef.current?.edit(source)}
+                  onSave={() => sessionRef.current?.flush()}
+                  onUndo={handleHistoryUndo}
+                  onRedo={handleHistoryRedo}
+                  onReady={() => setSourceEditorReady(true)}
+                  onCursorPositionChange={handleCursorPositionChange}
+                  readOnly={visualWorkspaceLocked}
+                />
+              </Suspense>
+            ) : (
+              <div className="grid min-h-[32rem] place-items-center bg-slate-950 text-slate-300">
+                <p aria-live="polite">Preparing the diagram before loading editor assets…</p>
+              </div>
+            )}
           </section>
 
           <DiagramPanel
@@ -1037,7 +1084,7 @@ export function ProjectSourceWorkspace({
             selectionStore={selectionStore}
             DiagramComponent={DiagramComponent}
             requestLayout={requestBoundedLayout}
-            sourceNavigationEnabled={sourceNavigationEnabled}
+            sourceNavigationEnabled={sourceNavigationReady}
             layoutView={activeLayoutView}
             layoutConflict={layoutSnapshot?.conflict ?? null}
             layoutPositions={activeLayout.positions}
@@ -1065,6 +1112,7 @@ export function ProjectSourceWorkspace({
             onRetryLocalLayout={() => void layoutSessionRef.current?.retryLocalLayout()}
             onLoadServerLayout={() => void layoutSessionRef.current?.loadServerLayout()}
             onReloadLayout={() => void handleReloadLayout()}
+            layoutInteractionDisabled={layoutInteractionLocked}
             visualCommandSession={visualCommandSession}
             visualInteractionDisabled={
               layoutInteractionLocked ||
@@ -1130,7 +1178,7 @@ export function ProjectSourceWorkspace({
             viewLabel={viewLabel}
             collapsedGroupKeys={activeCollapsedGroupKeys}
             selectionStore={selectionStore}
-            sourceNavigationEnabled={sourceNavigationEnabled}
+            sourceNavigationEnabled={sourceNavigationReady}
             onToggleGroup={handleToggleGroup}
             onNavigateSource={handleNavigateSource}
           />
@@ -1211,6 +1259,7 @@ function DiagramPanel({
   onRetryLocalLayout,
   onLoadServerLayout,
   onReloadLayout,
+  layoutInteractionDisabled,
   visualCommandSession,
   visualInteractionDisabled,
   onOpenVisualSource,
@@ -1257,6 +1306,7 @@ function DiagramPanel({
   readonly onRetryLocalLayout: () => void;
   readonly onLoadServerLayout: () => void;
   readonly onReloadLayout: () => void;
+  readonly layoutInteractionDisabled: boolean;
   readonly visualCommandSession: VisualCommandSessionController | null;
   readonly visualInteractionDisabled: boolean;
   readonly onOpenVisualSource: (range: import("@er-diagram/contracts").SourceRange | null) => void;
@@ -1298,7 +1348,13 @@ function DiagramPanel({
             onActivateSearchResult={onActivateSearchResult}
             onViewChange={onViewChange}
             onDetailLevelChange={onDetailLevelChange}
-            disabled={layoutBusy}
+            disabled={
+              layoutInteractionDisabled ||
+              layoutHydrating ||
+              layoutLoadFailed ||
+              layoutConflict !== null
+            }
+            searchDisabled={layoutBusy}
           />
           <LayoutToolbar
             viewKey={viewKey}
@@ -1324,11 +1380,7 @@ function DiagramPanel({
               </div>
             }
           >
-            {layoutHydrating ? (
-              <div className="grid min-h-[32rem] place-items-center bg-slate-950 text-slate-300">
-                <p aria-live="polite">Loading layout…</p>
-              </div>
-            ) : layoutLoadFailed ? (
+            {layoutLoadFailed ? (
               <div className="grid min-h-[32rem] place-items-center bg-slate-950 p-6 text-center">
                 <div>
                   <p className="font-semibold text-red-100">Layout could not be loaded</p>
@@ -1358,6 +1410,7 @@ function DiagramPanel({
                 requestLayout={requestLayout}
                 layoutPositions={layoutPositions}
                 layoutViewport={layoutViewport}
+                layoutPending={layoutHydrating}
                 layoutRequest={layoutRequest}
                 interactionDisabled={
                   layoutBusy || layoutConflict !== null || visualInteractionDisabled

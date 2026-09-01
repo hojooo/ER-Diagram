@@ -55,9 +55,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Run the repository release gate
         run: pnpm ci:verify
-      - name: Install Chromium for Playwright
-        run: pnpm exec playwright install --with-deps chromium
+      - name: Install Chromium and stable Chrome for Playwright
+        run: pnpm exec playwright install --with-deps chromium chrome
       - name: Run end-to-end acceptance tests
         run: pnpm test:e2e
-      - name: Run the Milestone 0 layout performance gate
-        run: pnpm test:perf -- --scenario layout-spike
+      - name: Run the M4 production performance gate
+        run: pnpm test:perf

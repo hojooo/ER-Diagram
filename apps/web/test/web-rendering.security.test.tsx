@@ -132,7 +132,7 @@ describe("Web text and byte-preservation security boundaries", () => {
     const tableSummary = screen.getByText(`public.${TABLE_NAME}`, { exact: true });
     expect(tableSummary).toBeVisible();
     fireEvent.click(tableSummary);
-    expect(screen.getByRole("button", { name: /column<img src=x onerror/ })).toBeVisible();
+    expect(await screen.findByRole("button", { name: /column<img src=x onerror/ })).toBeVisible();
     expectNoExecutableMarkup();
 
     cleanup();

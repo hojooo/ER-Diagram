@@ -116,6 +116,9 @@ test("production build enforces CSP while local editor, parser, layout, and diag
   });
   await expect(page.locator(".react-flow__renderer")).toBeVisible();
   await expect(page.locator(".react-flow__node")).toHaveCount(3);
+  await expect(page.getByRole("button", { name: "Preview auto layout" })).toBeEnabled();
+  await page.getByRole("button", { name: "Preview auto layout" }).click();
+  await expect(page.getByText("Auto-layout preview ready")).toBeVisible({ timeout: 25_000 });
   await expect(
     page.getByText("public.group<script>window.pwned=true</script>😀", { exact: true }),
   ).toBeVisible();

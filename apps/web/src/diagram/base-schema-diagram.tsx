@@ -17,8 +17,10 @@ import {
   DiagramInteractionContext,
   GroupDiagramNodeComponent,
   ReferenceDiagramEdgeComponent,
+  shouldShowDiagramEdgeLabels,
   TableDiagramNodeComponent,
 } from "./diagram-components.js";
+import { deriveInteractiveLayout, deriveInteractiveViewport } from "./interactive-layout.js";
 import { requestWorkerLayout } from "./layout-worker-client.js";
 import {
   createDiagramProjection,
@@ -42,7 +44,7 @@ const nodeTypes = {
 } satisfies NodeTypes;
 const edgeTypes = { reference: ReferenceDiagramEdgeComponent } satisfies EdgeTypes;
 
-type LayoutStatus = "LAYING_OUT" | "READY" | "ERROR";
+type LayoutStatus = "LAYING_OUT" | "SETTLING" | "READY" | "ERROR";
 const EMPTY_LAYOUT_POSITIONS = {} as const;
 
 export function BaseSchemaDiagram({
@@ -58,6 +60,7 @@ export function BaseSchemaDiagram({
   requestLayout = requestWorkerLayout,
   layoutPositions = EMPTY_LAYOUT_POSITIONS,
   layoutViewport = null,
+  layoutPending = false,
   layoutRequest = null,
   interactionDisabled = false,
   onPositionsCommit,
@@ -79,20 +82,34 @@ export function BaseSchemaDiagram({
     () => listDiagramViews(graph).find((view) => view.key === viewKey)?.label ?? "Global",
     [graph, viewKey],
   );
-  const [displayProjection, setDisplayProjection] = useState(projection);
+  const [displayProjection, setDisplayProjection] = useState(() =>
+    layoutRequest
+      ? projection
+      : deriveInteractiveLayout(projection, { savedPositions: layoutPositions }),
+  );
   const [layoutStatus, setLayoutStatus] = useState<LayoutStatus>(
-    projection.nodes.length === 0 ? "READY" : "LAYING_OUT",
+    projection.nodes.length === 0 ? "READY" : layoutRequest ? "LAYING_OUT" : "SETTLING",
   );
   const [settledLayoutRequestId, setSettledLayoutRequestId] = useState<string | null>(null);
   const [layoutGeneration, setLayoutGeneration] = useState(0);
   const [flowInstance, setFlowInstance] = useState<
     ReactFlowInstance<SchemaDiagramNode, SchemaDiagramEdge> | undefined
   >();
+  const flowInstanceRef = useRef<
+    ReactFlowInstance<SchemaDiagramNode, SchemaDiagramEdge> | undefined
+  >(undefined);
+  const diagramContainerRef = useRef<HTMLDivElement>(null);
   const selection = useStore(selectionStore, (state) => state.selection);
   const requestGenerationRef = useRef(0);
-  const layoutPositionsRef = useRef(layoutPositions);
+  const stableProjectionRef = useRef<DiagramProjection | null>(
+    layoutRequest ? null : displayProjection,
+  );
   const activeLayoutRequestRef = useRef("");
   const fittedLayoutRequestRef = useRef<string | null>(null);
+  const preparedViewportRef = useRef<{
+    requestId: string;
+    completion: Promise<unknown>;
+  } | null>(null);
   const focusedRequestRef = useRef<number | null>(null);
   const referenceByKey = useMemo(
     () => new Map(graph.references.map((reference) => [reference.key, reference])),
@@ -100,50 +117,81 @@ export function BaseSchemaDiagram({
   );
 
   useEffect(() => {
-    layoutPositionsRef.current = layoutPositions;
-    if (layoutRequest) return;
-    setDisplayProjection((current) => applySavedPositions(current, layoutPositions));
-  }, [layoutPositions, layoutRequest]);
-
-  useEffect(() => {
     requestGenerationRef.current += 1;
     const requestId = `${graph.schemaHash}:${layoutGeneration}:${requestGenerationRef.current}`;
     activeLayoutRequestRef.current = requestId;
-    setDisplayProjection(
-      layoutRequest ? projection : applySavedPositions(projection, layoutPositionsRef.current),
-    );
+    preparedViewportRef.current = null;
     setSettledLayoutRequestId(null);
 
     if (projection.nodes.length === 0) {
+      const emptyProjection = deriveInteractiveLayout(projection);
+      setDisplayProjection(emptyProjection);
+      if (!layoutRequest) stableProjectionRef.current = emptyProjection;
       setLayoutStatus("READY");
       setSettledLayoutRequestId(requestId);
       return;
     }
 
+    if (!layoutRequest) {
+      const derivedProjection = deriveInteractiveLayout(projection, {
+        savedPositions: layoutPositions,
+        previousProjection: stableProjectionRef.current,
+      });
+      const container = diagramContainerRef.current;
+      const viewport =
+        layoutViewport ??
+        (container
+          ? deriveInteractiveViewport(derivedProjection, {
+              width: container.clientWidth,
+              height: container.clientHeight,
+            })
+          : null);
+      const currentFlowInstance = flowInstanceRef.current;
+      let viewportPrepared = false;
+      if (currentFlowInstance && viewport) {
+        preparedViewportRef.current = {
+          requestId,
+          completion: Promise.resolve(currentFlowInstance.setViewport(viewport)),
+        };
+        viewportPrepared = true;
+      }
+      setDisplayProjection(derivedProjection);
+      setLayoutStatus(viewportPrepared && !layoutPending ? "READY" : "SETTLING");
+      setSettledLayoutRequestId(requestId);
+      return;
+    }
+
+    setDisplayProjection(projection);
     setLayoutStatus("LAYING_OUT");
     void requestLayout(projection).then(
       (laidOut) => {
         if (activeLayoutRequestRef.current !== requestId) return;
-        setDisplayProjection(
-          layoutRequest ? laidOut : applySavedPositions(laidOut, layoutPositionsRef.current),
-        );
-        setLayoutStatus("READY");
+        setDisplayProjection(laidOut);
+        setLayoutStatus("SETTLING");
         setSettledLayoutRequestId(requestId);
       },
       () => {
         if (activeLayoutRequestRef.current !== requestId) return;
-        setDisplayProjection(
-          layoutRequest ? projection : applySavedPositions(projection, layoutPositionsRef.current),
-        );
+        setDisplayProjection(projection);
         setLayoutStatus("ERROR");
         setSettledLayoutRequestId(requestId);
       },
     );
-  }, [graph.schemaHash, layoutGeneration, layoutRequest, projection, requestLayout]);
+  }, [
+    graph.schemaHash,
+    layoutGeneration,
+    layoutPositions,
+    layoutPending,
+    layoutRequest,
+    layoutViewport,
+    projection,
+    requestLayout,
+  ]);
 
   useEffect(() => {
     if (
       layoutStatus === "LAYING_OUT" ||
+      layoutPending ||
       !settledLayoutRequestId ||
       !flowInstance ||
       projection.nodes.length === 0
@@ -151,39 +199,59 @@ export function BaseSchemaDiagram({
       return;
     }
     if (fittedLayoutRequestRef.current === settledLayoutRequestId) return;
-    fittedLayoutRequestRef.current = settledLayoutRequestId;
     const animationFrame = requestAnimationFrame(() => {
-      if (!layoutRequest && layoutViewport) {
-        void Promise.resolve(flowInstance.setViewport(layoutViewport)).then(() => {
-          onRenderedLayoutReady?.(
-            projectionPositions(displayProjection),
-            flowInstance.getViewport(),
-          );
-        });
-        return;
-      }
-      void Promise.resolve(flowInstance.fitView({ padding: 0.15 })).then(() => {
+      const finishRenderedLayout = () => {
+        if (activeLayoutRequestRef.current !== settledLayoutRequestId) return;
+        if (fittedLayoutRequestRef.current === settledLayoutRequestId) return;
+        fittedLayoutRequestRef.current = settledLayoutRequestId;
         if (layoutRequest) {
+          const succeeded = layoutStatus !== "ERROR";
+          if (succeeded) setLayoutStatus("READY");
           onLayoutRequestReady?.({
             requestId: layoutRequest.requestId,
             mode: layoutRequest.mode,
-            succeeded: layoutStatus === "READY",
+            succeeded,
             positions: projectionPositions(displayProjection),
             viewport: flowInstance.getViewport(),
           });
-        } else {
-          onRenderedLayoutReady?.(
-            projectionPositions(displayProjection),
-            flowInstance.getViewport(),
-          );
+          return;
         }
-      });
+        stableProjectionRef.current = displayProjection;
+        setLayoutStatus("READY");
+        onRenderedLayoutReady?.(projectionPositions(displayProjection), flowInstance.getViewport());
+      };
+      const preparedViewport = preparedViewportRef.current;
+      if (preparedViewport?.requestId === settledLayoutRequestId) {
+        void preparedViewport.completion.then(finishRenderedLayout, () => {
+          void Promise.resolve(flowInstance.fitView({ padding: 0.15 })).then(finishRenderedLayout);
+        });
+        return;
+      }
+      if (!layoutRequest && layoutViewport) {
+        void Promise.resolve(flowInstance.setViewport(layoutViewport)).then(finishRenderedLayout);
+        return;
+      }
+      if (!layoutRequest) {
+        const container = diagramContainerRef.current;
+        const viewport = container
+          ? deriveInteractiveViewport(displayProjection, {
+              width: container.clientWidth,
+              height: container.clientHeight,
+            })
+          : null;
+        if (viewport) {
+          void Promise.resolve(flowInstance.setViewport(viewport)).then(finishRenderedLayout);
+          return;
+        }
+      }
+      void Promise.resolve(flowInstance.fitView({ padding: 0.15 })).then(finishRenderedLayout);
     });
     return () => cancelAnimationFrame(animationFrame);
   }, [
     displayProjection,
     flowInstance,
     layoutRequest,
+    layoutPending,
     layoutStatus,
     layoutViewport,
     onLayoutRequestReady,
@@ -232,45 +300,56 @@ export function BaseSchemaDiagram({
     [onNavigateSource, selectionStore, sourceNavigationEnabled],
   );
   const interactions = useMemo(
-    () => ({ activateElement, toggleGroup: onToggleGroup }),
-    [activateElement, onToggleGroup],
+    () => ({
+      activateElement,
+      toggleGroup: onToggleGroup,
+      showEdgeLabels: shouldShowDiagramEdgeLabels(displayProjection.edges.length),
+    }),
+    [activateElement, displayProjection.edges.length, onToggleGroup],
+  );
+  const handleFlowInit = useCallback(
+    (instance: ReactFlowInstance<SchemaDiagramNode, SchemaDiagramEdge>) => {
+      flowInstanceRef.current = instance;
+      setFlowInstance(instance);
+    },
+    [],
   );
 
   const selectedProjection = useMemo<DiagramProjection>(() => {
-    const selectedElementKey = selection?.elementKey ?? null;
+    if (!selection) return displayProjection;
+    const selectedElementKey = selection.elementKey;
     return {
       ...displayProjection,
       nodes: displayProjection.nodes.map((node) => {
         if (node.type === "table") {
-          const selected = selection?.tableKeys.includes(node.data.tableKey) ?? false;
+          const selected = selection.tableKeys.includes(node.data.tableKey);
+          if (!selected) return node;
           return {
             ...node,
-            selected,
+            selected: true,
             data: {
               ...node.data,
-              selectedElementKey: selected ? selectedElementKey : null,
+              selectedElementKey,
             },
           } satisfies TableDiagramNode;
         }
         const selected =
-          selection?.elementKey === node.data.groupKey ||
+          selection.elementKey === node.data.groupKey ||
           (node.data.collapsed &&
-            (selection?.tableKeys.some((tableKey) => node.data.tableKeys.includes(tableKey)) ??
-              false));
+            selection.tableKeys.some((tableKey) => node.data.tableKeys.includes(tableKey)));
+        if (!selected) return node;
         return {
           ...node,
-          selected,
+          selected: true,
           data: {
             ...node.data,
-            selectedElementKey: selected ? selectedElementKey : null,
+            selectedElementKey,
           },
         } satisfies GroupDiagramNode;
       }),
-      edges: displayProjection.edges.map((edge) => ({
-        ...edge,
-        selected:
-          selectedElementKey !== null && edge.data.referenceKeys.includes(selectedElementKey),
-      })),
+      edges: displayProjection.edges.map((edge) =>
+        edge.data.referenceKeys.includes(selectedElementKey) ? { ...edge, selected: true } : edge,
+      ),
     };
   }, [displayProjection, selection]);
 
@@ -294,14 +373,35 @@ export function BaseSchemaDiagram({
   }
 
   return (
-    <div className="relative min-h-[32rem] h-[min(68vh,52rem)] bg-slate-950">
-      <p className="sr-only" aria-live="polite" data-testid="base-diagram-layout-status">
-        {layoutStatus === "LAYING_OUT"
-          ? "Laying out diagram"
-          : layoutStatus === "READY"
-            ? "Diagram layout ready"
-            : "Diagram layout failed; fallback positions are shown"}
+    <div
+      ref={diagramContainerRef}
+      className="relative min-h-[32rem] h-[min(68vh,52rem)] bg-slate-950"
+    >
+      <p
+        className="sr-only"
+        aria-live="polite"
+        data-testid="base-diagram-layout-status"
+        data-view-key={displayProjection.viewKey}
+        data-lod={displayProjection.lod}
+      >
+        {layoutPending
+          ? "Loading layout"
+          : layoutStatus === "LAYING_OUT"
+            ? "Laying out diagram"
+            : layoutStatus === "SETTLING"
+              ? "Preparing diagram viewport"
+              : layoutStatus === "READY"
+                ? "Diagram layout ready"
+                : "Diagram layout failed; fallback positions are shown"}
       </p>
+      {layoutPending ? (
+        <div
+          className="absolute right-3 top-3 z-10 rounded-lg border border-slate-600 bg-slate-950/95 px-3 py-2 text-xs text-slate-200"
+          role="status"
+        >
+          Loading saved layout…
+        </div>
+      ) : null}
       {layoutStatus === "ERROR" ? (
         <div
           className="absolute right-3 top-3 z-10 flex items-center gap-3 rounded-lg border border-amber-300/50 bg-amber-950/95 px-3 py-2 text-xs text-amber-100"
@@ -324,7 +424,7 @@ export function BaseSchemaDiagram({
           edges={selectedProjection.edges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
-          onInit={setFlowInstance}
+          onInit={handleFlowInit}
           onNodeClick={(_event, node) => {
             if (node.type === "table") {
               activateElement({
@@ -355,7 +455,8 @@ export function BaseSchemaDiagram({
           onPaneClick={() => selectionStore.getState().setSelection(null)}
           onNodesChange={(changes) => {
             const controlledChanges = changes.filter(
-              (change) => change.type !== "add" && change.type !== "remove",
+              (change) =>
+                change.type !== "add" && change.type !== "remove" && change.type !== "select",
             );
             if (controlledChanges.length === 0) return;
             setDisplayProjection((current) => ({
@@ -368,6 +469,7 @@ export function BaseSchemaDiagram({
             const positions = projectionPositions(displayProjection);
             positions[node.id] = { ...node.position };
             onPositionsCommit?.(positions);
+            if (flowInstance) onViewportCommit?.(toDiagramViewport(flowInstance.getViewport()));
           }}
           onMoveEnd={(event, viewport) => {
             if (!event || interactionDisabled || layoutRequest) return;
@@ -391,19 +493,6 @@ export function BaseSchemaDiagram({
       </DiagramInteractionContext.Provider>
     </div>
   );
-}
-
-function applySavedPositions(
-  projection: DiagramProjection,
-  positions: Readonly<Record<string, { readonly x: number; readonly y: number }>>,
-): DiagramProjection {
-  return {
-    ...projection,
-    nodes: projection.nodes.map((node) => {
-      const position = positions[node.id];
-      return position ? { ...node, position: { ...position } } : node;
-    }),
-  };
 }
 
 function projectionPositions(
