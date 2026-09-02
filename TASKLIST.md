@@ -330,7 +330,7 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - portable bundle을 fresh second volume에 import하고 container restart 뒤 source·revision·layout을 read-back한다.
   - Gate A~F command wiring과 outbound·log redaction evidence를 fail-closed로 고정한다.
   - 검증: `pnpm test:p0-gate`
-- [ ] `M4-012` canvas-first Schema Workspace shell
+- [x] `M4-012` canvas-first Schema Workspace shell
   - Diagram Canvas를 workspace 전체 viewport의 full-bleed base layer로 유지하고 command bar, source, outline,
     inspector, history와 status를 overlay surface로 재구성한다.
   - Overlay open/close가 diagram remount, implicit ELK, viewport·selection·saved position 또는 schema/layout

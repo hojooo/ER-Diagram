@@ -34,7 +34,7 @@ test("M1-GATE explores the fidelity workspace without source loss and recovers a
       timeout: 20_000,
     },
   );
-  await expect(sourcePanel.getByTestId("validation-status")).toHaveText(/Draft valid/);
+  await expect(sourcePanel.getByTestId("source-validation-status")).toHaveText(/Draft valid/);
   await waitForLayoutReady(page);
   await expect(outline.getByText(GLOBAL_INVENTORY, { exact: true })).toBeVisible();
 
@@ -131,7 +131,7 @@ test("M1-GATE explores the fidelity workspace without source loss and recovers a
     source: INVALID_SOURCE,
     expectedSchemaRevisionNo: 1,
   });
-  await expect(sourcePanel.getByTestId("validation-status")).toHaveText(/Draft invalid/);
+  await expect(sourcePanel.getByTestId("source-validation-status")).toHaveText(/Draft invalid/);
   await expect(page.getByText(/Showing last-valid revision 1/)).toBeVisible();
   await expect(outline.getByText(GLOBAL_INVENTORY, { exact: true })).toBeVisible();
 
@@ -141,7 +141,7 @@ test("M1-GATE explores the fidelity workspace without source loss and recovers a
       timeout: 20_000,
     },
   );
-  await expect(sourcePanel.getByTestId("validation-status")).toHaveText(/Draft invalid/);
+  await expect(sourcePanel.getByTestId("source-validation-status")).toHaveText(/Draft invalid/);
   await expect(page.getByText(/Showing last-valid revision 1/)).toBeVisible();
   await waitForLayoutReady(page);
   await expect(outline.getByText(GLOBAL_INVENTORY, { exact: true })).toBeVisible();
@@ -159,7 +159,7 @@ test("M1-GATE explores the fidelity workspace without source loss and recovers a
     source: SOURCE,
     expectedSchemaRevisionNo: 2,
   });
-  await expect(sourcePanel.getByTestId("validation-status")).toHaveText(/Draft valid/);
+  await expect(sourcePanel.getByTestId("source-validation-status")).toHaveText(/Draft valid/);
   await expect(page.getByText(/Showing the current valid draft/)).toBeVisible();
   await waitForLayoutReady(page);
   expect(api.state.project.draftSource).toBe(SOURCE);
