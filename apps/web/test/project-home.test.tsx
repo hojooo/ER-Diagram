@@ -285,7 +285,7 @@ describe("Project Home", () => {
 
     await screen.findByRole("heading", { name: "Orders", level: 1 }, { timeout: 3_000 });
     expect(api.createInputs).toEqual([{ name: "Orders", primaryDialect: "MYSQL", source: "" }]);
-    expect(screen.getByText("MySQL project")).toBeVisible();
+    expect(screen.getByText(/MySQL · revision 1/)).toBeVisible();
     expect(screen.queryByText("Compound groups, source-defined views")).not.toBeInTheDocument();
   });
 
@@ -339,7 +339,7 @@ describe("Project Home", () => {
       await screen.findByRole("heading", { name: "Renamed schema copy", level: 1 }),
     ).toBeVisible();
 
-    fireEvent.click(screen.getByRole("link", { name: "Back to projects" }));
+    fireEvent.click(screen.getByRole("link", { name: "Back" }));
     const copyCard = await screen.findByRole("article", { name: "Renamed schema copy" });
     fireEvent.click(within(copyCard).getByRole("button", { name: "Delete Renamed schema copy" }));
     const deleteDialog = await screen.findByRole("dialog", { name: "Delete Renamed schema copy?" });

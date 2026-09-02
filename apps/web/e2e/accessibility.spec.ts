@@ -238,14 +238,16 @@ test("valid workspace, search, inspector, and history are keyboard reachable and
   test.setTimeout(90_000);
   await installWorkspaceApi(page);
   await page.goto(`/projects/${PROJECT_ID}`);
+  await expect(page.getByTestId("base-diagram-layout-status")).toHaveText("Diagram layout ready", {
+    timeout: 20_000,
+  });
+  await assertNoWcagViolations(page, "valid workspace with canvas-only initial state");
+  await page.getByRole("button", { name: "Source", exact: true }).click();
   await expect(page.locator('section[aria-label="DBML source editor"] .monaco-editor')).toBeVisible(
     {
       timeout: 20_000,
     },
   );
-  await expect(page.getByTestId("base-diagram-layout-status")).toHaveText("Diagram layout ready", {
-    timeout: 20_000,
-  });
   await expect(page.locator(".react-flow__node[tabindex='0']")).toHaveCount(0);
   await expect(page.locator(".react-flow__edge[tabindex='0']")).toHaveCount(0);
   await expect(page.locator(".diagram-table__table-action[tabindex='-1']")).toHaveCount(3);
@@ -285,6 +287,7 @@ test("valid workspace, search, inspector, and history are keyboard reachable and
   await expect(expandGroup).toBeVisible();
   await expandGroup.press("Enter");
 
+  await page.getByRole("button", { name: "Outline", exact: true }).click();
   const outline = page.getByRole("region", { name: "Schema outline" });
   await outline.locator("summary").filter({ hasText: "public.users" }).press("Enter");
   const tableOutlineAction = outline.getByRole("button", {
@@ -292,6 +295,7 @@ test("valid workspace, search, inspector, and history are keyboard reachable and
   });
   await tableOutlineAction.focus();
   await tableOutlineAction.press("Enter");
+  await page.getByRole("button", { name: "Inspector", exact: true }).click();
   const toolbar = page.getByRole("toolbar", { name: "Visual schema actions" });
   const firstAction = toolbar.getByRole("button").first();
   await firstAction.focus();
@@ -348,6 +352,7 @@ test("valid workspace, search, inspector, and history are keyboard reachable and
   await partialSourceAction.focus();
   await partialSourceAction.press("Enter");
   await expect(page.getByRole("textbox", { name: "DBML source editor" })).toBeFocused();
+  await page.getByRole("button", { name: "Source", exact: true }).click();
 
   const resetTrigger = page.getByRole("button", { name: "Reset layout" });
   await resetTrigger.click();
@@ -372,17 +377,25 @@ test("invalid draft keeps the last-valid diagram and exposes the recovery state 
   await installWorkspaceApi(page, projectState({ invalid: true }));
   await page.goto(`/projects/${PROJECT_ID}`);
 
+  await expect(page.getByText(/Showing last-valid revision 1/)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("button", { name: "Source", exact: true })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await page.getByRole("button", { name: "Source", exact: true }).click();
   await expect(page.locator('section[aria-label="DBML source editor"] .monaco-editor')).toBeVisible(
     {
       timeout: 20_000,
     },
   );
-  await expect(page.getByText(/Showing last-valid revision 1/)).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTestId("validation-status")).toContainText("Draft invalid");
   await expect(page.getByText("Last valid revision", { exact: true }).first()).toBeVisible();
   await expect(page.getByText(/Source navigation is disabled/)).toBeVisible();
-  await expect(page.getByRole("region", { name: "Schema outline" })).toContainText("public.users");
+  await page.getByRole("button", { name: "Outline", exact: true }).click();
+  await expect(page.locator("#workspace-outline-surface")).toContainText("public.users");
+  await page.getByRole("button", { name: "Inspector", exact: true }).click();
   await expect(page.getByRole("button", { name: "Create table" })).toBeDisabled();
+  await expect(page.locator("#workspace-inspector-surface")).toHaveCSS("opacity", "1");
   await assertNoWcagViolations(page, "invalid draft and last-valid diagram recovery");
 });
 
@@ -396,6 +409,7 @@ test("source and layout conflicts expose explicit keyboard recovery dialogs", as
     timeout: 20_000,
   });
 
+  await page.getByRole("button", { name: "Source", exact: true }).click();
   await replaceEditorSource(page, `${SOURCE}\nTable public.audit_log {\n  id bigint [pk]\n}\n`);
   await page.getByRole("button", { name: "Save now" }).click();
   await expect(page.getByTestId("persistence-status")).toContainText("Conflict");
@@ -407,6 +421,7 @@ test("source and layout conflicts expose explicit keyboard recovery dialogs", as
   await assertNoWcagViolations(page, "source conflict recovery dialog");
   await page.keyboard.press("Escape");
   await expect(loadDraftTrigger).toBeFocused();
+  await page.getByRole("button", { name: "Source", exact: true }).click();
 
   conflictApi.layouts.advanceRevision();
   await page.getByRole("combobox", { name: "Detail level" }).selectOption("NAME_ONLY");
@@ -429,8 +444,9 @@ test("dirty source navigation blocker keeps source and focuses Stay", async ({ p
     timeout: 20_000,
   });
 
+  await page.getByRole("button", { name: "Source", exact: true }).click();
   await replaceEditorSource(page, `${SOURCE}\nTable public.local_draft {\n  id bigint [pk]\n}\n`);
-  await page.getByRole("link", { name: "Back to projects" }).click();
+  await page.getByRole("link", { name: "Back" }).click();
   const blocker = page.getByRole("dialog", { name: "Leave schema workspace?" });
   await expect(blocker.getByRole("button", { name: "Stay" })).toBeFocused();
   await expect(blocker.getByRole("button", { name: "Leave workspace" })).toBeVisible();
@@ -453,6 +469,10 @@ test("core controls reflow without horizontal document overflow", async ({ page 
 
   await installWorkspaceApi(page);
   await page.goto(`/projects/${PROJECT_ID}`);
+  await expect(page.getByTestId("base-diagram-layout-status")).toHaveText("Diagram layout ready", {
+    timeout: 20_000,
+  });
+  await page.getByRole("button", { name: "Source", exact: true }).click();
   await expect(page.locator('section[aria-label="DBML source editor"] .monaco-editor')).toBeVisible(
     {
       timeout: 20_000,

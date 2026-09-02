@@ -336,6 +336,7 @@ describe("TableGroup navigation and collapse interactions", () => {
     if (!group) throw new Error("Expected a group.");
     const onToggleGroup = vi.fn();
     const onNavigateSource = vi.fn();
+    const onActivateElement = vi.fn();
 
     render(
       <BaseSchemaDiagram
@@ -347,6 +348,7 @@ describe("TableGroup navigation and collapse interactions", () => {
         sourceNavigationEnabled
         onToggleGroup={onToggleGroup}
         onNavigateSource={onNavigateSource}
+        onActivateElement={onActivateElement}
         requestLayout={async (projection) => projection}
       />,
     );
@@ -360,7 +362,8 @@ describe("TableGroup navigation and collapse interactions", () => {
     expect(onNavigateSource).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: `Select canvas node ${group.key}` }));
-    expect(onNavigateSource).toHaveBeenCalledWith({
+    expect(onNavigateSource).not.toHaveBeenCalled();
+    expect(onActivateElement).toHaveBeenCalledWith({
       elementKey: group.key,
       kind: "group",
       tableKeys: group.tableKeys,

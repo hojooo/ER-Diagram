@@ -68,12 +68,14 @@ test("switches DiagramViews, searches the current view, and preserves revision-s
   const api = await installViewsApi(page);
 
   await page.goto(`/projects/${PROJECT_ID}`);
+  await page.getByRole("button", { name: "Source", exact: true }).click();
   const editor = page.getByRole("textbox", { name: "DBML source editor" });
   await expect(page.locator('section[aria-label="DBML source editor"] .monaco-editor')).toBeVisible(
     {
       timeout: 20_000,
     },
   );
+  await page.getByRole("button", { name: "Source", exact: true }).click();
   await waitForDiagramLayout(page);
 
   const viewSelector = page.getByRole("combobox", { name: "Diagram view" });
@@ -111,50 +113,50 @@ test("switches DiagramViews, searches the current view, and preserves revision-s
   const search = page.getByRole("combobox", { name: "Search current view" });
   await search.fill("accounts");
   await page.getByRole("option", { name: "table public.accounts" }).click();
-  await expect(
-    page.getByRole("button", { name: "Focus public.accounts in diagram" }),
-  ).toHaveAttribute("aria-current", "true");
+  await expect(page.getByText("Selected table public.accounts")).toBeVisible();
 
   await search.fill("account_id");
   await page.getByRole("option", { name: /column public\.profiles\.account_id/ }).click();
-  await expect(
-    page.getByRole("button", { name: "Focus column account_id in diagram" }),
-  ).toHaveAttribute("aria-current", "true");
+  await expect(page.getByText("Selected column profiles.account_id")).toBeVisible();
 
   await search.fill("Identity");
   await page.getByRole("option", { name: "group public.Identity" }).click();
-  await expect(
-    page.getByRole("button", { name: "Focus group public.Identity in diagram" }),
-  ).toHaveAttribute("aria-current", "true");
+  await expect(page.getByText("Selected TableGroup")).toBeVisible();
 
   await search.fill("public");
   await page.getByRole("option", { name: "schema public" }).click();
   await expect(search).toHaveAttribute("aria-expanded", "false");
 
+  await page.getByRole("button", { name: "Source", exact: true }).click();
   await findInEditor(page, "Table orders");
   await expect(page.getByText("This symbol is hidden by identity_only.")).toBeVisible();
   await page.getByRole("button", { name: "Show in Global" }).click();
   await expect(viewSelector).toHaveValue("GLOBAL");
+  await page.getByRole("button", { name: "Outline", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Focus public.orders in diagram" }),
+    page.locator("#workspace-outline-surface").getByRole("button", {
+      name: "Focus public.orders in diagram",
+    }),
   ).toHaveAttribute("aria-current", "true");
+  await page.getByRole("button", { name: "Outline", exact: true }).click();
 
   await viewSelector.selectOption({ label: "identity_only" });
+  await page.getByRole("button", { name: "Source", exact: true }).click();
   await replaceEditorSource(editor, INVALID_SOURCE);
   await expect.poll(() => api.writes.length).toBe(1);
   await expect(page.getByText(/Showing last-valid revision 1/)).toBeVisible();
   await expect(viewSelector).toHaveValue(identityViewValue);
-  const firstVisibleTable = page
-    .getByRole("region", { name: "Schema outline" })
-    .locator("details")
-    .first();
+  await page.getByRole("button", { name: "Outline", exact: true }).click();
+  const firstVisibleTable = page.locator("#workspace-outline-surface").locator("details").first();
   await firstVisibleTable.locator("summary").click();
   await expect(
     firstVisibleTable.getByRole("button", { name: /Open source for table at line/ }),
   ).toBeDisabled();
+  await page.getByRole("button", { name: "Outline", exact: true }).click();
   await search.fill("profiles");
   await expect(page.getByRole("option", { name: "table public.profiles" })).toBeVisible();
 
+  await page.getByRole("button", { name: "Source", exact: true }).click();
   await replaceEditorSource(editor, RECOVERED_SOURCE);
   await expect.poll(() => api.writes.length).toBe(2);
   await expect(page.getByText(/Showing the current valid draft/)).toBeVisible();

@@ -32,6 +32,18 @@ describe("application accessibility shell", () => {
     fireEvent.click(skipLink);
 
     expect(main).toHaveFocus();
+    expect(main).toHaveClass("max-w-7xl");
+    expect(screen.getByText("Self-hosted schema workspace")).toBeVisible();
+  });
+
+  it("limits the canvas layout handle to the exact project workspace route", () => {
+    const shellRoute = createAppRoutes()[0];
+    const children = shellRoute?.children ?? [];
+    const workspace = children.find((route) => route.path === "projects/:projectId");
+    const documentRoutes = children.filter((route) => route.path !== "projects/:projectId");
+
+    expect(workspace?.handle).toEqual({ layout: "CANVAS_WORKSPACE" });
+    expect(documentRoutes.every((route) => route.handle === undefined)).toBe(true);
   });
 
   it("updates the document title and focuses the page heading after client navigation", async () => {

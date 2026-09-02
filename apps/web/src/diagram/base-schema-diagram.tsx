@@ -54,9 +54,10 @@ export function BaseSchemaDiagram({
   collapsedGroupKeys,
   focusRequest = null,
   selectionStore,
-  sourceNavigationEnabled,
   onToggleGroup,
-  onNavigateSource,
+  onActivateElement,
+  viewportInsets = EMPTY_VIEWPORT_INSETS,
+  fillContainer = false,
   requestLayout = requestWorkerLayout,
   layoutPositions = EMPTY_LAYOUT_POSITIONS,
   layoutViewport = null,
@@ -99,6 +100,8 @@ export function BaseSchemaDiagram({
     ReactFlowInstance<SchemaDiagramNode, SchemaDiagramEdge> | undefined
   >(undefined);
   const diagramContainerRef = useRef<HTMLDivElement>(null);
+  const viewportInsetsRef = useRef(viewportInsets);
+  viewportInsetsRef.current = viewportInsets;
   const selection = useStore(selectionStore, (state) => state.selection);
   const requestGenerationRef = useRef(0);
   const stableProjectionRef = useRef<DiagramProjection | null>(
@@ -141,10 +144,14 @@ export function BaseSchemaDiagram({
       const viewport =
         layoutViewport ??
         (container
-          ? deriveInteractiveViewport(derivedProjection, {
-              width: container.clientWidth,
-              height: container.clientHeight,
-            })
+          ? deriveInteractiveViewport(
+              derivedProjection,
+              {
+                width: container.clientWidth,
+                height: container.clientHeight,
+              },
+              { insets: viewportInsetsRef.current },
+            )
           : null);
       const currentFlowInstance = flowInstanceRef.current;
       let viewportPrepared = false;
@@ -234,15 +241,31 @@ export function BaseSchemaDiagram({
       if (!layoutRequest) {
         const container = diagramContainerRef.current;
         const viewport = container
-          ? deriveInteractiveViewport(displayProjection, {
-              width: container.clientWidth,
-              height: container.clientHeight,
-            })
+          ? deriveInteractiveViewport(
+              displayProjection,
+              {
+                width: container.clientWidth,
+                height: container.clientHeight,
+              },
+              { insets: viewportInsetsRef.current },
+            )
           : null;
         if (viewport) {
           void Promise.resolve(flowInstance.setViewport(viewport)).then(finishRenderedLayout);
           return;
         }
+      }
+      const container = diagramContainerRef.current;
+      const viewport = container
+        ? deriveInteractiveViewport(
+            displayProjection,
+            { width: container.clientWidth, height: container.clientHeight },
+            { insets: viewportInsetsRef.current },
+          )
+        : null;
+      if (viewport) {
+        void Promise.resolve(flowInstance.setViewport(viewport)).then(finishRenderedLayout);
+        return;
       }
       void Promise.resolve(flowInstance.fitView({ padding: 0.15 })).then(finishRenderedLayout);
     });
@@ -263,10 +286,23 @@ export function BaseSchemaDiagram({
   useEffect(() => {
     if (!flowInstance || !selection || displayProjection.nodes.length === 0) return;
     const selectedNodeIds = representativeNodeIds(displayProjection, selection);
+    if (selectedNodeIds.size === 0) return;
     const selectedNodes = displayProjection.nodes.filter((node) => selectedNodeIds.has(node.id));
-    if (selectedNodes.length === 0) return;
     const animationFrame = requestAnimationFrame(() => {
-      void flowInstance.fitView({ nodes: selectedNodes, padding: 0.45, duration: 250 });
+      const container = diagramContainerRef.current;
+      const viewport = container
+        ? deriveInteractiveViewport(
+            displayProjection,
+            { width: container.clientWidth, height: container.clientHeight },
+            {
+              padding: 0.45,
+              insets: viewportInsetsRef.current,
+              targetNodeIds: selectedNodeIds,
+            },
+          )
+        : null;
+      if (viewport) void flowInstance.setViewport(viewport, { duration: 250 });
+      else void flowInstance.fitView({ nodes: selectedNodes, padding: 0.45, duration: 250 });
     });
     return () => cancelAnimationFrame(animationFrame);
   }, [displayProjection, flowInstance, selection]);
@@ -283,11 +319,24 @@ export function BaseSchemaDiagram({
       return;
     }
     const selectedNodeIds = representativeNodeIdsForFocus(displayProjection, focusRequest);
+    if (selectedNodeIds.size === 0) return;
     const selectedNodes = displayProjection.nodes.filter((node) => selectedNodeIds.has(node.id));
-    if (selectedNodes.length === 0) return;
     focusedRequestRef.current = focusRequest.requestId;
     const animationFrame = requestAnimationFrame(() => {
-      void flowInstance.fitView({ nodes: selectedNodes, padding: 0.35, duration: 250 });
+      const container = diagramContainerRef.current;
+      const viewport = container
+        ? deriveInteractiveViewport(
+            displayProjection,
+            { width: container.clientWidth, height: container.clientHeight },
+            {
+              padding: 0.35,
+              insets: viewportInsetsRef.current,
+              targetNodeIds: selectedNodeIds,
+            },
+          )
+        : null;
+      if (viewport) void flowInstance.setViewport(viewport, { duration: 250 });
+      else void flowInstance.fitView({ nodes: selectedNodes, padding: 0.35, duration: 250 });
     });
     return () => cancelAnimationFrame(animationFrame);
   }, [displayProjection, flowInstance, focusRequest, layoutStatus, settledLayoutRequestId]);
@@ -295,9 +344,9 @@ export function BaseSchemaDiagram({
   const activateElement = useCallback(
     (nextSelection: DiagramSelection) => {
       selectionStore.getState().setSelection(nextSelection);
-      if (sourceNavigationEnabled) onNavigateSource(nextSelection);
+      onActivateElement?.(nextSelection);
     },
-    [onNavigateSource, selectionStore, sourceNavigationEnabled],
+    [onActivateElement, selectionStore],
   );
   const interactions = useMemo(
     () => ({
@@ -375,7 +424,9 @@ export function BaseSchemaDiagram({
   return (
     <div
       ref={diagramContainerRef}
-      className="relative min-h-[32rem] h-[min(68vh,52rem)] bg-slate-950"
+      className={`relative bg-slate-950 ${
+        fillContainer ? "h-full min-h-0" : "h-[min(68vh,52rem)] min-h-[32rem]"
+      }`}
     >
       <p
         className="sr-only"
@@ -488,12 +539,20 @@ export function BaseSchemaDiagram({
           onlyRenderVisibleElements
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
-          <Controls showInteractive={false} />
+          <Controls
+            showInteractive={false}
+            style={{
+              right: Math.max(10, viewportInsets.right + 10),
+              bottom: Math.max(10, viewportInsets.bottom + 10),
+            }}
+          />
         </ReactFlow>
       </DiagramInteractionContext.Provider>
     </div>
   );
 }
+
+const EMPTY_VIEWPORT_INSETS = { top: 0, right: 0, bottom: 0, left: 0 } as const;
 
 function projectionPositions(
   projection: DiagramProjection,

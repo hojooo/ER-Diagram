@@ -86,15 +86,15 @@ View 전환 중 parser·ELK request와 source/layout PUT은 모두 0건이어야
 명시적 Auto-layout은 ELK worker에서 실행되어야 한다. Frame interval median 16.67 ms는 60 FPS 목표로 별도
 보고하지만 hard gate는 p95 33.34 ms의 30 FPS다. 결과 JSON에는 source나 worker payload를 포함하지 않는다.
 
-### CI enforcement
+### 명시적 및 release enforcement
 
 `pnpm test:perf`는 profile fixture 검증, 기존 layout spike, production Web build와 전용 Playwright performance
-suite를 실행한다. PR과 release workflow 모두 같은 full command를 worker 1·retry 0으로 실행한다. 실패를
-retry, sample 감소, selector 제외 또는 threshold 완화로 통과시키지 않는다. Threshold 변경은 새로운 측정
-evidence와 architecture 결정을 동반해야 한다.
+suite를 실행한다. 일반 PR CI에서는 자동 실행하지 않고 사용자가 명시적으로 실행하며, release workflow는 같은 full command를
+worker 1·retry 0으로 실행한다. 실패를 retry, sample 감소, selector 제외 또는 threshold 완화로 통과시키지 않는다.
+Threshold 변경은 새로운 측정 evidence와 architecture 결정을 동반해야 한다.
 
-2026-09-01 reference run은 Chrome 152, 12 logical CPU, 16 GiB memory에서 다음 결과를 기록했다. CI의 각
-실행 결과가 authoritative하며 이 수치는 환경 drift를 숨기는 고정 성능 주장으로 사용하지 않는다.
+2026-09-01 reference run은 Chrome 152, 12 logical CPU, 16 GiB memory에서 다음 결과를 기록했다. 명시적으로
+실행한 각 결과가 authoritative하며 이 수치는 환경 drift를 숨기는 고정 성능 주장으로 사용하지 않는다.
 
 | 항목 | Samples | min | median | p95 | max |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -131,8 +131,8 @@ Flaky retry는 가장 느린 run을 숨겨 p95 gate의 의미를 약화한다. �
 - View·LOD·collapse 전환은 worker queue와 layout write에 의존하지 않는다.
 - 신규 node의 자동 배치는 단순한 deterministic grid이며 더 나은 배치가 필요하면 사용자가 Auto-layout을
   명시적으로 실행한다.
-- Full performance suite는 browser sample 수 때문에 기존 spike보다 오래 걸리지만 PR과 release regression을
-  실제 production bundle에서 차단한다.
+- Full performance suite는 browser sample 수 때문에 기존 spike보다 오래 걸리지만 명시적 검증과 release workflow에서
+  실제 production bundle regression을 차단한다.
 - Cross-browser, mobile device와 server throughput certification은 P0 M4-008 범위가 아니다.
 
 ## Verification

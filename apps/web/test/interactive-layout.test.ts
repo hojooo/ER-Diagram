@@ -109,6 +109,44 @@ describe("deterministic interactive diagram layout", () => {
     expect(first).toEqual({ x: 27.5, y: -275, zoom: 1.75 });
     expect(deriveInteractiveViewport(projection, { width: 0, height: 500 })).toBeNull();
   });
+
+  it("centers full and selected bounds inside asymmetric visible canvas insets", () => {
+    const leftId = 'table:["public","left"]';
+    const rightId = 'table:["public","right"]';
+    const projection = diagram([
+      { ...table(leftId), position: { x: 0, y: 0 } },
+      { ...table(rightId), position: { x: 600, y: 300 } },
+    ]);
+    const options = {
+      insets: { top: 100, right: 300, bottom: 50, left: 200 },
+      minZoom: 0.15,
+      maxZoom: 1,
+    } as const;
+
+    const full = deriveInteractiveViewport(projection, { width: 1_400, height: 900 }, options);
+    const selected = deriveInteractiveViewport(
+      projection,
+      { width: 1_400, height: 900 },
+      {
+        ...options,
+        targetNodeIds: new Set([rightId]),
+      },
+    );
+
+    expect(full?.x).toBeCloseTo(303.8461538461538);
+    expect(full?.y).toBeCloseTo(305.94812164579605);
+    expect(full?.zoom).toBeCloseTo(0.8050089445438283);
+    expect(selected).toEqual({ x: -80, y: 115, zoom: 1 });
+    expect(
+      deriveInteractiveViewport(
+        projection,
+        { width: 400, height: 300 },
+        {
+          insets: { top: 0, right: 250, bottom: 0, left: 250 },
+        },
+      ),
+    ).toBeNull();
+  });
 });
 
 function diagram(nodes: Array<GroupDiagramNode | TableDiagramNode>): DiagramProjection {

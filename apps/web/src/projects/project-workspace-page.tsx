@@ -8,7 +8,6 @@ import {
 } from "../source-editor/project-source-workspace.js";
 import { ProjectApiError } from "./project-api.js";
 import { useProjectApi } from "./project-api-context.js";
-import { dialectLabel, ValidityBadge } from "./project-home-page.js";
 import { projectQueryKeys } from "./project-queries.js";
 
 export function ProjectWorkspacePage({
@@ -34,7 +33,7 @@ export function ProjectWorkspacePage({
   }
   if (projectQuery.isPending) {
     return (
-      <section className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-slate-300">
+      <section className="grid h-full place-items-center bg-slate-950 p-5 text-slate-300">
         <h1 data-route-loading="true" className="font-semibold text-slate-100">
           Loading project
         </h1>
@@ -47,7 +46,10 @@ export function ProjectWorkspacePage({
   if (projectQuery.isError) {
     const error = projectQuery.error instanceof ProjectApiError ? projectQuery.error : undefined;
     return (
-      <section className="rounded-xl border border-red-400/40 bg-red-950/30 p-6" role="alert">
+      <section
+        className="mx-auto mt-24 max-w-xl rounded-xl border border-red-400/40 bg-red-950/30 p-6"
+        role="alert"
+      >
         <h1 className="text-xl font-semibold text-red-100">Project could not be loaded</h1>
         <p className="mt-2 text-sm text-red-100/80">No project source was changed.</p>
         {error?.correlationId ? (
@@ -67,45 +69,8 @@ export function ProjectWorkspacePage({
     );
   }
 
-  const { project, currentRevision } = projectQuery.data.state;
   return (
-    <section aria-labelledby="workspace-heading">
-      <BackToProjectsLink />
-      <div className="mt-6 flex flex-col gap-4 border-b border-slate-800 pb-7 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">
-            {dialectLabel(project.primaryDialect)} project
-          </p>
-          <h1 id="workspace-heading" className="mt-2 text-3xl font-semibold text-white">
-            {project.name}
-          </h1>
-          <p className="mt-3 text-sm text-slate-300">
-            Revision {project.schemaRevisionNo} · Parser {project.parserVersion}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <Link
-            className="inline-flex min-h-11 items-center rounded-lg border border-cyan-400/50 px-4 font-semibold text-cyan-100 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
-            to={`/projects/${projectId}/sql-import`}
-          >
-            Import SQL
-          </Link>
-          <Link
-            className="inline-flex min-h-11 items-center rounded-lg border border-cyan-400/50 px-4 font-semibold text-cyan-100 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
-            to={`/projects/${projectId}/sql-export`}
-          >
-            Export SQL
-          </Link>
-          <Link
-            className="inline-flex min-h-11 items-center rounded-lg border border-cyan-400/50 px-4 font-semibold text-cyan-100 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
-            to={`/projects/${projectId}/bundle-export`}
-          >
-            Export bundle
-          </Link>
-          <ValidityBadge validity={currentRevision.validity} />
-        </div>
-      </div>
-
+    <section className="h-full min-h-0" aria-labelledby="workspace-heading">
       <ProjectSourceWorkspace
         key={projectId}
         initialState={projectQuery.data.state}
@@ -119,7 +84,7 @@ export function ProjectWorkspacePage({
 
 function ProjectNotFound() {
   return (
-    <section className="mx-auto max-w-xl rounded-2xl border border-slate-800 bg-slate-900 p-8 text-center">
+    <section className="mx-auto mt-24 max-w-xl rounded-2xl border border-slate-800 bg-slate-900 p-8 text-center">
       <h1 className="text-2xl font-semibold text-white">Project not found</h1>
       <p className="mt-3 text-slate-300">
         The project may have been deleted or the link is invalid.

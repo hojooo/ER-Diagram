@@ -128,6 +128,7 @@ describe("DBML source workspace", () => {
     if (!problems) throw new Error("Problems panel was not rendered.");
     expect(within(problems).getByText("1")).toBeVisible();
     fireEvent.click(within(problems).getByRole("button", { name: /Go to DBML_PARSE/ }));
+    await act(() => vi.advanceTimersByTimeAsync(16));
     expect(navigateToDiagnostic).toHaveBeenCalledOnce();
 
     fireEvent.change(editor, { target: { value: SECOND_VALID_SOURCE } });
@@ -156,6 +157,7 @@ describe("DBML source workspace", () => {
     const undo = screen.getByRole("button", { name: /Undo schema change, 1 step/ });
     expect(undo).toBeEnabled();
     vi.useRealTimers();
+    fireEvent.click(screen.getByRole("button", { name: "Inspector" }));
     fireEvent.click(screen.getByRole("button", { name: "Create table" }));
     const tableName = await screen.findByLabelText("Table name");
     fireEvent.keyDown(tableName, { key: "z", ctrlKey: true });
@@ -296,7 +298,7 @@ describe("DBML source workspace", () => {
     await findWorkspaceStatus("Draft valid");
 
     fireEvent.change(editor, { target: { value: SECOND_VALID_SOURCE } });
-    const backToProjects = screen.getByRole("link", { name: "Back to projects" });
+    const backToProjects = screen.getByRole("link", { name: "Back" });
     fireEvent.click(backToProjects);
     const dialog = await screen.findByRole("dialog", { name: "Leave schema workspace?" });
     expect(within(dialog).getByRole("button", { name: "Stay" })).toHaveFocus();
@@ -373,6 +375,47 @@ describe("DBML source workspace", () => {
     expect(savedEvent.defaultPrevented).toBe(false);
   });
 
+  it("keeps the canvas mounted and performs no parse or persistence work when surfaces toggle", async () => {
+    const api = new SourceProjectApi(projectState(VALID_SOURCE, 1, "VALID"));
+    const { parserClient } = renderWorkspace(api);
+    await screen.findByText("Canonical DBML source");
+    await findWorkspaceStatus("Draft valid");
+    const diagram = screen.getByRole("application", { name: "ER diagram canvas" });
+    const initialParseCalls = parserClient.parseCalls;
+    const initialLayoutReads = api.getLayoutInputs.length;
+
+    fireEvent.click(screen.getByRole("button", { name: "Source" }));
+    fireEvent.click(screen.getByRole("button", { name: "Outline" }));
+    fireEvent.click(screen.getByRole("button", { name: "Inspector" }));
+    fireEvent.click(screen.getByRole("button", { name: "Outline" }));
+
+    expect(screen.getByRole("application", { name: "ER diagram canvas" })).toBe(diagram);
+    expect(parserClient.parseCalls).toBe(initialParseCalls);
+    expect(api.getLayoutInputs).toHaveLength(initialLayoutReads);
+    expect(api.saveDraftInputs).toHaveLength(0);
+    expect(api.saveLayoutInputs).toHaveLength(0);
+    expect(api.state.project.schemaRevisionNo).toBe(1);
+    expect(api.state.project.layoutRevisionNo).toBe(0);
+    expect(api.state.project.updatedAt).toBe(CREATED_AT);
+  });
+
+  it("uses the full-viewport shell only for the project workspace route", async () => {
+    const api = new SourceProjectApi(projectState(VALID_SOURCE, 1, "VALID"));
+    const { router } = renderWorkspace(api);
+    await screen.findByText("Canonical DBML source");
+    await findWorkspaceStatus("Draft valid");
+
+    const main = screen.getByRole("main");
+    expect(main).toHaveClass("h-full", "w-full", "overflow-hidden");
+    expect(main).not.toHaveClass("max-w-7xl");
+    expect(screen.queryByText("Self-hosted schema workspace")).not.toBeInTheDocument();
+
+    await act(async () => router.navigate("/"));
+    await screen.findByRole("heading", { name: "Projects", level: 1 });
+    expect(screen.getByRole("main")).toHaveClass("max-w-7xl");
+    expect(screen.getByText("Self-hosted schema workspace")).toBeVisible();
+  });
+
   it("synchronizes source selection and diagram navigation without applying last-valid ranges", async () => {
     const api = new SourceProjectApi(projectState(VALID_SOURCE, 1, "VALID"));
     renderWorkspace(api);
@@ -384,7 +427,17 @@ describe("DBML source workspace", () => {
     expect(await screen.findByTestId("fake-diagram-selection")).toHaveTextContent("column");
 
     fireEvent.click(screen.getByRole("button", { name: "Select first diagram table" }));
-    expect(revealSourceRange).toHaveBeenCalledOnce();
+    expect(revealSourceRange).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Inspector" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Outline" }));
+    const openSource = await screen.findByRole("button", {
+      name: /Open source for table at line/,
+    });
+    fireEvent.click(openSource);
+    await waitFor(() => expect(revealSourceRange).toHaveBeenCalledOnce());
 
     vi.useFakeTimers();
     fireEvent.change(editor, { target: { value: INVALID_SOURCE } });
@@ -401,7 +454,7 @@ describe("DBML source workspace", () => {
       expect(screen.getByText(/Showing the current valid draft/)).toBeVisible();
     });
     fireEvent.click(screen.getByRole("button", { name: "Select first diagram table" }));
-    expect(revealSourceRange).toHaveBeenCalledTimes(navigationCalls + 1);
+    expect(revealSourceRange).toHaveBeenCalledTimes(navigationCalls);
   });
 
   it("offers a source focus action when an invalid initial draft has no last-valid graph", async () => {
@@ -409,8 +462,14 @@ describe("DBML source workspace", () => {
     renderWorkspace(api);
 
     expect(await screen.findByText("No valid diagram yet")).toBeVisible();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute(
+        "aria-expanded",
+        "true",
+      ),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Focus source editor" }));
-    expect(focusSource).toHaveBeenCalledOnce();
+    await waitFor(() => expect(focusSource).toHaveBeenCalledOnce());
   });
 
   it("hydrates an uncached view before committing one diagram projection transition", async () => {
@@ -741,9 +800,8 @@ function FakeSchemaDiagram({
   layoutPositions,
   layoutPending,
   selectionStore,
-  sourceNavigationEnabled,
   onToggleGroup,
-  onNavigateSource,
+  onActivateElement,
 }: BaseSchemaDiagramProps) {
   const selection = useStore(selectionStore, (state) => state.selection);
   const table = graph.tables[0];
@@ -783,7 +841,7 @@ function FakeSchemaDiagram({
               tableKeys: [table.key],
             };
             selectionStore.getState().setSelection(nextSelection);
-            if (sourceNavigationEnabled) onNavigateSource(nextSelection);
+            onActivateElement?.(nextSelection);
           }}
         >
           Select first diagram table
@@ -795,6 +853,7 @@ function FakeSchemaDiagram({
 
 class SourceProjectApi implements ProjectApi {
   readonly saveDraftInputs: SaveDraftInput[] = [];
+  readonly saveLayoutInputs: SaveLayoutInput[] = [];
   readonly getLayoutInputs: Array<{ projectId: string; viewKey: string }> = [];
   conflictOnce: ProjectState | null = null;
   nextSave: Promise<ProjectMutationResponse> | null = null;
@@ -870,6 +929,7 @@ class SourceProjectApi implements ProjectApi {
   };
 
   async saveLayout(input: SaveLayoutInput) {
+    this.saveLayoutInputs.push(input);
     const revisionNo = input.expectedLayoutRevisionNo + 1;
     this.state = {
       ...this.state,

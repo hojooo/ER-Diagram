@@ -52,15 +52,11 @@ test("applies inspector commands through authoritative state without a draft PUT
   const api = await installVisualCommandApi(page);
 
   await page.goto(`/projects/${PROJECT_ID}`);
-  await expect(page.locator('section[aria-label="DBML source editor"] .monaco-editor')).toBeVisible(
-    {
-      timeout: 20_000,
-    },
-  );
   await expect(page.getByTestId("base-diagram-layout-status")).toHaveText("Diagram layout ready", {
     timeout: 20_000,
   });
-  await expect(page.getByRole("complementary", { name: "Visual schema inspector" })).toBeVisible();
+  await page.getByRole("button", { name: "Inspector", exact: true }).click();
+  await expect(page.locator("#workspace-inspector-surface")).toHaveCSS("opacity", "1");
 
   await page.getByRole("button", { name: "Create table" }).click();
   await page.getByLabel("Table name").fill("audit_log");
@@ -74,9 +70,13 @@ test("applies inspector commands through authoritative state without a draft PUT
     expectedSchemaRevisionNo: 1,
   });
   await expect(page.getByText("Selected table public.audit_log")).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("button", { name: "Outline", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Focus public.audit_log in diagram" }),
+    page.locator("#workspace-outline-surface").getByRole("button", {
+      name: "Focus public.audit_log in diagram",
+    }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Source", exact: true }).click();
   await expectEditorContains(page, "Table public.audit_log");
 
   await page.getByRole("button", { name: "Create column" }).click();
@@ -89,13 +89,16 @@ test("applies inspector commands through authoritative state without a draft PUT
     expectedSchemaRevisionNo: 2,
     column: { name: "event_name", type: "varchar(120)" },
   });
+  await page.getByRole("button", { name: "Outline", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Focus column event_name in diagram" }),
+    page.locator("#workspace-outline-surface").getByRole("button", {
+      name: "Focus column event_name in diagram",
+    }),
   ).toBeVisible({
     timeout: 20_000,
   });
 
-  const outline = page.getByRole("region", { name: "Schema outline" });
+  const outline = page.locator("#workspace-outline-surface");
   await outline.locator("summary").filter({ hasText: "public.posts" }).click();
   await outline.getByRole("button", { name: "Focus public.posts in diagram" }).click();
   await outline.getByRole("button", { name: "Focus column created_at in diagram" }).click();

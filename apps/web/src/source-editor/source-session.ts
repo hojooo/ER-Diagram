@@ -27,6 +27,7 @@ export interface SourceSessionSnapshot {
   readonly diagnostics: Diagnostic[];
   readonly activeGraph: SchemaGraph | null;
   readonly activeGraphSource: ActiveGraphSource | null;
+  readonly fallbackGraphResolved: boolean;
   readonly canUseValidSchema: boolean;
   readonly serverState: ProjectState;
   readonly conflictState: ProjectState | null;
@@ -262,6 +263,7 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
         diagnostics: outcome.diagnostics,
         activeGraph: outcome.graph,
         activeGraphSource: "CURRENT_DRAFT",
+        fallbackGraphResolved: true,
         canUseValidSchema: true,
         validationError: null,
       });
@@ -282,18 +284,25 @@ export function createSourceSession(options: CreateSourceSessionOptions): Source
   function validateLastValidSource(source: string, expectedHash: string): void {
     void options.parseSource(source).then(
       (result) => {
-        if (disposed || !result.ok || result.sourceHash !== expectedHash) return;
+        if (disposed) return;
+        if (!result.ok || result.sourceHash !== expectedHash) {
+          publish({ fallbackGraphResolved: true });
+          return;
+        }
         lastValidGraph = result.graph;
         if (snapshot.validation !== "VALID") {
           publish({
             activeGraph: result.graph,
             activeGraphSource: "LAST_VALID",
+            fallbackGraphResolved: true,
             canUseValidSchema: false,
           });
+          return;
         }
+        publish({ fallbackGraphResolved: true });
       },
       () => {
-        // Current-draft validation owns the visible worker error state.
+        if (!disposed) publish({ fallbackGraphResolved: true });
       },
     );
   }
@@ -580,6 +589,10 @@ function clientStateError(code: string, message: string): Error {
 }
 
 function initialSnapshot(state: ProjectState): SourceSessionSnapshot {
+  const fallbackGraphPending =
+    state.currentRevision.validity === "INVALID" &&
+    state.lastValidRevision !== null &&
+    state.lastValidRevision.sourceHash !== state.currentRevision.sourceHash;
   return {
     source: state.project.draftSource,
     sourceHash: null,
@@ -589,6 +602,7 @@ function initialSnapshot(state: ProjectState): SourceSessionSnapshot {
     diagnostics: [],
     activeGraph: null,
     activeGraphSource: null,
+    fallbackGraphResolved: !fallbackGraphPending,
     canUseValidSchema: false,
     serverState: state,
     conflictState: null,

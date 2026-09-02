@@ -11,12 +11,14 @@ export interface SchemaHistoryControlsProps {
   readonly session: SchemaHistorySessionController;
   readonly loadRevisions: () => Promise<ProjectRevisionsResponse>;
   readonly interactionDisabled?: boolean;
+  readonly compact?: boolean;
 }
 
 export function SchemaHistoryControls({
   session,
   loadRevisions,
   interactionDisabled = false,
+  compact = false,
 }: SchemaHistoryControlsProps) {
   const snapshot = useSyncExternalStore(
     session.subscribe,
@@ -68,9 +70,9 @@ export function SchemaHistoryControls({
   return (
     <section
       aria-label="Schema history"
-      className="rounded-xl border border-slate-700 bg-slate-900/70 p-3"
+      className={compact ? "contents" : "rounded-xl border border-slate-700 bg-slate-900/70 p-3"}
     >
-      <div className="flex flex-wrap items-center gap-2">
+      <div className={`flex items-center gap-2 ${compact ? "shrink-0" : "flex-wrap"}`}>
         <button
           aria-label={`Undo schema change, ${formatStepCount(snapshot.past.length)} available`}
           className={secondaryButtonClass}
@@ -102,8 +104,12 @@ export function SchemaHistoryControls({
           }}
         >
           <Dialog.Trigger asChild>
-            <button className={secondaryButtonClass} type="button">
-              Revision history
+            <button
+              aria-label={compact ? "Revision history" : undefined}
+              className={secondaryButtonClass}
+              type="button"
+            >
+              {compact ? "History" : "Revision history"}
             </button>
           </Dialog.Trigger>
           <RevisionHistoryDialog

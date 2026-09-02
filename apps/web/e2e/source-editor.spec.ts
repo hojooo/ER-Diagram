@@ -18,19 +18,20 @@ test("validates and autosaves Monaco source with revision-safe recovery", async 
   const api = await installSourceApi(page);
 
   await page.goto(`/projects/${PROJECT_ID}`);
+  await page.getByRole("button", { name: "Source", exact: true }).click();
   const sourcePanel = page.getByText("Canonical DBML source").locator("xpath=ancestor::section[1]");
   const editor = page.locator('section[aria-label="DBML source editor"] .monaco-editor');
   await expect(editor).toBeVisible();
-  await expect(sourcePanel.getByTestId("validation-status")).toHaveText(/Draft valid/);
-  await expect(sourcePanel.getByTestId("persistence-status")).toHaveText(/Saved/);
+  await expect(sourcePanel.getByTestId("source-validation-status")).toHaveText(/Draft valid/);
+  await expect(sourcePanel.getByTestId("source-persistence-status")).toHaveText(/Saved/);
   await replaceEditorSource(page, INVALID_SOURCE);
   await expect.poll(() => api.writes.length).toBe(1);
   expect(api.writes[0]).toMatchObject({
     source: INVALID_SOURCE,
     expectedSchemaRevisionNo: 1,
   });
-  await expect(sourcePanel.getByTestId("validation-status")).toHaveText(/Draft invalid/);
-  await expect(sourcePanel.getByTestId("persistence-status")).toHaveText(/Saved/);
+  await expect(sourcePanel.getByTestId("source-validation-status")).toHaveText(/Draft invalid/);
+  await expect(sourcePanel.getByTestId("source-persistence-status")).toHaveText(/Saved/);
   await page.getByRole("button", { name: "Go to DBML_PARSE_SYNTAX_UNEXPECTED_TOKEN" }).click();
   await expect(page.getByRole("textbox", { name: "DBML source editor" })).toBeFocused();
 
@@ -40,7 +41,7 @@ test("validates and autosaves Monaco source with revision-safe recovery", async 
     source: RECOVERED_SOURCE,
     expectedSchemaRevisionNo: 2,
   });
-  await expect(sourcePanel.getByTestId("validation-status")).toHaveText(/Draft valid/);
+  await expect(sourcePanel.getByTestId("source-validation-status")).toHaveText(/Draft valid/);
   await expect(
     page.getByText("Schema revision", { exact: true }).locator("xpath=following-sibling::dd"),
   ).toHaveText("3");
@@ -58,7 +59,7 @@ test("validates and autosaves Monaco source with revision-safe recovery", async 
 
   api.holdNextSave();
   await appendEditorSource(page, "// local unsaved note\n", false);
-  await page.getByRole("link", { name: "Back to projects" }).click();
+  await page.getByRole("link", { name: "Back" }).click();
   const leaveDialog = page.getByRole("dialog", { name: "Leave schema workspace?" });
   await expect(leaveDialog).toBeVisible();
   await expect(leaveDialog.getByRole("button", { name: "Stay" })).toBeFocused();
@@ -66,11 +67,11 @@ test("validates and autosaves Monaco source with revision-safe recovery", async 
   await expect(page).toHaveURL(`/projects/${PROJECT_ID}`);
   await expect.poll(() => api.writes.length).toBe(3);
   await api.releaseSave();
-  await expect(sourcePanel.getByTestId("persistence-status")).toHaveText(/Saved/, {
+  await expect(sourcePanel.getByTestId("source-persistence-status")).toHaveText(/Saved/, {
     timeout: 10_000,
   });
 
-  await page.getByRole("link", { name: "Back to projects" }).click();
+  await page.getByRole("link", { name: "Back" }).click();
   await expect(page).toHaveURL("/");
   expect(browserErrors).toEqual([]);
 });

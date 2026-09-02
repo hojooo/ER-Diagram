@@ -113,7 +113,26 @@ function assertProfileAndWorkflowWiring() {
     path.join(repositoryRoot, ".github", "workflows", "release.yml"),
     "utf8",
   );
-  assert.ok(ci.includes("run: pnpm test:p0-gate"), "CI must execute the complete P0 gate");
+  const ciRunCommands = new Set(
+    [...ci.matchAll(/^\s*run:\s+([^|\n].*)$/gmu)].map((match) => match[1].trim()),
+  );
+  for (const command of [
+    "pnpm test:e2e",
+    "pnpm test:e2e:security",
+    "pnpm test:accessibility",
+    "pnpm test:container",
+    "pnpm test:runtime-lifecycle",
+    "pnpm test:m1-gate",
+    "pnpm test:m2-gate",
+    "pnpm test:m3-gate",
+    "pnpm test:p0-gate",
+    "pnpm test:perf",
+  ]) {
+    assert.ok(
+      !ciRunCommands.has(command),
+      `CI must not execute explicit acceptance command ${command}`,
+    );
+  }
   assert.ok(
     release.includes("run: pnpm test:p0-gate"),
     "Release validation must execute the complete P0 gate",

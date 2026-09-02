@@ -21,6 +21,9 @@ export interface BaseSchemaDiagramProps {
   readonly sourceNavigationEnabled: boolean;
   readonly onToggleGroup: (groupKey: SchemaElementKey) => void;
   readonly onNavigateSource: (selection: DiagramSelection) => void;
+  readonly onActivateElement?: (selection: DiagramSelection) => void;
+  readonly viewportInsets?: DiagramViewportInsets;
+  readonly fillContainer?: boolean;
   readonly requestLayout?: (projection: DiagramProjection) => Promise<DiagramProjection>;
   readonly layoutPositions?: Readonly<Record<SchemaElementKey, DiagramPosition>>;
   readonly layoutViewport?: DiagramViewport | null;
@@ -36,6 +39,13 @@ export interface BaseSchemaDiagramProps {
     positions: Readonly<Record<SchemaElementKey, DiagramPosition>>,
     viewport: DiagramViewport,
   ) => void;
+}
+
+export interface DiagramViewportInsets {
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+  readonly left: number;
 }
 
 export interface DiagramLayoutRequest {

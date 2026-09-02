@@ -274,6 +274,7 @@ function sourceSessionSnapshot(): Mutable<SourceSessionSnapshot> {
     diagnostics: [],
     activeGraph: graph(HASH),
     activeGraphSource: "CURRENT_DRAFT",
+    fallbackGraphResolved: true,
     canUseValidSchema: true,
     serverState: state,
     conflictState: null,

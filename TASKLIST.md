@@ -330,7 +330,24 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - portable bundle을 fresh second volume에 import하고 container restart 뒤 source·revision·layout을 read-back한다.
   - Gate A~F command wiring과 outbound·log redaction evidence를 fail-closed로 고정한다.
   - 검증: `pnpm test:p0-gate`
-- [ ] `P0-RELEASE` `pnpm ci:verify`, Release Gate A~F, OrbStack restore drill,
+- [x] `M4-012` canvas-first Schema Workspace shell
+  - Diagram Canvas를 workspace 전체 viewport의 full-bleed base layer로 유지하고 command bar, source, outline,
+    inspector, history와 status를 overlay surface로 재구성한다.
+  - Overlay open/close가 diagram remount, implicit ELK, viewport·selection·saved position 또는 schema/layout
+    revision 변경을 만들지 않도록 한다.
+  - 검증: `pnpm --filter @er-diagram/web test test/canvas-workspace-shell.test.tsx`
+- [ ] `M4-013` workspace overlay interaction·responsive system
+  - Source처럼 넓은 surface의 expand/collapse, overlay stacking·pointer boundary와 canvas pan·zoom·drag 공존을
+    정의하고 narrow viewport와 200% zoom에서도 핵심 control을 잃지 않는다.
+  - Keyboard focus order, visible focus, Escape, trigger focus return, dialog/drawer semantics와 outline-first
+    navigation을 canvas-first 구조에서도 유지한다.
+  - 검증: `pnpm --filter @er-diagram/web test test/workspace-overlays.test.tsx && pnpm test:accessibility`
+- [ ] `M4-014` canvas-first core-flow visual acceptance
+  - Source·visual edit, diagnostics, history, layout, import/export 진입·복귀가 같은 diagram context를 보존하고
+    overlay 간 충돌, 가려진 critical action과 예기치 않은 background interaction이 없음을 검증한다.
+  - 143-table profile의 cold interactive·view switch·FPS gate와 production Browser keyboard flow를 재검증한다.
+  - 검증: `pnpm test:e2e canvas-workspace && pnpm test:perf && pnpm test:accessibility`
+- [ ] `P0-RELEASE` M4-012~M4-014 디자인 재정비, `pnpm ci:verify`, Release Gate A~F, OrbStack restore drill,
       source/image mapping과 exact candidate approval 통과 후에만 `v0.1.0` tag 생성
   - preparation gate는 `P0_RELEASE_EVIDENCE_VERSION = 1` profile과 `pnpm test:p0-release`로 online backup,
     source volume 제거, plan-hash Apply와 replacement restart를 검증한다.
@@ -369,8 +386,8 @@ docker compose config
 ```
 
 `pnpm ci:verify`는 format check, lint, typecheck, architecture, unit, integration, build,
-license와 deterministic application SBOM 검사를 모두 실행한다. Playwright와 Docker acceptance는 CI의 별도 job에서 실행하되
-P0 release 전에는 모두 필수로 통과해야 한다.
+license와 deterministic application SBOM 검사를 모두 실행한다. Playwright와 Docker acceptance는 일반 CI에서 자동 실행하지
+않으며, 사용자가 명시적으로 실행하거나 release workflow에서 검증한다. P0 release 전에는 모두 필수로 통과해야 한다.
 
 ## 6. 확정 가정
 
