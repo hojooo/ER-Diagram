@@ -386,8 +386,8 @@ docker compose config
 ```
 
 `pnpm ci:verify`는 format check, lint, typecheck, architecture, unit, integration, build,
-license와 deterministic application SBOM 검사를 모두 실행한다. Playwright와 Docker acceptance는 CI의 별도 job에서 실행하되
-P0 release 전에는 모두 필수로 통과해야 한다.
+license와 deterministic application SBOM 검사를 모두 실행한다. Playwright와 Docker acceptance는 일반 CI에서 자동 실행하지
+않으며, 사용자가 명시적으로 실행하거나 release workflow에서 검증한다. P0 release 전에는 모두 필수로 통과해야 한다.
 
 ## 6. 확정 가정
 
