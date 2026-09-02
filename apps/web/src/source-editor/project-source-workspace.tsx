@@ -13,25 +13,25 @@ import * as Dialog from "@radix-ui/react-dialog";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   lazy,
+  type RefObject,
   Suspense,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type RefObject,
 } from "react";
-import { useBlocker } from "react-router-dom";
+import { Link, useBlocker } from "react-router-dom";
 
 import type {
-  BaseSchemaDiagramProps,
   BaseSchemaDiagramComponent,
+  BaseSchemaDiagramProps,
   DiagramLayoutRequest,
   DiagramLayoutRequestResult,
+  DiagramViewportInsets,
 } from "../diagram/base-schema-diagram-contract.js";
 import { toggleCollapsedGroup } from "../diagram/collapse-state.js";
 import { DiagramWorkspaceControls } from "../diagram/diagram-workspace-controls.js";
-import { requestWorkerLayout } from "../diagram/layout-worker-client.js";
 import {
   createDefaultLayoutValue,
   createLayoutSession,
@@ -40,6 +40,7 @@ import {
   type LayoutSessionSnapshot,
   type LayoutViewSnapshot,
 } from "../diagram/layout-session.js";
+import { requestWorkerLayout } from "../diagram/layout-worker-client.js";
 import {
   createDiagramVisibility,
   GLOBAL_VIEW_KEY,
@@ -68,6 +69,7 @@ import {
   type SchemaHistorySessionSnapshot,
 } from "../history/history-session.js";
 import type { ProjectApi } from "../projects/project-api.js";
+import { dialectLabel, ValidityBadge } from "../projects/project-home-page.js";
 import { projectQueryKeys } from "../projects/project-queries.js";
 import { useRuntimeResourceLimits } from "../runtime-config.js";
 import {
@@ -76,6 +78,10 @@ import {
   type VisualCommandSessionSnapshot,
 } from "../visual-editor/visual-command-session.js";
 import { VisualSchemaInspector } from "../visual-editor/visual-schema-inspector.js";
+import {
+  CanvasWorkspaceShell,
+  useCanvasWorkspaceSurfaces,
+} from "../workspace/canvas-workspace-shell.js";
 import type { SourceEditorComponent, SourceEditorHandle } from "./editor-contract.js";
 import {
   createDbmlParserWorkerClient,
@@ -132,6 +138,10 @@ export function ProjectSourceWorkspace({
   const historySessionRef = useRef<SchemaHistorySessionController | null>(null);
   const editorRef = useRef<SourceEditorHandle>(null);
   const lastCursorPositionRef = useRef<SourceCursorPosition | null>(null);
+  const pendingSourceNavigationRef = useRef<
+    import("@er-diagram/contracts").SourceRange | "FOCUS" | null
+  >(null);
+  const recoverySourceOpenedRef = useRef(false);
   const flushedBlockedNavigationRef = useRef(false);
   const flushedBlockedLayoutNavigationRef = useRef(false);
   const proceededBlockedNavigationRef = useRef(false);
@@ -160,6 +170,9 @@ export function ProjectSourceWorkspace({
     selection: DiagramSelection;
     viewLabel: string;
   } | null>(null);
+  const surfaces = useCanvasWorkspaceSurfaces();
+  const [diagramControlsElement, setDiagramControlsElement] = useState<HTMLDivElement | null>(null);
+  const [viewportInsets, setViewportInsets] = useState<DiagramViewportInsets | null>(null);
   const projectId = initialState.project.id;
   const initialStateRef = useRef(initialState);
   const prioritizeInitialDiagram =
@@ -233,11 +246,58 @@ export function ProjectSourceWorkspace({
     (sessionSnapshot?.validation === "VALID" && activeGraph?.tables.length === 0) ||
     activeLayoutView?.status === "ERROR";
 
+  const openSourceSurface = useCallback(
+    (
+      range: import("@er-diagram/contracts").SourceRange | null = null,
+      trigger?: HTMLElement | null,
+    ) => {
+      setSourceEditorLoadReady(true);
+      surfaces.openLeft("SOURCE", trigger);
+      pendingSourceNavigationRef.current = range ?? "FOCUS";
+      window.requestAnimationFrame(() => {
+        const pending = pendingSourceNavigationRef.current;
+        if (!sourceEditorReady || !pending) return;
+        if (pending === "FOCUS") editorRef.current?.focus();
+        else editorRef.current?.revealSourceRange(pending);
+        pendingSourceNavigationRef.current = null;
+      });
+    },
+    [sourceEditorReady, surfaces.openLeft],
+  );
+
   useEffect(() => {
     if (!sourceEditorRecoveryRequired) return;
     setInitialDiagramReady(true);
     setSourceEditorLoadReady(true);
   }, [sourceEditorRecoveryRequired]);
+
+  useEffect(() => {
+    if (
+      !sessionSnapshot ||
+      activeGraph ||
+      !sessionSnapshot.fallbackGraphResolved ||
+      (sessionSnapshot.validation !== "INVALID" && sessionSnapshot.validation !== "ERROR") ||
+      recoverySourceOpenedRef.current
+    ) {
+      return;
+    }
+    recoverySourceOpenedRef.current = true;
+    setSourceEditorLoadReady(true);
+    surfaces.openLeft("SOURCE");
+  }, [activeGraph, sessionSnapshot, surfaces.openLeft]);
+
+  useEffect(() => {
+    if (!sourceEditorReady || surfaces.leftSurface !== "SOURCE") return;
+    if (!pendingSourceNavigationRef.current) return;
+    const animationFrame = window.requestAnimationFrame(() => {
+      const pending = pendingSourceNavigationRef.current;
+      if (!pending) return;
+      if (pending === "FOCUS") editorRef.current?.focus();
+      else editorRef.current?.revealSourceRange(pending);
+      pendingSourceNavigationRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [sourceEditorReady, surfaces.leftSurface]);
 
   useEffect(() => {
     if (!initialDiagramReady || sourceEditorLoadReady) return;
@@ -288,11 +348,11 @@ export function ProjectSourceWorkspace({
 
   const handleNavigateSource = useCallback(
     (selection: DiagramSelection) => {
-      if (!sourceNavigationReady || !activeGraph) return;
+      if (!sourceNavigationEnabled || !activeGraph) return;
       const range = activeGraph.sourceMap[selection.elementKey];
-      if (range) editorRef.current?.revealSourceRange(range);
+      if (range) openSourceSurface(range);
     },
-    [activeGraph, sourceNavigationReady],
+    [activeGraph, openSourceSurface, sourceNavigationEnabled],
   );
 
   const handleToggleGroup = useCallback(
@@ -994,82 +1054,99 @@ export function ProjectSourceWorkspace({
 
   if (!sessionSnapshot) {
     return (
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 text-slate-300">
+      <div className="grid h-full place-items-center bg-slate-950 p-6 text-slate-300">
         <p aria-live="polite">Preparing source workspace…</p>
       </div>
     );
   }
 
   const { serverState } = sessionSnapshot;
+  const visualInteractionDisabled =
+    layoutInteractionLocked || !sessionSnapshot.canUseValidSchema || visualCommandSession === null;
   return (
     <>
-      <div className="mt-8 space-y-5">
-        {historySession && historySnapshot ? (
-          <SchemaHistoryControls
-            session={historySession}
-            loadRevisions={loadHistoryRevisions}
-            interactionDisabled={visualCommandWorkspaceLocked}
-          />
-        ) : null}
-        <div className="grid gap-5 xl:grid-cols-2">
-          <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
-            <div className="flex flex-col gap-3 border-b border-slate-700 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">
-                  Canonical DBML source
-                </p>
-                <p className="mt-1 text-xs text-slate-400">
-                  Autosaves 750 ms after the latest edit. Ctrl/Cmd+S saves immediately.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge
-                  label={persistenceLabel(sessionSnapshot.persistence)}
-                  testId="persistence-status"
-                />
-                <StatusBadge
-                  label={validationLabel(sessionSnapshot.validation)}
-                  testId="validation-status"
-                />
-                <button
-                  className="min-h-10 rounded-lg border border-slate-600 px-3 text-sm font-semibold text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
-                  type="button"
-                  disabled={sessionSnapshot.persistence === "CONFLICT"}
-                  onClick={() => sessionRef.current?.flush()}
-                >
-                  Save now
-                </button>
-              </div>
+      <CanvasWorkspaceShell
+        surfaces={surfaces}
+        diagramControlsElement={diagramControlsElement}
+        onViewportInsetsChange={setViewportInsets}
+        commandBar={
+          <div className="flex max-w-[calc(100vw-1.5rem)] items-center gap-2 overflow-x-auto px-3 py-2 text-sm sm:max-w-[calc(100vw-2.5rem)] sm:px-4">
+            <Link className={commandBarButtonClass} to="/">
+              Back
+            </Link>
+            <div className="min-w-0 px-1 sm:px-2">
+              <p className="truncate text-[0.65rem] font-bold uppercase tracking-[0.14em] text-cyan-300">
+                {dialectLabel(serverState.project.primaryDialect)} · revision{" "}
+                {serverState.project.schemaRevisionNo}
+              </p>
+              <h1 id="workspace-heading" className="truncate font-semibold text-white">
+                {serverState.project.name}
+              </h1>
             </div>
-            {sourceEditorLoadReady ? (
-              <Suspense
-                fallback={
-                  <div className="grid min-h-[32rem] place-items-center bg-slate-950 text-slate-300">
-                    <p aria-live="polite">Loading local editor assets…</p>
-                  </div>
-                }
-              >
-                <EditorComponent
-                  ref={editorRef}
-                  projectId={projectId}
-                  initialSource={sessionSnapshot.source}
-                  diagnostics={sessionSnapshot.diagnostics}
-                  onChange={(source) => sessionRef.current?.edit(source)}
-                  onSave={() => sessionRef.current?.flush()}
-                  onUndo={handleHistoryUndo}
-                  onRedo={handleHistoryRedo}
-                  onReady={() => setSourceEditorReady(true)}
-                  onCursorPositionChange={handleCursorPositionChange}
-                  readOnly={visualWorkspaceLocked}
-                />
-              </Suspense>
-            ) : (
-              <div className="grid min-h-[32rem] place-items-center bg-slate-950 text-slate-300">
-                <p aria-live="polite">Preparing the diagram before loading editor assets…</p>
-              </div>
-            )}
-          </section>
-
+            <ValidityBadge validity={serverState.currentRevision.validity} />
+            <div className="h-6 w-px bg-slate-700" aria-hidden="true" />
+            <button
+              className={commandBarButtonClass}
+              type="button"
+              aria-expanded={surfaces.leftSurface === "SOURCE"}
+              aria-controls="workspace-source-surface"
+              onClick={(event) => {
+                setSourceEditorLoadReady(true);
+                surfaces.toggleLeft("SOURCE", event.currentTarget);
+              }}
+            >
+              Source
+            </button>
+            <button
+              className={commandBarButtonClass}
+              type="button"
+              aria-expanded={surfaces.leftSurface === "OUTLINE"}
+              aria-controls="workspace-outline-surface"
+              onClick={(event) => surfaces.toggleLeft("OUTLINE", event.currentTarget)}
+            >
+              Outline
+            </button>
+            <button
+              className={commandBarButtonClass}
+              type="button"
+              aria-expanded={surfaces.inspectorOpen}
+              aria-controls="workspace-inspector-surface"
+              onClick={(event) => surfaces.toggleInspector(event.currentTarget)}
+            >
+              Inspector
+            </button>
+            {historySession && historySnapshot ? (
+              <SchemaHistoryControls
+                session={historySession}
+                loadRevisions={loadHistoryRevisions}
+                interactionDisabled={visualCommandWorkspaceLocked}
+                compact
+              />
+            ) : null}
+            <Link
+              aria-label="Import SQL"
+              className={commandBarButtonClass}
+              to={`/projects/${projectId}/sql-import`}
+            >
+              Import
+            </Link>
+            <Link
+              aria-label="Export SQL"
+              className={commandBarButtonClass}
+              to={`/projects/${projectId}/sql-export`}
+            >
+              Export
+            </Link>
+            <Link
+              aria-label="Export bundle"
+              className={commandBarButtonClass}
+              to={`/projects/${projectId}/bundle-export`}
+            >
+              Bundle
+            </Link>
+          </div>
+        }
+        diagram={
           <DiagramPanel
             snapshot={sessionSnapshot}
             visibility={visibility}
@@ -1084,7 +1161,8 @@ export function ProjectSourceWorkspace({
             selectionStore={selectionStore}
             DiagramComponent={DiagramComponent}
             requestLayout={requestBoundedLayout}
-            sourceNavigationEnabled={sourceNavigationReady}
+            sourceNavigationEnabled={sourceNavigationEnabled}
+            viewportInsets={viewportInsets}
             layoutView={activeLayoutView}
             layoutConflict={layoutSnapshot?.conflict ?? null}
             layoutPositions={activeLayout.positions}
@@ -1099,7 +1177,8 @@ export function ProjectSourceWorkspace({
             onSearchQueryChange={setSearchQuery}
             onActivateSearchResult={handleActivateSearchResult}
             onNavigateSource={handleNavigateSource}
-            onFocusSource={() => editorRef.current?.focus()}
+            onActivateElement={() => surfaces.openInspector()}
+            onFocusSource={() => openSourceSurface()}
             onPositionsCommit={handlePositionsCommit}
             onViewportCommit={handleViewportCommit}
             onRenderedLayoutReady={handleRenderedLayoutReady}
@@ -1113,92 +1192,194 @@ export function ProjectSourceWorkspace({
             onLoadServerLayout={() => void layoutSessionRef.current?.loadServerLayout()}
             onReloadLayout={() => void handleReloadLayout()}
             layoutInteractionDisabled={layoutInteractionLocked}
-            visualCommandSession={visualCommandSession}
-            visualInteractionDisabled={
-              layoutInteractionLocked ||
-              !sessionSnapshot.canUseValidSchema ||
-              visualCommandSession === null
-            }
-            onOpenVisualSource={(range) => {
-              if (range) editorRef.current?.revealSourceRange(range);
-              else editorRef.current?.focus();
-            }}
+            visualInteractionDisabled={visualInteractionDisabled}
+            controlsRef={setDiagramControlsElement}
           />
-        </div>
-
-        <aside className="grid gap-5 lg:grid-cols-2" aria-label="Source workspace details">
-          <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-            <h2 className="font-semibold text-white">Draft status</h2>
-            <dl className="mt-4 grid gap-3 text-sm">
-              <DetailRow
-                label="Schema revision"
-                value={String(sessionSnapshot.expectedSchemaRevisionNo)}
-              />
-              <DetailRow label="Parser" value={serverState.project.parserVersion} />
-              <DetailRow
-                label="Last valid revision"
-                value={serverState.lastValidRevision?.revisionNo.toString() ?? "None"}
-              />
-              <DetailRow
-                label="Diagram source"
-                value={
-                  sessionSnapshot.activeGraphSource === "CURRENT_DRAFT"
-                    ? "Current draft"
-                    : sessionSnapshot.activeGraphSource === "LAST_VALID"
-                      ? "Last valid revision"
-                      : "Unavailable"
-                }
-              />
-              <DetailRow
-                label="Schema actions"
-                value={sessionSnapshot.canUseValidSchema ? "Available" : "Disabled"}
-              />
-            </dl>
-          </section>
-
-          <SessionRecoveryPanel
-            snapshot={sessionSnapshot}
-            session={sessionRef.current}
-            onLoadServer={() => {
-              const source = sessionRef.current?.loadServerDraft();
-              if (source !== null && source !== undefined) editorRef.current?.replaceSource(source);
-            }}
-          />
-
-          <ProblemsPanel
-            diagnostics={sessionSnapshot.diagnostics}
-            onNavigate={(diagnostic) => editorRef.current?.navigateToDiagnostic(diagnostic)}
-          />
-        </aside>
-
-        {activeGraph && visibility ? (
-          <SchemaOutline
-            graph={activeGraph}
-            visibility={visibility}
-            viewLabel={viewLabel}
-            collapsedGroupKeys={activeCollapsedGroupKeys}
-            selectionStore={selectionStore}
-            sourceNavigationEnabled={sourceNavigationReady}
-            onToggleGroup={handleToggleGroup}
-            onNavigateSource={handleNavigateSource}
-          />
-        ) : null}
-        {hiddenSourceSelection ? (
-          <section
-            className="rounded-2xl border border-amber-300/50 bg-amber-950/30 p-4 text-sm text-amber-100"
-            role="status"
-          >
-            <p>This symbol is hidden by {hiddenSourceSelection.viewLabel}.</p>
-            <button
-              className="mt-3 min-h-10 rounded-lg border border-amber-200 px-3 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200"
-              type="button"
-              onClick={handleShowHiddenSelectionInGlobal}
+        }
+        source={
+          <div className="flex min-h-full flex-col">
+            <div className="flex flex-col gap-3 border-b border-slate-700 pb-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">
+                  Canonical DBML source
+                </p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Autosaves 750 ms after the latest edit. Ctrl/Cmd+S saves immediately.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge
+                  label={persistenceLabel(sessionSnapshot.persistence)}
+                  testId="source-persistence-status"
+                />
+                <StatusBadge
+                  label={validationLabel(sessionSnapshot.validation)}
+                  testId="source-validation-status"
+                />
+              </div>
+            </div>
+            <div className="mt-4 min-h-[32rem] flex-1 overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
+              {sourceEditorLoadReady ? (
+                <Suspense
+                  fallback={
+                    <div className="grid min-h-[32rem] place-items-center bg-slate-950 text-slate-300">
+                      <p aria-live="polite">Loading local editor assets…</p>
+                    </div>
+                  }
+                >
+                  <EditorComponent
+                    ref={editorRef}
+                    projectId={projectId}
+                    initialSource={sessionSnapshot.source}
+                    diagnostics={sessionSnapshot.diagnostics}
+                    onChange={(source) => sessionRef.current?.edit(source)}
+                    onSave={() => sessionRef.current?.flush()}
+                    onUndo={handleHistoryUndo}
+                    onRedo={handleHistoryRedo}
+                    onReady={() => setSourceEditorReady(true)}
+                    onCursorPositionChange={handleCursorPositionChange}
+                    readOnly={visualWorkspaceLocked}
+                  />
+                </Suspense>
+              ) : (
+                <div className="grid min-h-[32rem] place-items-center bg-slate-950 text-slate-300">
+                  <p aria-live="polite">Preparing the diagram before loading editor assets…</p>
+                </div>
+              )}
+            </div>
+            <section className="mt-4 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+              <h2 className="font-semibold text-white">Draft status</h2>
+              <dl className="mt-4 grid gap-3 text-sm">
+                <DetailRow
+                  label="Schema revision"
+                  value={String(sessionSnapshot.expectedSchemaRevisionNo)}
+                />
+                <DetailRow label="Parser" value={serverState.project.parserVersion} />
+                <DetailRow
+                  label="Last valid revision"
+                  value={serverState.lastValidRevision?.revisionNo.toString() ?? "None"}
+                />
+                <DetailRow
+                  label="Diagram source"
+                  value={
+                    sessionSnapshot.activeGraphSource === "CURRENT_DRAFT"
+                      ? "Current draft"
+                      : sessionSnapshot.activeGraphSource === "LAST_VALID"
+                        ? "Last valid revision"
+                        : "Unavailable"
+                  }
+                />
+                <DetailRow
+                  label="Schema actions"
+                  value={sessionSnapshot.canUseValidSchema ? "Available" : "Disabled"}
+                />
+              </dl>
+            </section>
+          </div>
+        }
+        outline={
+          activeGraph && visibility ? (
+            <SchemaOutline
+              graph={activeGraph}
+              visibility={visibility}
+              viewLabel={viewLabel}
+              collapsedGroupKeys={activeCollapsedGroupKeys}
+              selectionStore={selectionStore}
+              sourceNavigationEnabled={sourceNavigationEnabled}
+              onToggleGroup={handleToggleGroup}
+              onNavigateSource={handleNavigateSource}
+            />
+          ) : (
+            <p className="text-sm text-slate-300">A valid schema is required for the outline.</p>
+          )
+        }
+        inspector={
+          activeGraph && visualCommandSession ? (
+            <VisualSchemaInspector
+              graph={activeGraph}
+              primaryDialect={serverState.project.primaryDialect}
+              currentViewKey={resolvedViewKey}
+              selectionStore={selectionStore}
+              commandSession={visualCommandSession}
+              interactionDisabled={visualInteractionDisabled}
+              sourceNavigationEnabled={sourceNavigationEnabled}
+              onOpenSource={openSourceSurface}
+              onReloadLayouts={() => void handleReloadLayout()}
+            />
+          ) : (
+            <div className="p-2 text-sm text-slate-300">
+              <h2 className="font-semibold text-white">Visual schema inspector</h2>
+              <p className="mt-2">Select an element from a valid diagram to inspect it.</p>
+            </div>
+          )
+        }
+        status={
+          <div className="flex flex-wrap items-center justify-center gap-2 px-3 py-2 text-xs sm:justify-start">
+            <span
+              className="rounded-full border border-slate-700 px-2.5 py-1 text-slate-200"
+              data-testid="persistence-status"
             >
-              Show in Global
+              Source: {persistenceLabel(sessionSnapshot.persistence)}
+            </span>
+            <span
+              className="rounded-full border border-slate-700 px-2.5 py-1 text-slate-200"
+              data-testid="validation-status"
+            >
+              Schema: {validationLabel(sessionSnapshot.validation)}
+            </span>
+            <span className="text-slate-400">
+              Revision {sessionSnapshot.expectedSchemaRevisionNo} · {viewLabel}
+            </span>
+            <button
+              className="min-h-9 rounded-lg border border-slate-600 px-3 font-semibold text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+              type="button"
+              disabled={sessionSnapshot.persistence === "CONFLICT"}
+              onClick={() => sessionRef.current?.flush()}
+            >
+              Save now
             </button>
-          </section>
-        ) : null}
-      </div>
+          </div>
+        }
+        alerts={
+          <div className="max-h-[45vh] space-y-3 overflow-auto">
+            <SessionRecoveryPanel
+              snapshot={sessionSnapshot}
+              session={sessionRef.current}
+              onLoadServer={() => {
+                const source = sessionRef.current?.loadServerDraft();
+                if (source !== null && source !== undefined)
+                  editorRef.current?.replaceSource(source);
+              }}
+            />
+            {sessionSnapshot.diagnostics.length > 0 ? (
+              <ProblemsPanel
+                diagnostics={sessionSnapshot.diagnostics}
+                onNavigate={(diagnostic) => {
+                  openSourceSurface(diagnostic.range ?? null);
+                  window.requestAnimationFrame(() =>
+                    editorRef.current?.navigateToDiagnostic(diagnostic),
+                  );
+                }}
+              />
+            ) : null}
+            {hiddenSourceSelection ? (
+              <section
+                className="rounded-2xl border border-amber-300/50 bg-amber-950/90 p-4 text-sm text-amber-100"
+                role="status"
+              >
+                <p>This symbol is hidden by {hiddenSourceSelection.viewLabel}.</p>
+                <button
+                  className="mt-3 min-h-10 rounded-lg border border-amber-200 px-3 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200"
+                  type="button"
+                  onClick={handleShowHiddenSelectionInGlobal}
+                >
+                  Show in Global
+                </button>
+              </section>
+            ) : null}
+          </div>
+        }
+      />
 
       <p className="sr-only" aria-live="polite" aria-atomic="true">
         {persistenceLabel(sessionSnapshot.persistence)}.{" "}
@@ -1246,6 +1427,7 @@ function DiagramPanel({
   onSearchQueryChange,
   onActivateSearchResult,
   onNavigateSource,
+  onActivateElement,
   onFocusSource,
   onPositionsCommit,
   onViewportCommit,
@@ -1260,9 +1442,9 @@ function DiagramPanel({
   onLoadServerLayout,
   onReloadLayout,
   layoutInteractionDisabled,
-  visualCommandSession,
   visualInteractionDisabled,
-  onOpenVisualSource,
+  viewportInsets,
+  controlsRef,
 }: {
   readonly snapshot: SourceSessionSnapshot;
   readonly visibility: DiagramVisibility | null;
@@ -1290,6 +1472,7 @@ function DiagramPanel({
   readonly onSearchQueryChange: (query: string) => void;
   readonly onActivateSearchResult: (result: DiagramSearchResult) => void;
   readonly onNavigateSource: (selection: DiagramSelection) => void;
+  readonly onActivateElement: (selection: DiagramSelection) => void;
   readonly onFocusSource: () => void;
   readonly onPositionsCommit: (positions: Readonly<Record<string, DiagramPosition>>) => void;
   readonly onViewportCommit: (viewport: DiagramViewport) => void;
@@ -1307,9 +1490,9 @@ function DiagramPanel({
   readonly onLoadServerLayout: () => void;
   readonly onReloadLayout: () => void;
   readonly layoutInteractionDisabled: boolean;
-  readonly visualCommandSession: VisualCommandSessionController | null;
   readonly visualInteractionDisabled: boolean;
-  readonly onOpenVisualSource: (range: import("@er-diagram/contracts").SourceRange | null) => void;
+  readonly viewportInsets: DiagramViewportInsets | null;
+  readonly controlsRef: (element: HTMLDivElement | null) => void;
 }) {
   const graph = snapshot.activeGraph;
   const showingLastValid = snapshot.activeGraphSource === "LAST_VALID";
@@ -1323,65 +1506,70 @@ function DiagramPanel({
     layoutView?.layout.baseSchemaHash !== graph.schemaHash;
 
   return (
-    <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
-      <div className="border-b border-slate-700 px-4 py-3">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">
-          Editable ER diagram
-        </p>
-        <p className="mt-1 text-xs text-slate-400" aria-live="polite">
-          {showingLastValid
-            ? `Showing last-valid revision ${lastValidRevisionNo ?? "unknown"}. Source navigation is disabled until the current draft is valid.`
-            : graph
-              ? "Showing the current valid draft. Select a schema element to inspect, edit, or open its source."
-              : "Waiting for a valid schema graph."}
-        </p>
-      </div>
+    <section className="relative h-full min-h-0 overflow-hidden bg-slate-950">
       {graph && visibility ? (
         <>
-          <DiagramWorkspaceControls
-            graph={graph}
-            visibility={visibility}
-            viewKey={viewKey}
-            detailLevel={detailLevel}
-            searchQuery={searchQuery}
-            onSearchQueryChange={onSearchQueryChange}
-            onActivateSearchResult={onActivateSearchResult}
-            onViewChange={onViewChange}
-            onDetailLevelChange={onDetailLevelChange}
-            disabled={
-              layoutInteractionDisabled ||
-              layoutHydrating ||
-              layoutLoadFailed ||
-              layoutConflict !== null
-            }
-            searchDisabled={layoutBusy}
-          />
-          <LayoutToolbar
-            viewKey={viewKey}
-            layoutView={layoutView}
-            layoutConflict={layoutConflict}
-            layoutRequest={layoutRequest}
-            layoutPreview={layoutPreview}
-            workflowError={layoutWorkflowError}
-            recoveryNotice={layoutRecoveryNotice}
-            schemaHashMismatch={schemaHashMismatch}
-            onPreview={onPreviewAutoLayout}
-            onApply={onApplyAutoLayout}
-            onCancel={onCancelAutoLayout}
-            onReset={onResetLayout}
-            onRetry={onRetryLayout}
-            onRetryLocal={onRetryLocalLayout}
-            onLoadServer={onLoadServerLayout}
-          />
+          <div
+            ref={controlsRef}
+            className="pointer-events-none absolute left-3 top-24 z-10 max-w-[min(58rem,calc(100vw-1.5rem))] sm:left-5"
+          >
+            <div className="pointer-events-auto overflow-hidden rounded-2xl border border-slate-700/90 bg-slate-950/90 shadow-2xl backdrop-blur-md">
+              <div className="border-b border-slate-700 px-4 py-3">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">
+                  Editable ER diagram
+                </p>
+                <p className="mt-1 text-xs text-slate-400" aria-live="polite">
+                  {showingLastValid
+                    ? `Showing last-valid revision ${lastValidRevisionNo ?? "unknown"}. Source navigation is disabled until the current draft is valid.`
+                    : "Showing the current valid draft. Select a schema element to inspect or edit it."}
+                </p>
+              </div>
+              <DiagramWorkspaceControls
+                graph={graph}
+                visibility={visibility}
+                viewKey={viewKey}
+                detailLevel={detailLevel}
+                searchQuery={searchQuery}
+                onSearchQueryChange={onSearchQueryChange}
+                onActivateSearchResult={onActivateSearchResult}
+                onViewChange={onViewChange}
+                onDetailLevelChange={onDetailLevelChange}
+                disabled={
+                  layoutInteractionDisabled ||
+                  layoutHydrating ||
+                  layoutLoadFailed ||
+                  layoutConflict !== null
+                }
+                searchDisabled={layoutBusy}
+              />
+              <LayoutToolbar
+                viewKey={viewKey}
+                layoutView={layoutView}
+                layoutConflict={layoutConflict}
+                layoutRequest={layoutRequest}
+                layoutPreview={layoutPreview}
+                workflowError={layoutWorkflowError}
+                recoveryNotice={layoutRecoveryNotice}
+                schemaHashMismatch={schemaHashMismatch}
+                onPreview={onPreviewAutoLayout}
+                onApply={onApplyAutoLayout}
+                onCancel={onCancelAutoLayout}
+                onReset={onResetLayout}
+                onRetry={onRetryLayout}
+                onRetryLocal={onRetryLocalLayout}
+                onLoadServer={onLoadServerLayout}
+              />
+            </div>
+          </div>
           <Suspense
             fallback={
-              <div className="grid min-h-[32rem] place-items-center bg-slate-950 text-slate-300">
+              <div className="grid h-full place-items-center bg-slate-950 text-slate-300">
                 <p aria-live="polite">Loading local diagram assets…</p>
               </div>
             }
           >
             {layoutLoadFailed ? (
-              <div className="grid min-h-[32rem] place-items-center bg-slate-950 p-6 text-center">
+              <div className="grid h-full place-items-center bg-slate-950 p-6 text-center">
                 <div>
                   <p className="font-semibold text-red-100">Layout could not be loaded</p>
                   <p className="mt-2 text-sm text-slate-400">
@@ -1396,6 +1584,10 @@ function DiagramPanel({
                   </button>
                 </div>
               </div>
+            ) : viewportInsets === null ? (
+              <div className="grid h-full place-items-center bg-slate-950 text-slate-300">
+                <p aria-live="polite">Preparing diagram safe area…</p>
+              </div>
             ) : (
               <DiagramComponent
                 graph={graph}
@@ -1407,6 +1599,9 @@ function DiagramPanel({
                 sourceNavigationEnabled={sourceNavigationEnabled}
                 onToggleGroup={onToggleGroup}
                 onNavigateSource={onNavigateSource}
+                onActivateElement={onActivateElement}
+                viewportInsets={viewportInsets}
+                fillContainer
                 requestLayout={requestLayout}
                 layoutPositions={layoutPositions}
                 layoutViewport={layoutViewport}
@@ -1425,22 +1620,9 @@ function DiagramPanel({
           <p className="sr-only" aria-live="polite">
             Showing {viewLabel} at {detailLevel.toLowerCase().replaceAll("_", " ")} detail.
           </p>
-          {visualCommandSession ? (
-            <VisualSchemaInspector
-              graph={graph}
-              primaryDialect={snapshot.serverState.project.primaryDialect}
-              currentViewKey={viewKey}
-              selectionStore={selectionStore}
-              commandSession={visualCommandSession}
-              interactionDisabled={visualInteractionDisabled}
-              sourceNavigationEnabled={sourceNavigationEnabled}
-              onOpenSource={onOpenVisualSource}
-              onReloadLayouts={onReloadLayout}
-            />
-          ) : null}
         </>
       ) : (
-        <div className="grid min-h-[32rem] place-items-center bg-slate-950 p-6 text-center">
+        <div className="grid h-full place-items-center bg-slate-950 p-6 text-center">
           <div>
             <p className="font-semibold text-slate-100">No valid diagram yet</p>
             <p className="mt-2 max-w-md text-sm text-slate-400">
@@ -2166,3 +2348,5 @@ const secondaryButtonClass =
   "min-h-10 rounded-lg border border-slate-600 px-3 text-sm font-semibold text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:opacity-50";
 const primaryButtonClass =
   "min-h-10 rounded-lg bg-cyan-300 px-3 text-sm font-semibold text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:opacity-50";
+const commandBarButtonClass =
+  "inline-flex min-h-10 items-center rounded-lg border border-slate-600 px-3 text-xs font-semibold text-slate-100 no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:opacity-50";

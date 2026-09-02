@@ -164,6 +164,7 @@ describe("source session autosave", () => {
       persistence: "SAVED",
       validation: "INVALID",
       activeGraphSource: "LAST_VALID",
+      fallbackGraphResolved: true,
       canUseValidSchema: false,
     });
     expect(session.getSnapshot().activeGraph?.schemaHash).toBe(fakeHash(VALID_SOURCE));
