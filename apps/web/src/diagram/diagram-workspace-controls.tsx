@@ -1,6 +1,7 @@
 import type { SchemaGraph } from "@er-diagram/core";
 import { useId, useMemo, useState } from "react";
 
+import { useUiLocale } from "../localization/ui-locale.js";
 import { listDiagramViews } from "./projection.js";
 import { searchDiagramVisibility } from "./search-index.js";
 import type {
@@ -35,6 +36,7 @@ export function DiagramWorkspaceControls({
   readonly disabled?: boolean;
   readonly searchDisabled?: boolean;
 }) {
+  const { messages } = useUiLocale();
   const listboxId = useId();
   const [activeIndex, setActiveIndex] = useState(-1);
   const [resultsOpen, setResultsOpen] = useState(false);
@@ -57,7 +59,7 @@ export function DiagramWorkspaceControls({
   return (
     <div className="grid gap-3 border-b border-slate-700 bg-slate-900/95 px-4 py-3 lg:grid-cols-[minmax(10rem,0.7fr)_minmax(14rem,1.4fr)_minmax(9rem,0.6fr)_auto] lg:items-end">
       <label className="grid gap-1 text-xs font-semibold text-slate-300">
-        Diagram view
+        {messages["diagram.view"]}
         <select
           className="min-h-10 rounded-lg border border-slate-600 bg-slate-950 px-3 text-sm text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
           value={viewKey}
@@ -76,14 +78,14 @@ export function DiagramWorkspaceControls({
       </label>
 
       <div className="relative grid gap-1 text-xs font-semibold text-slate-300">
-        <label htmlFor={`${listboxId}-input`}>Search current view</label>
+        <label htmlFor={`${listboxId}-input`}>{messages["diagram.search"]}</label>
         <input
           id={`${listboxId}-input`}
           className="min-h-10 rounded-lg border border-slate-600 bg-slate-950 px-3 text-sm text-slate-100 placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
           type="search"
           role="combobox"
           autoComplete="off"
-          placeholder="Table, column, group, or schema"
+          placeholder={messages["diagram.searchPlaceholder"]}
           value={searchQuery}
           disabled={searchDisabled}
           aria-autocomplete="list"
@@ -131,11 +133,11 @@ export function DiagramWorkspaceControls({
             id={listboxId}
             className="absolute left-0 right-0 top-full z-30 mt-1 max-h-80 overflow-auto rounded-lg border border-slate-600 bg-slate-950 p-1 shadow-2xl"
             role="listbox"
-            aria-label="Current view search results"
+            aria-label={messages["diagram.searchResults"]}
           >
             {search.results.length === 0 ? (
               <p className="px-3 py-2 text-sm font-normal text-slate-400">
-                No matches in this view.
+                {messages["diagram.noMatches"]}
               </p>
             ) : (
               search.results.map((result, index) => (
@@ -144,7 +146,11 @@ export function DiagramWorkspaceControls({
                   className={`block w-full rounded px-3 py-2 text-left text-sm font-normal text-slate-200 hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-cyan-300 ${index === activeIndex ? "bg-slate-800" : ""}`}
                   type="button"
                   role="option"
-                  aria-label={formatResultAccessibleName(result)}
+                  aria-label={messages["diagram.resultAccessibleName"](
+                    result.kind,
+                    result.qualifiedLabel,
+                    result.kind === "column" ? result.ownerLabel : null,
+                  )}
                   aria-selected={index === activeIndex}
                   key={result.resultId}
                   onMouseDown={(event) => event.preventDefault()}
@@ -155,39 +161,45 @@ export function DiagramWorkspaceControls({
                   </span>
                   <span>{result.qualifiedLabel}</span>
                   {result.kind === "column" ? (
-                    <span className="ml-2 text-xs text-slate-400">in {result.ownerLabel}</span>
+                    <span className="ml-2 text-xs text-slate-400">
+                      {messages["diagram.resultOwner"](result.ownerLabel)}
+                    </span>
                   ) : null}
                 </button>
               ))
             )}
             <p className="px-3 py-2 text-xs font-normal text-slate-400">
-              Showing {search.results.length} of {search.total} matches
+              {messages["diagram.showingMatches"](search.results.length, search.total)}
             </p>
           </div>
         ) : null}
         <p className="sr-only" aria-live="polite">
           {searchQuery.trim()
-            ? `${search.total} matches in the current diagram view`
-            : "Search is limited to the current diagram view"}
+            ? messages["diagram.matchCount"](search.total)
+            : messages["diagram.searchScope"]}
         </p>
       </div>
 
       <label className="grid gap-1 text-xs font-semibold text-slate-300">
-        Detail level
+        {messages["diagram.detailLevel"]}
         <select
           className="min-h-10 rounded-lg border border-slate-600 bg-slate-950 px-3 text-sm text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
           value={detailLevel}
           disabled={disabled}
           onChange={(event) => onDetailLevelChange(event.target.value as DiagramLod)}
         >
-          <option value="NAME_ONLY">Names</option>
-          <option value="KEYS_ONLY">Keys</option>
-          <option value="FULL">Full</option>
+          <option value="NAME_ONLY">{messages["diagram.names"]}</option>
+          <option value="KEYS_ONLY">{messages["diagram.keys"]}</option>
+          <option value="FULL">{messages["diagram.full"]}</option>
         </select>
       </label>
 
       <p className="pb-2 text-xs text-slate-400" aria-live="polite">
-        {formatInventory(visibility)}
+        {messages["diagram.inventory"](
+          visibility.tableKeys.size,
+          visibility.groupKeys.size,
+          visibility.referenceKeys.size,
+        )}
       </p>
     </div>
   );
@@ -195,16 +207,4 @@ export function DiagramWorkspaceControls({
 
 function optionId(listboxId: string, index: number): string {
   return `${listboxId}-option-${index}`;
-}
-
-function formatInventory(visibility: DiagramVisibility): string {
-  return `${visibility.tableKeys.size} ${plural(visibility.tableKeys.size, "table")} · ${visibility.groupKeys.size} ${plural(visibility.groupKeys.size, "group")} · ${visibility.referenceKeys.size} ${plural(visibility.referenceKeys.size, "relationship")}`;
-}
-
-function formatResultAccessibleName(result: DiagramSearchResult): string {
-  return `${result.kind} ${result.qualifiedLabel}${result.kind === "column" ? ` in ${result.ownerLabel}` : ""}`;
-}
-
-function plural(count: number, noun: string): string {
-  return count === 1 ? noun : `${noun}s`;
 }

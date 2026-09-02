@@ -3,6 +3,7 @@ import type { SourceRange } from "@er-diagram/core";
 import type { editor, IRange } from "monaco-editor";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 
+import { useUiLocale } from "../localization/ui-locale.js";
 import {
   DBML_LANGUAGE_ID,
   dbmlLanguageConfiguration,
@@ -50,6 +51,7 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
     },
     forwardedRef,
   ) {
+    const { messages } = useUiLocale();
     const containerRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
     const modelRef = useRef<editor.ITextModel | null>(null);
@@ -63,6 +65,7 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
     const onRedoRef = useRef(onRedo);
     const onReadyRef = useRef(onReady);
     const onCursorPositionChangeRef = useRef(onCursorPositionChange);
+    const editorAriaLabelRef = useRef(messages["source.editorAria"]);
     const suppressChangeRef = useRef(false);
     const [loadState, setLoadState] = useState<"LOADING" | "READY" | "ERROR">("LOADING");
 
@@ -74,6 +77,7 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
     onReadyRef.current = onReady;
     onCursorPositionChangeRef.current = onCursorPositionChange;
     readOnlyRef.current = readOnly;
+    editorAriaLabelRef.current = messages["source.editorAria"];
 
     useImperativeHandle(
       forwardedRef,
@@ -137,7 +141,7 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
           setModelEol(model, initialSourceRef.current);
           activeEditor = monaco.editor.create(containerRef.current, {
             model,
-            ariaLabel: "DBML source editor",
+            ariaLabel: editorAriaLabelRef.current,
             automaticLayout: true,
             bracketPairColorization: { enabled: true },
             fontSize: 14,
@@ -203,8 +207,11 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
     }, [loadRuntime, projectId]);
 
     useEffect(() => {
-      editorRef.current?.updateOptions({ readOnly });
-    }, [readOnly]);
+      editorRef.current?.updateOptions({
+        readOnly,
+        ariaLabel: messages["source.editorAria"],
+      });
+    }, [messages, readOnly]);
 
     useEffect(() => {
       const monaco = monacoRef.current;
@@ -217,11 +224,12 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
         <section
           ref={containerRef}
           className="h-[min(68vh,52rem)] min-h-[32rem] w-full"
-          aria-label="DBML source editor"
+          aria-label={messages["source.editorAria"]}
+          data-schema-history-scope="source"
         />
         {loadState === "LOADING" ? (
           <div className="absolute inset-0 grid place-items-center bg-slate-950 text-sm text-slate-300">
-            <p aria-live="polite">Loading source editor…</p>
+            <p aria-live="polite">{messages["source.editorLoading"]}</p>
           </div>
         ) : null}
         {loadState === "ERROR" ? (
@@ -230,9 +238,9 @@ export const MonacoDbmlEditor = forwardRef<SourceEditorHandle, MonacoDbmlEditorP
             role="alert"
           >
             <div>
-              <p className="font-semibold">Source editor could not be loaded</p>
+              <p className="font-semibold">{messages["source.editorLoadError"]}</p>
               <p className="mt-2 text-sm text-red-100/80">
-                Reload the workspace to try loading the local editor assets again.
+                {messages["source.editorLoadDescription"]}
               </p>
             </div>
           </div>

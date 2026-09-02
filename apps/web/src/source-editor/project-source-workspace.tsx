@@ -69,6 +69,8 @@ import {
   type SchemaHistorySessionSnapshot,
 } from "../history/history-session.js";
 import type { ProjectApi } from "../projects/project-api.js";
+import type { UiMessages } from "../localization/messages.js";
+import { LanguageSelect, useUiLocale } from "../localization/ui-locale.js";
 import { dialectLabel, ValidityBadge } from "../projects/project-home-page.js";
 import { projectQueryKeys } from "../projects/project-queries.js";
 import { useRuntimeResourceLimits } from "../runtime-config.js";
@@ -124,6 +126,9 @@ export function ProjectSourceWorkspace({
   readonly queryClient: QueryClient;
   readonly adapters?: ProjectWorkspaceAdapters;
 }) {
+  const { messages } = useUiLocale();
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
   const runtimeLimits = useRuntimeResourceLimits();
   const [sessionSnapshot, setSessionSnapshot] = useState<SourceSessionSnapshot | null>(null);
   const sessionRef = useRef<SourceSessionController | null>(null);
@@ -221,9 +226,9 @@ export function ProjectSourceWorkspace({
     () =>
       activeGraph
         ? (listDiagramViews(activeGraph).find((view) => view.key === resolvedViewKey)?.label ??
-          "Global")
-        : "Global",
-    [activeGraph, resolvedViewKey],
+          messages["diagram.global"])
+        : messages["diagram.global"],
+    [activeGraph, messages, resolvedViewKey],
   );
   const navigationIndex = useMemo(
     () => (activeGraph ? createDiagramNavigationIndex(activeGraph) : null),
@@ -500,9 +505,9 @@ export function ProjectSourceWorkspace({
       }
       setLayoutRecoveryNotice(
         skipNextClientRenameRecoveryRef.current
-          ? "Authoritative layout rename migration was reloaded from the server."
+          ? messagesRef.current["layout.renameReloaded"]
           : recoveredCount > 0
-            ? `Recovered ${recoveredCount} renamed layout ${recoveredCount === 1 ? "key" : "keys"}. Previous keys were retained for safe fallback.`
+            ? messagesRef.current["layout.renameRecovered"](recoveredCount)
             : null,
       );
       const appliedCommand = lastAppliedVisualCommandRef.current;
@@ -600,7 +605,7 @@ export function ProjectSourceWorkspace({
         utf8ByteLength(source) > runtimeLimits.maxSourceBytes
           ? {
               code: "RESOURCE_SOURCE_TOO_LARGE",
-              message: `Source exceeds the configured ${runtimeLimits.maxSourceBytes} byte limit. Reduce it before validation or saving.`,
+              message: messagesRef.current["source.tooLarge"](runtimeLimits.maxSourceBytes),
             }
           : null,
       saveDraft: (input) => api.saveDraft(input),
@@ -663,7 +668,7 @@ export function ProjectSourceWorkspace({
         if (flushed.persistence !== "SAVED") {
           throw historyWorkspaceError(
             "CLIENT_HISTORY_SOURCE_NOT_SAVED",
-            "The current DBML source must be saved before changing schema history.",
+            messagesRef.current["history.sourceMustBeSaved"],
           );
         }
         return flushed.serverState;
@@ -677,7 +682,7 @@ export function ProjectSourceWorkspace({
         if (flushed.hasUnsavedChanges || failedView) {
           throw historyWorkspaceError(
             "CLIENT_HISTORY_LAYOUT_NOT_SAVED",
-            "Every loaded diagram layout must be saved before changing schema history.",
+            messagesRef.current["history.layoutsMustBeSaved"],
           );
         }
       },
@@ -693,7 +698,7 @@ export function ProjectSourceWorkspace({
         ) {
           throw historyWorkspaceError(
             "CLIENT_HISTORY_STATE_ADOPTION_FAILED",
-            "The committed history state could not be adopted.",
+            messagesRef.current["history.adoptFailed"],
           );
         }
         await layoutSession.adoptCommittedRevision(
@@ -846,7 +851,7 @@ export function ProjectSourceWorkspace({
       const view = controller?.getSnapshot().views.get(resolvedViewKey);
       if (!controller || !graph || !view || view.status === "LOADING") return false;
       if (view.status === "CONFLICT") {
-        setLayoutWorkflowError("Resolve the layout conflict before starting auto-layout.");
+        setLayoutWorkflowError(messagesRef.current["layout.resolveConflictFirst"]);
         return false;
       }
       let baseline = view.layout;
@@ -862,7 +867,7 @@ export function ProjectSourceWorkspace({
       await controller.replaceAndFlush(resolvedViewKey, baseline);
       const status = controller.getSnapshot().views.get(resolvedViewKey)?.status;
       if (status === "ERROR" || status === "CONFLICT") {
-        setLayoutWorkflowError("The current layout could not be saved as an auto-layout baseline.");
+        setLayoutWorkflowError(messagesRef.current["layout.baselineSaveFailed"]);
         return false;
       }
       return true;
@@ -903,8 +908,8 @@ export function ProjectSourceWorkspace({
     if (status === "ERROR" || status === "CONFLICT") {
       setLayoutWorkflowError(
         status === "CONFLICT"
-          ? "The auto-layout is preserved locally. Resolve the layout conflict to continue."
-          : "The auto-layout could not be saved. The previous durable layout is unchanged.",
+          ? messagesRef.current["layout.previewConflict"]
+          : messagesRef.current["layout.previewSaveFailed"],
       );
     }
   }, [activeGraph, layoutPreview, resolvedViewKey]);
@@ -928,7 +933,7 @@ export function ProjectSourceWorkspace({
         return;
       }
       if (!result.succeeded) {
-        setLayoutWorkflowError("Automatic layout failed. The durable layout was not changed.");
+        setLayoutWorkflowError(messagesRef.current["layout.automaticFailed"]);
         setLayoutRequest(null);
         setLayoutPreview(null);
         return;
@@ -956,8 +961,8 @@ export function ProjectSourceWorkspace({
         if (status === "ERROR" || status === "CONFLICT") {
           setLayoutWorkflowError(
             status === "CONFLICT"
-              ? "The reset layout is preserved locally. Resolve the layout conflict to continue."
-              : "The reset layout could not be saved. The previous durable layout is unchanged.",
+              ? messagesRef.current["layout.resetConflict"]
+              : messagesRef.current["layout.resetSaveFailed"],
           );
         }
       });
@@ -1055,7 +1060,7 @@ export function ProjectSourceWorkspace({
   if (!sessionSnapshot) {
     return (
       <div className="grid h-full place-items-center bg-slate-950 p-6 text-slate-300">
-        <p aria-live="polite">Preparing source workspace…</p>
+        <p aria-live="polite">{messages["source.workspacePreparing"]}</p>
       </div>
     );
   }
@@ -1072,12 +1077,14 @@ export function ProjectSourceWorkspace({
         commandBar={
           <div className="flex max-w-[calc(100vw-1.5rem)] items-center gap-2 overflow-x-auto px-3 py-2 text-sm sm:max-w-[calc(100vw-2.5rem)] sm:px-4">
             <Link className={commandBarButtonClass} to="/">
-              Back
+              {messages["workspace.backToProjects"]}
             </Link>
             <div className="min-w-0 px-1 sm:px-2">
               <p className="truncate text-[0.65rem] font-bold uppercase tracking-[0.14em] text-cyan-300">
-                {dialectLabel(serverState.project.primaryDialect)} · revision{" "}
-                {serverState.project.schemaRevisionNo}
+                {messages["workspace.revisionSummary"](
+                  dialectLabel(serverState.project.primaryDialect),
+                  serverState.project.schemaRevisionNo,
+                )}
               </p>
               <h1 id="workspace-heading" className="truncate font-semibold text-white">
                 {serverState.project.name}
@@ -1095,7 +1102,7 @@ export function ProjectSourceWorkspace({
                 surfaces.toggleLeft("SOURCE", event.currentTarget);
               }}
             >
-              Source
+              {messages["workspace.source"]}
             </button>
             <button
               className={commandBarButtonClass}
@@ -1104,7 +1111,7 @@ export function ProjectSourceWorkspace({
               aria-controls="workspace-outline-surface"
               onClick={(event) => surfaces.toggleLeft("OUTLINE", event.currentTarget)}
             >
-              Outline
+              {messages["workspace.outline"]}
             </button>
             <button
               className={commandBarButtonClass}
@@ -1113,7 +1120,7 @@ export function ProjectSourceWorkspace({
               aria-controls="workspace-inspector-surface"
               onClick={(event) => surfaces.toggleInspector(event.currentTarget)}
             >
-              Inspector
+              {messages["workspace.inspector"]}
             </button>
             {historySession && historySnapshot ? (
               <SchemaHistoryControls
@@ -1124,26 +1131,27 @@ export function ProjectSourceWorkspace({
               />
             ) : null}
             <Link
-              aria-label="Import SQL"
+              aria-label={messages["workspace.importSql"]}
               className={commandBarButtonClass}
               to={`/projects/${projectId}/sql-import`}
             >
-              Import
+              {messages["workspace.import"]}
             </Link>
             <Link
-              aria-label="Export SQL"
+              aria-label={messages["workspace.exportSql"]}
               className={commandBarButtonClass}
               to={`/projects/${projectId}/sql-export`}
             >
-              Export
+              {messages["workspace.export"]}
             </Link>
             <Link
-              aria-label="Export bundle"
+              aria-label={messages["workspace.exportBundle"]}
               className={commandBarButtonClass}
               to={`/projects/${projectId}/bundle-export`}
             >
-              Bundle
+              {messages["workspace.bundle"]}
             </Link>
+            <LanguageSelect className="shrink-0" />
           </div>
         }
         diagram={
@@ -1201,19 +1209,19 @@ export function ProjectSourceWorkspace({
             <div className="flex flex-col gap-3 border-b border-slate-700 pb-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">
-                  Canonical DBML source
+                  {messages["source.canonicalTitle"]}
                 </p>
                 <p className="mt-1 text-xs text-slate-400">
-                  Autosaves 750 ms after the latest edit. Ctrl/Cmd+S saves immediately.
+                  {messages["source.autosaveDescription"]}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge
-                  label={persistenceLabel(sessionSnapshot.persistence)}
+                  label={persistenceLabel(sessionSnapshot.persistence, messages)}
                   testId="source-persistence-status"
                 />
                 <StatusBadge
-                  label={validationLabel(sessionSnapshot.validation)}
+                  label={validationLabel(sessionSnapshot.validation, messages)}
                   testId="source-validation-status"
                 />
               </div>
@@ -1223,7 +1231,7 @@ export function ProjectSourceWorkspace({
                 <Suspense
                   fallback={
                     <div className="grid min-h-[32rem] place-items-center bg-slate-950 text-slate-300">
-                      <p aria-live="polite">Loading local editor assets…</p>
+                      <p aria-live="polite">{messages["source.localAssetsLoading"]}</p>
                     </div>
                   }
                 >
@@ -1243,35 +1251,41 @@ export function ProjectSourceWorkspace({
                 </Suspense>
               ) : (
                 <div className="grid min-h-[32rem] place-items-center bg-slate-950 text-slate-300">
-                  <p aria-live="polite">Preparing the diagram before loading editor assets…</p>
+                  <p aria-live="polite">{messages["source.preparingAfterDiagram"]}</p>
                 </div>
               )}
             </div>
             <section className="mt-4 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-              <h2 className="font-semibold text-white">Draft status</h2>
+              <h2 className="font-semibold text-white">{messages["source.draftStatus"]}</h2>
               <dl className="mt-4 grid gap-3 text-sm">
                 <DetailRow
-                  label="Schema revision"
+                  label={messages["source.schemaRevision"]}
                   value={String(sessionSnapshot.expectedSchemaRevisionNo)}
                 />
                 <DetailRow label="Parser" value={serverState.project.parserVersion} />
                 <DetailRow
-                  label="Last valid revision"
-                  value={serverState.lastValidRevision?.revisionNo.toString() ?? "None"}
-                />
-                <DetailRow
-                  label="Diagram source"
+                  label={messages["source.lastValidRevision"]}
                   value={
-                    sessionSnapshot.activeGraphSource === "CURRENT_DRAFT"
-                      ? "Current draft"
-                      : sessionSnapshot.activeGraphSource === "LAST_VALID"
-                        ? "Last valid revision"
-                        : "Unavailable"
+                    serverState.lastValidRevision?.revisionNo.toString() ?? messages["common.none"]
                   }
                 />
                 <DetailRow
-                  label="Schema actions"
-                  value={sessionSnapshot.canUseValidSchema ? "Available" : "Disabled"}
+                  label={messages["source.diagramSource"]}
+                  value={
+                    sessionSnapshot.activeGraphSource === "CURRENT_DRAFT"
+                      ? messages["source.currentDraft"]
+                      : sessionSnapshot.activeGraphSource === "LAST_VALID"
+                        ? messages["source.lastValid"]
+                        : messages["common.unavailable"]
+                  }
+                />
+                <DetailRow
+                  label={messages["source.schemaActions"]}
+                  value={
+                    sessionSnapshot.canUseValidSchema
+                      ? messages["common.available"]
+                      : messages["common.disabled"]
+                  }
                 />
               </dl>
             </section>
@@ -1290,7 +1304,7 @@ export function ProjectSourceWorkspace({
               onNavigateSource={handleNavigateSource}
             />
           ) : (
-            <p className="text-sm text-slate-300">A valid schema is required for the outline.</p>
+            <p className="text-sm text-slate-300">{messages["source.outlineRequiresValid"]}</p>
           )
         }
         inspector={
@@ -1308,8 +1322,8 @@ export function ProjectSourceWorkspace({
             />
           ) : (
             <div className="p-2 text-sm text-slate-300">
-              <h2 className="font-semibold text-white">Visual schema inspector</h2>
-              <p className="mt-2">Select an element from a valid diagram to inspect it.</p>
+              <h2 className="font-semibold text-white">{messages["inspector.title"]}</h2>
+              <p className="mt-2">{messages["source.inspectorEmpty"]}</p>
             </div>
           )
         }
@@ -1319,16 +1333,23 @@ export function ProjectSourceWorkspace({
               className="rounded-full border border-slate-700 px-2.5 py-1 text-slate-200"
               data-testid="persistence-status"
             >
-              Source: {persistenceLabel(sessionSnapshot.persistence)}
+              {messages["source.statusSource"](
+                persistenceLabel(sessionSnapshot.persistence, messages),
+              )}
             </span>
             <span
               className="rounded-full border border-slate-700 px-2.5 py-1 text-slate-200"
               data-testid="validation-status"
             >
-              Schema: {validationLabel(sessionSnapshot.validation)}
+              {messages["source.statusSchema"](
+                validationLabel(sessionSnapshot.validation, messages),
+              )}
             </span>
             <span className="text-slate-400">
-              Revision {sessionSnapshot.expectedSchemaRevisionNo} · {viewLabel}
+              {messages["source.statusRevision"](
+                sessionSnapshot.expectedSchemaRevisionNo,
+                viewLabel,
+              )}
             </span>
             <button
               className="min-h-9 rounded-lg border border-slate-600 px-3 font-semibold text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
@@ -1336,7 +1357,7 @@ export function ProjectSourceWorkspace({
               disabled={sessionSnapshot.persistence === "CONFLICT"}
               onClick={() => sessionRef.current?.flush()}
             >
-              Save now
+              {messages["source.saveNow"]}
             </button>
           </div>
         }
@@ -1367,13 +1388,13 @@ export function ProjectSourceWorkspace({
                 className="rounded-2xl border border-amber-300/50 bg-amber-950/90 p-4 text-sm text-amber-100"
                 role="status"
               >
-                <p>This symbol is hidden by {hiddenSourceSelection.viewLabel}.</p>
+                <p>{messages["source.hiddenByView"](hiddenSourceSelection.viewLabel)}</p>
                 <button
                   className="mt-3 min-h-10 rounded-lg border border-amber-200 px-3 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200"
                   type="button"
                   onClick={handleShowHiddenSelectionInGlobal}
                 >
-                  Show in Global
+                  {messages["source.showInGlobal"]}
                 </button>
               </section>
             ) : null}
@@ -1382,8 +1403,8 @@ export function ProjectSourceWorkspace({
       />
 
       <p className="sr-only" aria-live="polite" aria-atomic="true">
-        {persistenceLabel(sessionSnapshot.persistence)}.{" "}
-        {validationLabel(sessionSnapshot.validation)}.
+        {persistenceLabel(sessionSnapshot.persistence, messages)}.{" "}
+        {validationLabel(sessionSnapshot.validation, messages)}.
       </p>
 
       <UnsavedNavigationDialog
@@ -1494,6 +1515,7 @@ function DiagramPanel({
   readonly viewportInsets: DiagramViewportInsets | null;
   readonly controlsRef: (element: HTMLDivElement | null) => void;
 }) {
+  const { messages } = useUiLocale();
   const graph = snapshot.activeGraph;
   const showingLastValid = snapshot.activeGraphSource === "LAST_VALID";
   const lastValidRevisionNo = snapshot.serverState.lastValidRevision?.revisionNo;
@@ -1516,12 +1538,14 @@ function DiagramPanel({
             <div className="pointer-events-auto overflow-hidden rounded-2xl border border-slate-700/90 bg-slate-950/90 shadow-2xl backdrop-blur-md">
               <div className="border-b border-slate-700 px-4 py-3">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">
-                  Editable ER diagram
+                  {messages["diagram.editable"]}
                 </p>
                 <p className="mt-1 text-xs text-slate-400" aria-live="polite">
                   {showingLastValid
-                    ? `Showing last-valid revision ${lastValidRevisionNo ?? "unknown"}. Source navigation is disabled until the current draft is valid.`
-                    : "Showing the current valid draft. Select a schema element to inspect or edit it."}
+                    ? messages["diagram.showingLastValid"](
+                        lastValidRevisionNo?.toString() ?? messages["common.unavailable"],
+                      )
+                    : messages["diagram.showingCurrent"]}
                 </p>
               </div>
               <DiagramWorkspaceControls
@@ -1564,29 +1588,29 @@ function DiagramPanel({
           <Suspense
             fallback={
               <div className="grid h-full place-items-center bg-slate-950 text-slate-300">
-                <p aria-live="polite">Loading local diagram assets…</p>
+                <p aria-live="polite">{messages["diagram.localAssetsLoading"]}</p>
               </div>
             }
           >
             {layoutLoadFailed ? (
               <div className="grid h-full place-items-center bg-slate-950 p-6 text-center">
                 <div>
-                  <p className="font-semibold text-red-100">Layout could not be loaded</p>
+                  <p className="font-semibold text-red-100">{messages["layout.loadFailedTitle"]}</p>
                   <p className="mt-2 text-sm text-slate-400">
-                    The diagram remains protected from overwriting an unknown server layout.
+                    {messages["layout.loadFailedDescription"]}
                   </p>
                   <button
                     className={`${secondaryButtonClass} mt-4`}
                     type="button"
                     onClick={onReloadLayout}
                   >
-                    Retry layout load
+                    {messages["layout.retryLoad"]}
                   </button>
                 </div>
               </div>
             ) : viewportInsets === null ? (
               <div className="grid h-full place-items-center bg-slate-950 text-slate-300">
-                <p aria-live="polite">Preparing diagram safe area…</p>
+                <p aria-live="polite">{messages["diagram.preparingSafeArea"]}</p>
               </div>
             ) : (
               <DiagramComponent
@@ -1618,22 +1642,25 @@ function DiagramPanel({
             )}
           </Suspense>
           <p className="sr-only" aria-live="polite">
-            Showing {viewLabel} at {detailLevel.toLowerCase().replaceAll("_", " ")} detail.
+            {messages["diagram.detailStatus"](
+              viewLabel,
+              detailLevel.toLowerCase().replaceAll("_", " "),
+            )}
           </p>
         </>
       ) : (
         <div className="grid h-full place-items-center bg-slate-950 p-6 text-center">
           <div>
-            <p className="font-semibold text-slate-100">No valid diagram yet</p>
+            <p className="font-semibold text-slate-100">{messages["diagram.noValidTitle"]}</p>
             <p className="mt-2 max-w-md text-sm text-slate-400">
-              Fix the current DBML diagnostics to create the first valid diagram.
+              {messages["diagram.noValidDescription"]}
             </p>
             <button
               className="mt-4 rounded-lg border border-slate-600 px-3 py-2 text-sm font-semibold text-cyan-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
               type="button"
               onClick={onFocusSource}
             >
-              Focus source editor
+              {messages["source.focusEditor"]}
             </button>
           </div>
         </div>
@@ -1675,6 +1702,7 @@ function LayoutToolbar({
   readonly onRetryLocal: () => void;
   readonly onLoadServer: () => void;
 }) {
+  const { messages } = useUiLocale();
   const unavailable =
     layoutView === null ||
     layoutView.status === "LOADING" ||
@@ -1686,20 +1714,20 @@ function LayoutToolbar({
         <p className="text-xs font-semibold text-slate-300" aria-live="polite">
           {layoutRequest?.mode === "PREVIEW"
             ? layoutPreview
-              ? "Auto-layout preview ready"
-              : "Previewing auto layout"
+              ? messages["layout.previewReady"]
+              : messages["layout.previewing"]
             : layoutRequest?.mode === "RESET"
-              ? "Resetting layout"
-              : layoutStatusLabel(layoutView)}
+              ? messages["layout.resetting"]
+              : layoutStatusLabel(layoutView, messages)}
         </p>
         <div className="flex flex-wrap gap-2">
           {layoutRequest?.mode === "PREVIEW" && layoutPreview ? (
             <>
               <button className={primaryButtonClass} type="button" onClick={onApply}>
-                Apply auto layout
+                {messages["layout.applyAuto"]}
               </button>
               <button className={secondaryButtonClass} type="button" onClick={onCancel}>
-                Cancel preview
+                {messages["layout.cancelPreview"]}
               </button>
             </>
           ) : (
@@ -1710,7 +1738,7 @@ function LayoutToolbar({
                 disabled={unavailable || layoutRequest !== null}
                 onClick={onPreview}
               >
-                Preview auto layout
+                {messages["layout.previewAuto"]}
               </button>
               <ResetLayoutDialog
                 disabled={unavailable || layoutRequest !== null}
@@ -1721,7 +1749,7 @@ function LayoutToolbar({
           )}
           {layoutView?.status === "ERROR" ? (
             <button className={secondaryButtonClass} type="button" onClick={onRetry}>
-              Retry layout save
+              {messages["layout.retrySave"]}
             </button>
           ) : null}
         </div>
@@ -1729,8 +1757,7 @@ function LayoutToolbar({
 
       {schemaHashMismatch ? (
         <p className="mt-2 text-xs text-amber-200" role="status">
-          This layout was saved for an earlier schema. Matching stable keys were restored; new
-          elements use automatic positions.
+          {messages["layout.savedForEarlierSchema"]}
         </p>
       ) : null}
       {recoveryNotice ? (
@@ -1745,7 +1772,7 @@ function LayoutToolbar({
       ) : null}
       {layoutView?.error?.correlationId ? (
         <p className="mt-2 text-xs text-red-200">
-          Correlation ID: {layoutView.error.correlationId}
+          {messages["error.correlationId"](layoutView.error.correlationId)}
         </p>
       ) : null}
       {layoutConflict ? (
@@ -1753,13 +1780,11 @@ function LayoutToolbar({
           className="mt-3 rounded-lg border border-amber-300/50 bg-amber-950/30 p-3"
           role="alert"
         >
-          <p className="font-semibold text-amber-100">Layout conflict</p>
-          <p className="mt-1 text-xs text-amber-100/80">
-            Autosave is paused. Local layouts remain available until you choose a recovery action.
-          </p>
+          <p className="font-semibold text-amber-100">{messages["layout.conflictTitle"]}</p>
+          <p className="mt-1 text-xs text-amber-100/80">{messages["layout.conflictDescription"]}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button className={primaryButtonClass} type="button" onClick={onRetryLocal}>
-              Retry local layout
+              {messages["layout.retryLocal"]}
             </button>
             <LayoutConflictLoadDialog viewKey={layoutConflict.viewKey} onLoad={onLoadServer} />
           </div>
@@ -1778,13 +1803,14 @@ function ResetLayoutDialog({
   readonly viewKey: string;
   readonly onReset: () => void;
 }) {
+  const { messages } = useUiLocale();
   const [open, setOpen] = useState(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
         <button className={secondaryButtonClass} type="button" disabled={disabled}>
-          Reset layout
+          {messages["layout.reset"]}
         </button>
       </Dialog.Trigger>
       <Dialog.Portal>
@@ -1796,10 +1822,11 @@ function ResetLayoutDialog({
             cancelRef.current?.focus();
           }}
         >
-          <Dialog.Title className="text-xl font-semibold">Reset this view layout?</Dialog.Title>
+          <Dialog.Title className="text-xl font-semibold">
+            {messages["layout.resetQuestion"]}
+          </Dialog.Title>
           <Dialog.Description className="mt-3 text-sm leading-6 text-slate-300">
-            {viewKey} will return to Full detail, all groups expanded, no hidden elements, and a
-            fresh automatic layout. Other views are not changed.
+            {messages["layout.resetDescription"](viewKey)}
           </Dialog.Description>
           <div className="mt-6 flex flex-row-reverse flex-wrap gap-3">
             <button
@@ -1810,11 +1837,11 @@ function ResetLayoutDialog({
                 onReset();
               }}
             >
-              Reset this view
+              {messages["layout.resetThisView"]}
             </button>
             <Dialog.Close asChild>
               <button ref={cancelRef} className={secondaryButtonClass} type="button">
-                Cancel
+                {messages["action.cancel"]}
               </button>
             </Dialog.Close>
           </div>
@@ -1831,13 +1858,14 @@ function LayoutConflictLoadDialog({
   readonly viewKey: string;
   readonly onLoad: () => void;
 }) {
+  const { messages } = useUiLocale();
   const [open, setOpen] = useState(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
         <button className={secondaryButtonClass} type="button">
-          Load server layout
+          {messages["layout.loadServer"]}
         </button>
       </Dialog.Trigger>
       <Dialog.Portal>
@@ -1849,10 +1877,11 @@ function LayoutConflictLoadDialog({
             cancelRef.current?.focus();
           }}
         >
-          <Dialog.Title className="text-xl font-semibold">Load server layout?</Dialog.Title>
+          <Dialog.Title className="text-xl font-semibold">
+            {messages["layout.loadServerQuestion"]}
+          </Dialog.Title>
           <Dialog.Description className="mt-3 text-sm leading-6 text-slate-300">
-            This replaces the unsaved local layout for {viewKey}. Pending layouts for other views
-            remain unchanged.
+            {messages["layout.loadServerDescription"](viewKey)}
           </Dialog.Description>
           <div className="mt-6 flex flex-row-reverse flex-wrap gap-3">
             <button
@@ -1863,11 +1892,11 @@ function LayoutConflictLoadDialog({
                 onLoad();
               }}
             >
-              Load server layout
+              {messages["layout.loadServer"]}
             </button>
             <Dialog.Close asChild>
               <button ref={cancelRef} className={secondaryButtonClass} type="button">
-                Cancel
+                {messages["action.cancel"]}
               </button>
             </Dialog.Close>
           </div>
@@ -1877,15 +1906,15 @@ function LayoutConflictLoadDialog({
   );
 }
 
-function layoutStatusLabel(view: LayoutViewSnapshot | null): string {
-  if (!view) return "Loading layout";
+function layoutStatusLabel(view: LayoutViewSnapshot | null, messages: UiMessages): string {
+  if (!view) return messages["layout.statusLoading"];
   return {
-    LOADING: "Loading layout",
-    SAVED: "Layout saved",
-    DIRTY: "Unsaved layout changes",
-    SAVING: "Saving layout",
-    ERROR: "Layout save error",
-    CONFLICT: "Layout conflict",
+    LOADING: messages["layout.statusLoading"],
+    SAVED: messages["layout.statusSaved"],
+    DIRTY: messages["layout.statusDirty"],
+    SAVING: messages["layout.statusSaving"],
+    ERROR: messages["layout.statusError"],
+    CONFLICT: messages["layout.statusConflict"],
   }[view.status];
 }
 
@@ -1898,16 +1927,15 @@ function SessionRecoveryPanel({
   readonly session: SourceSessionController | null;
   readonly onLoadServer: () => void;
 }) {
+  const { messages } = useUiLocale();
   if (snapshot.persistence === "CONFLICT") {
     return (
       <section className="rounded-2xl border border-amber-300/50 bg-amber-950/30 p-5" role="alert">
-        <h2 className="font-semibold text-amber-100">Draft conflict</h2>
-        <p className="mt-2 text-sm text-amber-100/80">
-          The server draft changed. Your local buffer was preserved and autosave is paused.
-        </p>
+        <h2 className="font-semibold text-amber-100">{messages["source.conflictTitle"]}</h2>
+        <p className="mt-2 text-sm text-amber-100/80">{messages["source.conflictDescription"]}</p>
         {snapshot.persistenceError?.currentRevisionNo ? (
           <p className="mt-2 text-xs text-amber-100/70">
-            Current server revision: {snapshot.persistenceError.currentRevisionNo}
+            {messages["source.currentServerRevision"](snapshot.persistenceError.currentRevisionNo)}
           </p>
         ) : null}
         <div className="mt-4 flex flex-wrap gap-2">
@@ -1917,7 +1945,7 @@ function SessionRecoveryPanel({
             disabled={!snapshot.conflictState}
             onClick={() => session?.retryLocalDraft()}
           >
-            Retry local draft
+            {messages["source.retryLocalDraft"]}
           </button>
           <ConflictLoadDialog
             snapshot={snapshot}
@@ -1932,12 +1960,18 @@ function SessionRecoveryPanel({
   if (snapshot.persistence === "ERROR" || snapshot.validation === "ERROR") {
     return (
       <section className="rounded-2xl border border-red-400/40 bg-red-950/30 p-5" role="alert">
-        <h2 className="font-semibold text-red-100">Workspace needs attention</h2>
+        <h2 className="font-semibold text-red-100">{messages["source.attentionTitle"]}</h2>
         {snapshot.persistenceError ? (
-          <ErrorDescription title="Save error" error={snapshot.persistenceError} />
+          <ErrorDescription
+            title={messages["source.persistenceError"]}
+            error={snapshot.persistenceError}
+          />
         ) : null}
         {snapshot.validationError ? (
-          <ErrorDescription title="Validation error" error={snapshot.validationError} />
+          <ErrorDescription
+            title={messages["source.validationError"]}
+            error={snapshot.validationError}
+          />
         ) : null}
         <div className="mt-4 flex flex-wrap gap-2">
           {snapshot.persistence === "ERROR" ? (
@@ -1946,7 +1980,7 @@ function SessionRecoveryPanel({
               type="button"
               onClick={() => session?.retrySave()}
             >
-              Retry save
+              {messages["source.retrySave"]}
             </button>
           ) : null}
           {snapshot.validation === "ERROR" ? (
@@ -1955,7 +1989,7 @@ function SessionRecoveryPanel({
               type="button"
               onClick={() => session?.retryValidation()}
             >
-              Retry validation
+              {messages["source.retryValidation"]}
             </button>
           ) : null}
         </div>
@@ -1973,16 +2007,17 @@ function ProblemsPanel({
   readonly diagnostics: SourceSessionSnapshot["diagnostics"];
   readonly onNavigate: (diagnostic: SourceSessionSnapshot["diagnostics"][number]) => void;
 }) {
+  const { messages } = useUiLocale();
   return (
     <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-semibold text-white">Problems</h2>
+        <h2 className="font-semibold text-white">{messages["source.problems"]}</h2>
         <span className="rounded-full bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-300">
           {diagnostics.length}
         </span>
       </div>
       {diagnostics.length === 0 ? (
-        <p className="mt-3 text-sm text-slate-400">No diagnostics for the current buffer.</p>
+        <p className="mt-3 text-sm text-slate-400">{messages["source.noDiagnostics"]}</p>
       ) : (
         <ol className="mt-4 space-y-3">
           {diagnostics.map((diagnostic) => (
@@ -1998,7 +2033,7 @@ function ProblemsPanel({
                   <button
                     className="text-xs font-semibold text-cyan-300 underline decoration-cyan-300/40 underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
                     type="button"
-                    aria-label={`Go to ${diagnostic.code}`}
+                    aria-label={messages["source.goToDiagnostic"](diagnostic.code)}
                     onClick={() => onNavigate(diagnostic)}
                   >
                     {diagnostic.range.startLine}:{diagnostic.range.startColumn}
@@ -2024,6 +2059,7 @@ function ConflictLoadDialog({
   readonly disabled: boolean;
   readonly onLoad: () => void;
 }) {
+  const { messages } = useUiLocale();
   const [open, setOpen] = useState(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
   if (snapshot.persistence !== "CONFLICT") return null;
@@ -2032,7 +2068,7 @@ function ConflictLoadDialog({
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
         <button className={secondaryButtonClass} type="button" disabled={disabled}>
-          Load server draft
+          {messages["source.loadServerDraft"]}
         </button>
       </Dialog.Trigger>
       <Dialog.Portal>
@@ -2044,11 +2080,14 @@ function ConflictLoadDialog({
             cancelRef.current?.focus();
           }}
         >
-          <Dialog.Title className="text-xl font-semibold">Load server draft?</Dialog.Title>
+          <Dialog.Title className="text-xl font-semibold">
+            {messages["source.loadServerDraftQuestion"]}
+          </Dialog.Title>
           <Dialog.Description className="mt-3 text-sm leading-6 text-slate-300">
-            This replaces unsaved local source with server revision{" "}
-            {snapshot.conflictState?.project.schemaRevisionNo ?? "unknown"}. This action cannot be
-            undone in this session.
+            {messages["source.loadServerDraftDescription"](
+              snapshot.conflictState?.project.schemaRevisionNo.toString() ??
+                messages["common.unavailable"],
+            )}
           </Dialog.Description>
           <div className="mt-6 flex flex-row-reverse flex-wrap gap-3">
             <button
@@ -2059,11 +2098,11 @@ function ConflictLoadDialog({
                 setOpen(false);
               }}
             >
-              Load server draft
+              {messages["source.loadServerDraft"]}
             </button>
             <Dialog.Close asChild>
               <button ref={cancelRef} className={secondaryButtonClass} type="button">
-                Cancel
+                {messages["action.cancel"]}
               </button>
             </Dialog.Close>
           </div>
@@ -2088,6 +2127,7 @@ function UnsavedNavigationDialog({
   readonly returnFocusRef: RefObject<HTMLElement | null>;
   readonly onStay: () => void;
 }) {
+  const { messages } = useUiLocale();
   const stayRef = useRef<HTMLButtonElement>(null);
   const open = blocker.state === "blocked";
   const resetNavigation = () => {
@@ -2114,16 +2154,18 @@ function UnsavedNavigationDialog({
             returnFocusRef.current?.focus();
           }}
         >
-          <Dialog.Title className="text-xl font-semibold">Leave schema workspace?</Dialog.Title>
+          <Dialog.Title className="text-xl font-semibold">
+            {messages["navigation.leaveWorkspaceQuestion"]}
+          </Dialog.Title>
           <Dialog.Description className="mt-3 text-sm leading-6 text-slate-300">
             {requiresSavedWorkspace &&
             (snapshot.persistence === "ERROR" || snapshot.persistence === "CONFLICT")
-              ? "SQL import and export require a fully saved source and layout. Resolve the current save error or conflict, then try again."
+              ? messages["navigation.requiresSavedWorkspace"]
               : snapshot.persistence === "SAVING" ||
                   snapshot.persistence === "DIRTY" ||
                   hasUnsavedLayout
-                ? "Source and layout changes are being flushed. Navigation will continue automatically after every write succeeds."
-                : "Local source or layout changes have not been saved. Leaving now discards changes that were not sent; a write already sent to the server may still commit."}
+                ? messages["navigation.flushingWorkspace"]
+                : messages["navigation.unsavedWorkspace"]}
           </Dialog.Description>
           <div className="mt-6 flex flex-row-reverse flex-wrap gap-3">
             {!requiresSavedWorkspace ? (
@@ -2134,7 +2176,7 @@ function UnsavedNavigationDialog({
                   if (blocker.state === "blocked") blocker.proceed();
                 }}
               >
-                Leave workspace
+                {messages["navigation.leaveWorkspace"]}
               </button>
             ) : null}
             <button
@@ -2143,7 +2185,7 @@ function UnsavedNavigationDialog({
               type="button"
               onClick={resetNavigation}
             >
-              Stay
+              {messages["action.stay"]}
             </button>
           </div>
         </Dialog.Content>
@@ -2182,35 +2224,36 @@ function ErrorDescription({
   readonly title: string;
   readonly error: NonNullable<SourceSessionSnapshot["persistenceError"]>;
 }) {
+  const { messages } = useUiLocale();
   return (
     <div className="mt-3 text-sm text-red-100/80">
       <p>
         <strong>{title}:</strong> {error.message}
       </p>
       {error.correlationId ? (
-        <p className="mt-1 text-xs">Correlation ID: {error.correlationId}</p>
+        <p className="mt-1 text-xs">{messages["error.correlationId"](error.correlationId)}</p>
       ) : null}
     </div>
   );
 }
 
-function persistenceLabel(status: SourcePersistenceStatus): string {
+function persistenceLabel(status: SourcePersistenceStatus, messages: UiMessages): string {
   return {
-    SAVED: "Saved",
-    DIRTY: "Unsaved changes",
-    SAVING: "Saving",
-    ERROR: "Save error",
-    CONFLICT: "Conflict",
+    SAVED: messages["source.persistenceSaved"],
+    DIRTY: messages["source.persistenceDirty"],
+    SAVING: messages["source.persistenceSaving"],
+    ERROR: messages["source.persistenceError"],
+    CONFLICT: messages["source.persistenceConflict"],
   }[status];
 }
 
-function validationLabel(status: SourceValidationStatus): string {
+function validationLabel(status: SourceValidationStatus, messages: UiMessages): string {
   return {
-    PENDING: "Validation pending",
-    VALIDATING: "Validating",
-    VALID: "Draft valid",
-    INVALID: "Draft invalid",
-    ERROR: "Validation error",
+    PENDING: messages["source.validationPending"],
+    VALIDATING: messages["source.validating"],
+    VALID: messages["source.valid"],
+    INVALID: messages["source.invalid"],
+    ERROR: messages["source.validationError"],
   }[status];
 }
 
@@ -2338,10 +2381,7 @@ function historyWorkspaceError(code: string, message: string): Error {
 
 function isSchemaHistoryShortcutTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
-  return (
-    target.closest('[aria-label="ER diagram canvas"]') !== null ||
-    target.closest('section[aria-label="DBML source editor"]') !== null
-  );
+  return target.closest("[data-schema-history-scope]") !== null;
 }
 
 const secondaryButtonClass =

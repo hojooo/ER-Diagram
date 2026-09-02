@@ -2,6 +2,7 @@ import type { ReferenceEdge, SchemaGraph, TableNode } from "@er-diagram/core";
 import { memo, useEffect, useMemo, useState } from "react";
 import { useStore } from "zustand";
 
+import { useUiLocale } from "../localization/ui-locale.js";
 import { createBaseDiagramProjection, formatMultiplicity } from "./projection.js";
 import type { DiagramSelectionStore } from "./selection-store.js";
 import type { DiagramSelection } from "./source-navigation.js";
@@ -23,6 +24,7 @@ const LARGE_OUTLINE_ELEMENT_COUNT = 200;
 const LARGE_OUTLINE_STABILITY_DELAY_MS = 500;
 
 export function SchemaOutline({ visibility, viewLabel, ...contentProps }: SchemaOutlineProps) {
+  const { messages } = useUiLocale();
   const [renderedVisibility, setRenderedVisibility] = useState(visibility);
   const updating = renderedVisibility !== visibility;
   useEffect(() => {
@@ -41,25 +43,23 @@ export function SchemaOutline({ visibility, viewLabel, ...contentProps }: Schema
   return (
     <section
       className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
-      aria-label="Schema outline"
+      aria-label={messages["outline.label"]}
       aria-busy={updating}
     >
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-semibold text-white">Schema outline · {viewLabel}</h2>
+        <h2 className="font-semibold text-white">{messages["outline.heading"](viewLabel)}</h2>
         <span className="text-xs text-slate-400">
-          {formatInventory(
+          {messages["diagram.inventory"](
             visibility.tableKeys.size,
             visibility.groupKeys.size,
             visibility.referenceKeys.size,
           )}
         </span>
       </div>
-      <p className="mt-2 text-xs text-slate-400">
-        Focus an element in the diagram or use its line action to open the canonical source.
-      </p>
+      <p className="mt-2 text-xs text-slate-400">{messages["outline.description"]}</p>
       {updating ? (
         <p className="mt-3 text-xs text-slate-400" role="status">
-          Updating outline details…
+          {messages["outline.updating"]}
         </p>
       ) : null}
       <div aria-hidden={updating || undefined} inert={updating || undefined}>
@@ -82,6 +82,7 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
   onToggleGroup,
   onNavigateSource,
 }: Omit<SchemaOutlineProps, "viewLabel">) {
+  const { messages } = useUiLocale();
   const selection = useStore(selectionStore, (state) => state.selection);
   const projection = useMemo(() => createBaseDiagramProjection(graph), [graph]);
   const nodeByTableKey = useMemo(
@@ -135,7 +136,7 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
       {visibleGroups.length > 0 ? (
         <div className="mt-5">
           <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
-            Table groups
+            {messages["outline.tableGroups"]}
           </h3>
           <ol className="mt-3 grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
             {visibleGroups.map((group) => {
@@ -159,28 +160,36 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
                 >
                   <p className="font-semibold text-slate-100">{qualifiedName}</p>
                   <p className="mt-1 text-slate-400">
-                    {visibleMemberKeys.length} tables · Color {group.color ?? "default"} ·{" "}
-                    {collapsed ? "Collapsed" : "Expanded"}
+                    {messages["outline.groupSummary"](
+                      visibleMemberKeys.length,
+                      group.color ?? messages["outline.defaultColor"],
+                      collapsed ? messages["outline.collapsed"] : messages["outline.expanded"],
+                    )}
                   </p>
                   <p className="mt-2 break-words text-slate-300">
-                    {memberNames.length > 0 ? memberNames.join(", ") : "No member tables"}
+                    {memberNames.length > 0
+                      ? memberNames.join(", ")
+                      : messages["outline.noMembers"]}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <OutlineAction
-                      label={`Focus group ${qualifiedName} in diagram`}
+                      label={messages["outline.focusGroup"](qualifiedName)}
                       current={selection?.elementKey === group.key}
                       onClick={() => activate(groupSelection)}
                     >
-                      Diagram
+                      {messages["outline.diagram"]}
                     </OutlineAction>
                     <button
                       className="rounded border border-slate-600 px-2 py-1 font-semibold text-slate-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
                       type="button"
                       aria-expanded={!collapsed}
-                      aria-label={`${collapsed ? "Expand" : "Collapse"} ${qualifiedName} in diagram`}
+                      aria-label={messages["outline.toggleGroup"](
+                        collapsed ? messages["action.expand"] : messages["action.collapse"],
+                        qualifiedName,
+                      )}
                       onClick={() => onToggleGroup(group.key)}
                     >
-                      {collapsed ? "Expand" : "Collapse"}
+                      {collapsed ? messages["action.expand"] : messages["action.collapse"]}
                     </button>
                     <SourceLineAction
                       selection={groupSelection}
@@ -198,7 +207,9 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
 
       <div className="mt-4 grid gap-5 xl:grid-cols-2">
         <div>
-          <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Tables</h3>
+          <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+            {messages["outline.tables"]}
+          </h3>
           <ol className="mt-3 space-y-2">
             {visibleTables.map((table) => {
               const tableSelection = selectionForTable(table);
@@ -224,18 +235,20 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
                     <summary className="cursor-pointer text-sm font-semibold text-slate-100">
                       {qualifiedTableName(table)}
                       {selectedTable ? (
-                        <span className="ml-2 text-xs text-cyan-300">Selected</span>
+                        <span className="ml-2 text-xs text-cyan-300">
+                          {messages["outline.selected"]}
+                        </span>
                       ) : null}
                     </summary>
                     {tableOpen ? (
                       <>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <OutlineAction
-                            label={`Focus ${qualifiedTableName(table)} in diagram`}
+                            label={messages["outline.focusTable"](qualifiedTableName(table))}
                             current={selection?.elementKey === table.key}
                             onClick={() => activate(tableSelection)}
                           >
-                            Diagram
+                            {messages["outline.diagram"]}
                           </OutlineAction>
                           <SourceLineAction
                             selection={tableSelection}
@@ -265,7 +278,7 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
                                 key={column.key}
                               >
                                 <OutlineAction
-                                  label={`Focus column ${column.name} in diagram`}
+                                  label={messages["outline.focusColumn"](column.name)}
                                   current={selection?.elementKey === column.key}
                                   onClick={() => activate(columnSelection)}
                                 >
@@ -298,10 +311,10 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
 
         <div>
           <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
-            Relationships
+            {messages["outline.relationships"]}
           </h3>
           {visibleReferences.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-400">No relationships.</p>
+            <p className="mt-3 text-sm text-slate-400">{messages["outline.noRelationships"]}</p>
           ) : (
             <ol className="mt-3 space-y-2">
               {renderedReferences.map((reference) => {
@@ -312,9 +325,9 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
                     key={reference.key}
                   >
                     <p className="font-semibold text-slate-100">
-                      {reference.name ?? "Anonymous reference"}
+                      {reference.name ?? messages["outline.anonymousReference"]}
                       {reference.inactive ? (
-                        <span className="ml-2 text-amber-300">Inactive</span>
+                        <span className="ml-2 text-amber-300">{messages["outline.inactive"]}</span>
                       ) : null}
                     </p>
                     <p className="mt-1 break-words text-slate-400">
@@ -322,11 +335,13 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <OutlineAction
-                        label={`Focus relationship ${reference.name ?? "anonymous reference"} in diagram`}
+                        label={messages["outline.focusRelationship"](
+                          reference.name ?? messages["outline.anonymousReference"],
+                        )}
                         current={selection?.elementKey === reference.key}
                         onClick={() => activate(referenceSelection)}
                       >
-                        Diagram
+                        {messages["outline.diagram"]}
                       </OutlineAction>
                       <SourceLineAction
                         selection={referenceSelection}
@@ -346,7 +361,7 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
               type="button"
               onClick={() => setShowAllReferences(true)}
             >
-              Show all {visibleReferences.length} relationships
+              {messages["outline.showAllRelationships"](visibleReferences.length)}
             </button>
           ) : null}
         </div>
@@ -366,6 +381,7 @@ function OutlineAction({
   readonly onClick: () => void;
   readonly children: string;
 }) {
+  const { messages } = useUiLocale();
   return (
     <button
       className="rounded border border-slate-600 px-2 py-1 font-semibold text-cyan-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
@@ -375,7 +391,7 @@ function OutlineAction({
       onClick={onClick}
     >
       {children}
-      {current ? <span className="sr-only">, selected</span> : null}
+      {current ? <span className="sr-only">{messages["outline.selectedSuffix"]}</span> : null}
     </button>
   );
 }
@@ -391,21 +407,21 @@ function SourceLineAction({
   readonly enabled: boolean;
   readonly onClick: (selection: DiagramSelection) => void;
 }) {
+  const { messages } = useUiLocale();
   const range = graph.sourceMap[selection.elementKey];
   return (
     <button
       className="rounded px-2 py-1 font-semibold text-slate-300 underline decoration-slate-500 underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:text-slate-600"
       type="button"
-      aria-label={`Open source for ${selection.kind} at line ${range?.startLine ?? "unknown"}`}
+      aria-label={messages["outline.openSource"](
+        selection.kind,
+        String(range?.startLine ?? "unknown"),
+      )}
       disabled={!enabled || !range}
-      title={
-        !enabled
-          ? "Source navigation is unavailable while showing the last-valid diagram."
-          : undefined
-      }
+      title={!enabled ? messages["outline.sourceUnavailable"] : undefined}
       onClick={() => onClick(selection)}
     >
-      Line {range?.startLine ?? "—"}
+      {messages["outline.line"](String(range?.startLine ?? "—"))}
     </button>
   );
 }
@@ -439,12 +455,4 @@ function formatReference(
       return `${table ? qualifiedTableName(table) : endpoint.tableKey}.(${columns.join(", ")}) ${formatMultiplicity(endpoint)}`;
     })
     .join(" ↔ ");
-}
-
-function formatInventory(tables: number, groups: number, references: number): string {
-  return `${tables} ${plural(tables, "table")} · ${groups} ${plural(groups, "group")} · ${references} ${plural(references, "relationship")}`;
-}
-
-function plural(count: number, noun: string): string {
-  return count === 1 ? noun : `${noun}s`;
 }

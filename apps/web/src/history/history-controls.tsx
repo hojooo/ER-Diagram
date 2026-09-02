@@ -2,6 +2,8 @@ import type { ProjectRevisionsResponse, SchemaRevisionSummary } from "@er-diagra
 import * as Dialog from "@radix-ui/react-dialog";
 import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 
+import type { UiMessages } from "../localization/messages.js";
+import { useUiLocale } from "../localization/ui-locale.js";
 import type {
   SchemaHistorySessionController,
   SchemaHistorySessionSnapshot,
@@ -20,6 +22,7 @@ export function SchemaHistoryControls({
   interactionDisabled = false,
   compact = false,
 }: SchemaHistoryControlsProps) {
+  const { messages } = useUiLocale();
   const snapshot = useSyncExternalStore(
     session.subscribe,
     session.getSnapshot,
@@ -69,27 +72,31 @@ export function SchemaHistoryControls({
 
   return (
     <section
-      aria-label="Schema history"
+      aria-label={messages["history.label"]}
       className={compact ? "contents" : "rounded-xl border border-slate-700 bg-slate-900/70 p-3"}
     >
       <div className={`flex items-center gap-2 ${compact ? "shrink-0" : "flex-wrap"}`}>
         <button
-          aria-label={`Undo schema change, ${formatStepCount(snapshot.past.length)} available`}
+          aria-label={messages["history.undoAvailable"](
+            messages["history.steps"](snapshot.past.length),
+          )}
           className={secondaryButtonClass}
           type="button"
           disabled={interactionDisabled || !snapshot.canUndo}
           onClick={() => void runUndo()}
         >
-          Undo <span aria-hidden="true">({snapshot.past.length})</span>
+          {messages["history.undo"]} <span aria-hidden="true">({snapshot.past.length})</span>
         </button>
         <button
-          aria-label={`Redo schema change, ${formatStepCount(snapshot.future.length)} available`}
+          aria-label={messages["history.redoAvailable"](
+            messages["history.steps"](snapshot.future.length),
+          )}
           className={secondaryButtonClass}
           type="button"
           disabled={interactionDisabled || !snapshot.canRedo}
           onClick={() => void runRedo()}
         >
-          Redo <span aria-hidden="true">({snapshot.future.length})</span>
+          {messages["history.redo"]} <span aria-hidden="true">({snapshot.future.length})</span>
         </button>
 
         <Dialog.Root
@@ -105,11 +112,11 @@ export function SchemaHistoryControls({
         >
           <Dialog.Trigger asChild>
             <button
-              aria-label={compact ? "Revision history" : undefined}
+              aria-label={compact ? messages["history.revisionHistory"] : undefined}
               className={secondaryButtonClass}
               type="button"
             >
-              {compact ? "History" : "Revision history"}
+              {compact ? messages["history.short"] : messages["history.revisionHistory"]}
             </button>
           </Dialog.Trigger>
           <RevisionHistoryDialog
@@ -136,14 +143,14 @@ export function SchemaHistoryControls({
       </div>
 
       <p className="sr-only" aria-live="polite" aria-atomic="true">
-        {historyStatusMessage(snapshot)}
+        {historyStatusMessage(snapshot, messages)}
       </p>
       {snapshot.error ? (
         <div className="mt-3 rounded-lg border border-red-300/50 bg-red-950/30 p-3" role="alert">
           <p className="font-semibold text-red-100">{snapshot.error.message}</p>
           {snapshot.error.correlationId ? (
             <p className="mt-1 text-xs text-red-100/80">
-              Correlation ID: {snapshot.error.correlationId}
+              {messages["error.correlationId"](snapshot.error.correlationId)}
             </p>
           ) : null}
           {snapshot.status === "UNKNOWN_OUTCOME" && snapshot.pendingOperation ? (
@@ -153,7 +160,7 @@ export function SchemaHistoryControls({
               disabled={interactionDisabled}
               onClick={() => void retrySafely()}
             >
-              Retry safely
+              {messages["history.retrySafely"]}
             </button>
           ) : null}
         </div>
@@ -185,33 +192,35 @@ function RevisionHistoryDialog({
   readonly onCancelRestore: () => void;
   readonly onConfirmRestore: () => Promise<void>;
 }) {
+  const { formatDate, messages } = useUiLocale();
   const restoreTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   return (
     <Dialog.Portal>
       <Dialog.Overlay className="fixed inset-0 z-40 bg-slate-950/80" />
       <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[min(94vw,56rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6 text-slate-100 shadow-2xl">
-        <Dialog.Title className="text-xl font-semibold">Revision history</Dialog.Title>
+        <Dialog.Title className="text-xl font-semibold">
+          {messages["history.revisionHistory"]}
+        </Dialog.Title>
         <Dialog.Description className="mt-2 text-sm leading-6 text-slate-300">
-          Durable revisions contain source-free summaries here. Restoring creates a new checkpoint
-          revision and does not restore diagram layouts.
+          {messages["history.description"]}
         </Dialog.Description>
 
         {loading ? (
           <p className="mt-6 text-sm text-slate-300" role="status">
-            Loading revision history
+            {messages["history.loading"]}
           </p>
         ) : loadFailed ? (
           <div className="mt-6 rounded-lg border border-red-300/50 bg-red-950/30 p-3" role="alert">
-            <p>Revision history could not be loaded.</p>
+            <p>{messages["history.loadError"]}</p>
             <button className={`${secondaryButtonClass} mt-3`} type="button" onClick={onRetryLoad}>
-              Try again
+              {messages["action.tryAgain"]}
             </button>
           </div>
         ) : revisions.length === 0 ? (
-          <p className="mt-6 text-sm text-slate-300">No revisions are available.</p>
+          <p className="mt-6 text-sm text-slate-300">{messages["history.empty"]}</p>
         ) : (
-          <ol className="mt-6 space-y-3" aria-label="Project revisions">
+          <ol className="mt-6 space-y-3" aria-label={messages["history.projectRevisions"]}>
             {revisions.map((revision) => {
               const current = revision.revisionNo === snapshot.current.revisionNo;
               return (
@@ -219,17 +228,19 @@ function RevisionHistoryDialog({
                   key={revision.id}
                   className="rounded-xl border border-slate-700 bg-slate-950/60 p-4"
                 >
-                  <article aria-label={`Revision ${revision.revisionNo}`}>
+                  <article aria-label={messages["history.revision"](revision.revisionNo)}>
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <h3 className="font-semibold">Revision {revision.revisionNo}</h3>
+                        <h3 className="font-semibold">
+                          {messages["history.revision"](revision.revisionNo)}
+                        </h3>
                         <p className="mt-1 text-sm text-slate-300">
                           {revision.validity} · {revision.origin}
                         </p>
                       </div>
                       {current ? (
                         <button className={secondaryButtonClass} type="button" disabled>
-                          Current revision
+                          {messages["history.current"]}
                         </button>
                       ) : (
                         <button
@@ -241,26 +252,36 @@ function RevisionHistoryDialog({
                             onSelectRestore(revision);
                           }}
                         >
-                          Restore revision {revision.revisionNo}
+                          {messages["history.restore"](revision.revisionNo)}
                         </button>
                       )}
                     </div>
                     <dl className="mt-3 grid gap-2 text-xs text-slate-300 sm:grid-cols-2">
-                      <SummaryDetail label="Created">
-                        <time dateTime={revision.createdAt}>{revision.createdAt}</time>
+                      <SummaryDetail label={messages["history.created"]}>
+                        <time dateTime={revision.createdAt}>
+                          {formatDate(revision.createdAt, {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}
+                        </time>
                       </SummaryDetail>
-                      <SummaryDetail label="Parser">{revision.parserVersion}</SummaryDetail>
-                      <SummaryDetail label="Diagnostics">
-                        {formatDiagnosticCounts(revision)}
+                      <SummaryDetail label={messages["runtime.parser"]}>
+                        {revision.parserVersion}
                       </SummaryDetail>
-                      <SummaryDetail label="Source hash">
+                      <SummaryDetail label={messages["history.diagnostics"]}>
+                        {messages["history.diagnosticCounts"](
+                          revision.diagnosticSummary.errors,
+                          revision.diagnosticSummary.warnings,
+                          revision.diagnosticSummary.infos,
+                        )}
+                      </SummaryDetail>
+                      <SummaryDetail label={messages["history.sourceHash"]}>
                         <code className="break-all">{revision.sourceHash}</code>
                       </SummaryDetail>
                     </dl>
                     {revision.validity === "INVALID" ? (
                       <p className="mt-3 text-xs leading-5 text-amber-200">
-                        Restoring this invalid revision keeps the last-valid diagram available until
-                        the draft becomes valid again.
+                        {messages["history.invalidSummary"]}
                       </p>
                     ) : null}
                   </article>
@@ -273,7 +294,7 @@ function RevisionHistoryDialog({
         <div className="mt-6 flex justify-end">
           <Dialog.Close asChild>
             <button className={secondaryButtonClass} type="button">
-              Close history
+              {messages["history.close"]}
             </button>
           </Dialog.Close>
         </div>
@@ -303,6 +324,7 @@ function RestoreConfirmationDialog({
   readonly onCancel: () => void;
   readonly onConfirm: () => Promise<void>;
 }) {
+  const { messages } = useUiLocale();
   const cancelRef = useRef<HTMLButtonElement>(null);
   return (
     <Dialog.Root
@@ -325,18 +347,12 @@ function RestoreConfirmationDialog({
           }}
         >
           <Dialog.Title className="text-xl font-semibold">
-            Restore revision {revision?.revisionNo}?
+            {messages["history.restoreQuestion"](revision?.revisionNo ?? null)}
           </Dialog.Title>
           <Dialog.Description className="mt-3 space-y-2 text-sm leading-6 text-slate-300">
-            <span className="block">
-              This appends a RESTORE checkpoint with the selected revision source. Diagram layouts
-              are not restored.
-            </span>
+            <span className="block">{messages["history.restoreDescription"]}</span>
             {revision?.validity === "INVALID" ? (
-              <span className="block text-amber-200">
-                This revision is invalid. The current last-valid diagram remains available while the
-                restored draft is invalid.
-              </span>
+              <span className="block text-amber-200">{messages["history.restoreInvalid"]}</span>
             ) : null}
           </Dialog.Description>
           <div className="mt-6 flex flex-row-reverse flex-wrap gap-3">
@@ -346,7 +362,7 @@ function RestoreConfirmationDialog({
               disabled={locked || !revision}
               onClick={() => void onConfirm()}
             >
-              Restore revision {revision?.revisionNo}
+              {revision ? messages["history.restore"](revision.revisionNo) : null}
             </button>
             <button
               ref={cancelRef}
@@ -355,7 +371,7 @@ function RestoreConfirmationDialog({
               disabled={locked}
               onClick={onCancel}
             >
-              Cancel
+              {messages["action.cancel"]}
             </button>
           </div>
         </Dialog.Content>
@@ -379,37 +395,31 @@ function SummaryDetail({
   );
 }
 
-function formatDiagnosticCounts(revision: SchemaRevisionSummary): string {
-  const { errors, warnings, infos } = revision.diagnosticSummary;
-  return `${errors} errors · ${warnings} warnings · ${infos} info`;
-}
-
-function formatStepCount(count: number): string {
-  return `${count} ${count === 1 ? "step" : "steps"}`;
-}
-
-function historyStatusMessage(snapshot: SchemaHistorySessionSnapshot): string {
+function historyStatusMessage(
+  snapshot: SchemaHistorySessionSnapshot,
+  messages: UiMessages,
+): string {
   switch (snapshot.status) {
     case "FLUSHING_SOURCE":
-      return "Saving source before the history operation.";
+      return messages["history.statusFlushingSource"];
     case "FLUSHING_LAYOUT":
-      return "Saving diagram layouts before the history operation.";
+      return messages["history.statusFlushingLayout"];
     case "UNDOING":
-      return "Undoing the last schema revision.";
+      return messages["history.statusUndoing"];
     case "REDOING":
-      return "Redoing the next schema revision.";
+      return messages["history.statusRedoing"];
     case "RESTORING":
-      return "Restoring the selected durable revision.";
+      return messages["history.statusRestoring"];
     case "SUCCEEDED":
-      return "Schema history operation completed.";
+      return messages["history.statusSucceeded"];
     case "UNKNOWN_OUTCOME":
-      return "The history outcome is unknown. Retry safely to confirm it.";
+      return messages["history.statusUnknown"];
     case "CONFLICT":
-      return "Schema history was reset because the project changed.";
+      return messages["history.statusConflict"];
     case "ERROR":
-      return "The schema history operation failed.";
+      return messages["history.statusError"];
     case "IDLE":
-      return `Schema history ready. ${snapshot.past.length} undo and ${snapshot.future.length} redo steps available.`;
+      return messages["history.statusIdle"](snapshot.past.length, snapshot.future.length);
   }
 }
 

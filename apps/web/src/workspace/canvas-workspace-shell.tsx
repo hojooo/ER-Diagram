@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import type { DiagramViewportInsets } from "../diagram/base-schema-diagram-contract.js";
+import { useUiLocale } from "../localization/ui-locale.js";
 
 export type WorkspaceLeftSurface = "SOURCE" | "OUTLINE" | null;
 
@@ -156,6 +157,7 @@ export function CanvasWorkspaceShell({
   readonly diagramControlsElement?: HTMLElement | null;
   readonly onViewportInsetsChange?: (insets: DiagramViewportInsets) => void;
 }) {
+  const { messages } = useUiLocale();
   const rootRef = useRef<HTMLDivElement>(null);
   const commandBarRef = useRef<HTMLDivElement>(null);
   const leftDockRef = useRef<HTMLDivElement>(null);
@@ -205,7 +207,7 @@ export function CanvasWorkspaceShell({
       >
         <section
           id="workspace-source-surface"
-          aria-label="DBML source"
+          aria-label={messages["source.surface"]}
           aria-hidden={!sourceOpen}
           inert={!sourceOpen}
           onKeyDown={(event) => {
@@ -219,7 +221,7 @@ export function CanvasWorkspaceShell({
         </section>
         <section
           id="workspace-outline-surface"
-          aria-label="Schema outline"
+          aria-label={messages["outline.label"]}
           aria-hidden={!outlineOpen}
           inert={!outlineOpen}
           onKeyDown={(event) => {
@@ -236,7 +238,7 @@ export function CanvasWorkspaceShell({
       <aside
         ref={inspectorRef}
         id="workspace-inspector-surface"
-        aria-label="Visual schema inspector"
+        aria-label={messages["inspector.title"]}
         aria-hidden={!surfaces.inspectorOpen}
         inert={!surfaces.inspectorOpen}
         onKeyDown={(event) => {

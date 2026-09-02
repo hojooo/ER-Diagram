@@ -9,6 +9,7 @@ import {
   Position,
 } from "@xyflow/react";
 import { type CSSProperties, createContext, memo, useContext } from "react";
+import { useUiLocale } from "../localization/ui-locale.js";
 import type { DiagramSelection } from "./source-navigation.js";
 import type { GroupDiagramNode, SchemaDiagramEdge, TableDiagramNode } from "./types.js";
 
@@ -34,13 +35,19 @@ export const GroupDiagramNodeComponent = memo(function GroupDiagramNodeComponent
   data,
 }: NodeProps<GroupDiagramNode>) {
   const { toggleGroup } = useContext(DiagramInteractionContext);
-  const action = data.collapsed ? "Expand" : "Collapse";
+  const { messages } = useUiLocale();
+  const action = data.collapsed ? messages["action.expand"] : messages["action.collapse"];
   const qualifiedName = `${data.schemaName}.${data.name}`;
   const safeColor = safeGroupColor(data.color);
   return (
     <section
       className={`diagram-group ${data.collapsed ? "is-collapsed" : ""} ${data.selectedElementKey ? "is-selected" : ""}`}
-      aria-label={`Table group ${qualifiedName}, ${data.tableCount} tables, ${data.collapsed ? "collapsed" : "expanded"}, Color ${data.color ?? "default"}`}
+      aria-label={messages["diagram.groupAccessibleName"](
+        qualifiedName,
+        data.tableCount,
+        data.collapsed ? messages["diagram.stateCollapsed"] : messages["diagram.stateExpanded"],
+        data.color ?? messages["outline.defaultColor"],
+      )}
       style={safeColor ? ({ "--diagram-group-color": safeColor } as CSSProperties) : undefined}
     >
       <Handle type="target" position={Position.Left} />
@@ -49,13 +56,15 @@ export const GroupDiagramNodeComponent = memo(function GroupDiagramNodeComponent
           <p className="diagram-kicker">TableGroup</p>
           <p className="diagram-group__schema">{data.schemaName}</p>
           <h2>{data.name}</h2>
-          <p className="diagram-group__color">Color {data.color ?? "default"}</p>
+          <p className="diagram-group__color">
+            {messages["diagram.groupColor"](data.color ?? messages["outline.defaultColor"])}
+          </p>
         </div>
         <button
           className="nodrag nopan diagram-group__toggle"
           type="button"
           aria-expanded={!data.collapsed}
-          aria-label={`${action} ${qualifiedName}`}
+          aria-label={messages["diagram.toggleGroup"](action, qualifiedName)}
           onClick={(event) => {
             event.stopPropagation();
             toggleGroup(data.groupKey);
@@ -65,7 +74,9 @@ export const GroupDiagramNodeComponent = memo(function GroupDiagramNodeComponent
         </button>
       </header>
       {data.collapsed ? (
-        <p className="diagram-group__summary">{data.tableCount} tables collapsed</p>
+        <p className="diagram-group__summary">
+          {messages["diagram.tablesCollapsed"](data.tableCount)}
+        </p>
       ) : null}
       <Handle type="source" position={Position.Right} />
     </section>
@@ -76,6 +87,7 @@ export const TableDiagramNodeComponent = memo(function TableDiagramNodeComponent
   data,
 }: NodeProps<TableDiagramNode>) {
   const { activateElement } = useContext(DiagramInteractionContext);
+  const { messages } = useUiLocale();
   const displayedColumns =
     data.lod === "FULL"
       ? data.columns
@@ -86,7 +98,7 @@ export const TableDiagramNodeComponent = memo(function TableDiagramNodeComponent
   return (
     <article
       className={`diagram-table ${data.selectedElementKey ? "is-selected" : ""}`}
-      aria-label={`Table ${data.schemaName}.${data.name}`}
+      aria-label={messages["diagram.tableAccessibleName"](`${data.schemaName}.${data.name}`)}
     >
       <Handle type="target" position={Position.Left} />
       <header className="diagram-table__header">
@@ -154,6 +166,7 @@ export const ReferenceDiagramEdgeComponent = memo(function ReferenceDiagramEdgeC
   props: EdgeProps<SchemaDiagramEdge>,
 ) {
   const { showEdgeLabels } = useContext(DiagramInteractionContext);
+  const { messages } = useUiLocale();
   // Dense overview projections keep every relationship visible, but avoid calculating hundreds
   // of orthogonal routes that cannot be distinguished at the fitted overview zoom. Focused views
   // retain the labeled smooth-step route.
@@ -163,13 +176,13 @@ export const ReferenceDiagramEdgeComponent = memo(function ReferenceDiagramEdgeC
   const count = props.data?.count ?? 1;
   const label =
     count > 1
-      ? `×${count} relationships`
+      ? messages["diagram.relationshipCount"](count)
       : [
-          props.data?.referenceName ?? "Ref",
+          props.data?.referenceName ?? messages["diagram.ref"],
           props.data?.sourceMultiplicity && props.data?.targetMultiplicity
             ? `${props.data.sourceMultiplicity} → ${props.data.targetMultiplicity}`
             : null,
-          props.data?.inactive ? "Inactive" : null,
+          props.data?.inactive ? messages["outline.inactive"] : null,
         ]
           .filter((part): part is string => part !== null)
           .join(" · ");

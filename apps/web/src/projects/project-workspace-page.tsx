@@ -2,6 +2,7 @@ import { projectIdSchema } from "@er-diagram/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
+import { useUiLocale } from "../localization/ui-locale.js";
 import {
   ProjectSourceWorkspace,
   type ProjectWorkspaceAdapters,
@@ -16,6 +17,7 @@ export function ProjectWorkspacePage({
   readonly adapters?: ProjectWorkspaceAdapters;
 }) {
   const api = useProjectApi();
+  const { messages } = useUiLocale();
   const queryClient = useQueryClient();
   const params = useParams();
   const parsedProjectId = projectIdSchema.safeParse(params.projectId);
@@ -35,10 +37,10 @@ export function ProjectWorkspacePage({
     return (
       <section className="grid h-full place-items-center bg-slate-950 p-5 text-slate-300">
         <h1 data-route-loading="true" className="font-semibold text-slate-100">
-          Loading project
+          {messages["workspace.loadingProject"]}
         </h1>
         <p className="mt-2" aria-live="polite">
-          Loading project…
+          {messages["workspace.loadingProjectMessage"]}
         </p>
       </section>
     );
@@ -50,10 +52,14 @@ export function ProjectWorkspacePage({
         className="mx-auto mt-24 max-w-xl rounded-xl border border-red-400/40 bg-red-950/30 p-6"
         role="alert"
       >
-        <h1 className="text-xl font-semibold text-red-100">Project could not be loaded</h1>
-        <p className="mt-2 text-sm text-red-100/80">No project source was changed.</p>
+        <h1 className="text-xl font-semibold text-red-100">
+          {messages["workspace.loadErrorTitle"]}
+        </h1>
+        <p className="mt-2 text-sm text-red-100/80">{messages["workspace.loadErrorMessage"]}</p>
         {error?.correlationId ? (
-          <p className="mt-2 text-xs text-red-100/70">Correlation ID: {error.correlationId}</p>
+          <p className="mt-2 text-xs text-red-100/70">
+            {messages["error.correlationId"](error.correlationId)}
+          </p>
         ) : null}
         <div className="mt-5 flex flex-wrap gap-3">
           <button
@@ -61,7 +67,7 @@ export function ProjectWorkspacePage({
             type="button"
             onClick={() => void projectQuery.refetch()}
           >
-            Try again
+            {messages["action.tryAgain"]}
           </button>
           <BackToProjectsLink />
         </div>
@@ -83,24 +89,24 @@ export function ProjectWorkspacePage({
 }
 
 function ProjectNotFound() {
+  const { messages } = useUiLocale();
   return (
     <section className="mx-auto mt-24 max-w-xl rounded-2xl border border-slate-800 bg-slate-900 p-8 text-center">
-      <h1 className="text-2xl font-semibold text-white">Project not found</h1>
-      <p className="mt-3 text-slate-300">
-        The project may have been deleted or the link is invalid.
-      </p>
+      <h1 className="text-2xl font-semibold text-white">{messages["workspace.notFoundTitle"]}</h1>
+      <p className="mt-3 text-slate-300">{messages["workspace.notFoundMessage"]}</p>
       <BackToProjectsLink extraClass="mt-6" />
     </section>
   );
 }
 
 function BackToProjectsLink({ extraClass = "" }: { readonly extraClass?: string }) {
+  const { messages } = useUiLocale();
   return (
     <Link
       className={`inline-flex min-h-11 items-center rounded-lg border border-slate-700 px-4 font-semibold text-slate-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300 ${extraClass}`}
       to="/"
     >
-      Back to projects
+      {messages["route.backToProjects"]}
     </Link>
   );
 }
