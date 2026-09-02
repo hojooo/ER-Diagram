@@ -244,7 +244,7 @@ function renderApp(api: ProjectApi, initialEntry = "/") {
     }),
     { initialEntries: [initialEntry] },
   );
-  return render(<App api={api} queryClient={queryClient} router={router} />);
+  return render(<App api={api} queryClient={queryClient} router={router} initialLocale="en" />);
 }
 
 const TestSourceEditor: SourceEditorComponent = ({ initialSource, onChange }) => (

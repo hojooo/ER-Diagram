@@ -806,7 +806,7 @@ function FakeSchemaDiagram({
   const selection = useStore(selectionStore, (state) => state.selection);
   const table = graph.tables[0];
   return (
-    <div role="application" aria-label="ER diagram canvas">
+    <div role="application" aria-label="ER diagram canvas" data-schema-history-scope="diagram">
       <svg aria-label="Fake relationships">
         <g data-testid="fake-relationship-edge" tabIndex={0} />
       </svg>
@@ -1031,7 +1031,9 @@ function renderWorkspace(api: SourceProjectApi) {
     }),
     { initialEntries: [`/projects/${PROJECT_ID}`] },
   );
-  const rendered = render(<App api={api} queryClient={queryClient} router={router} />);
+  const rendered = render(
+    <App api={api} queryClient={queryClient} router={router} initialLocale="en" />,
+  );
   return { ...rendered, queryClient, router, parserClient };
 }
 

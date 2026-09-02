@@ -68,7 +68,9 @@ function renderApplication() {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: ["/"] });
-  const rendered = render(<App api={api} queryClient={queryClient} router={router} />);
+  const rendered = render(
+    <App api={api} queryClient={queryClient} router={router} initialLocale="en" />,
+  );
   return { ...rendered, router };
 }
 

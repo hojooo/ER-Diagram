@@ -347,7 +347,7 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
     overlay 간 충돌, 가려진 critical action과 예기치 않은 background interaction이 없음을 검증한다.
   - 143-table profile의 cold interactive·view switch·FPS gate와 production Browser keyboard flow를 재검증한다.
   - 검증: `pnpm test:e2e canvas-workspace && pnpm test:perf && pnpm test:accessibility`
-- [ ] `M4-015` Korean-first Web localization·language selection
+- [x] `M4-015` Korean-first Web localization·language selection
   - 전체 Web product workflow에 `한국어 | English` 선택을 제공하고 최초 기본값을 browser 설정과 관계없이
     한국어로 고정한다.
   - versioned client-only preference를 유효한 경우에만 복구하고 locale 전환이 source, diagram, query cache,
