@@ -113,6 +113,8 @@ jobs:
         run: pnpm test:m2-gate
       - name: Run Milestone 3 acceptance gate
         run: pnpm test:m3-gate
+      - name: Run complete P0 production acceptance
+        run: pnpm test:p0-gate
       - name: Run production performance acceptance
         run: pnpm test:perf
 

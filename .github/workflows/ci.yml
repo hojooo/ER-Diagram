@@ -212,6 +212,8 @@ jobs:
         run: pnpm test:container
       - name: Verify production lifecycle and offline runtime
         run: pnpm test:runtime-lifecycle
+      - name: Verify complete P0 production acceptance
+        run: pnpm test:p0-gate
       - name: Verify M4 production performance acceptance
         run: pnpm test:perf
       - name: Run end-to-end tests
