@@ -347,7 +347,13 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
     overlay 간 충돌, 가려진 critical action과 예기치 않은 background interaction이 없음을 검증한다.
   - 143-table profile의 cold interactive·view switch·FPS gate와 production Browser keyboard flow를 재검증한다.
   - 검증: `pnpm test:e2e canvas-workspace && pnpm test:perf && pnpm test:accessibility`
-- [ ] `P0-RELEASE` M4-012~M4-014 디자인 재정비, `pnpm ci:verify`, Release Gate A~F, OrbStack restore drill,
+- [ ] `M4-015` Korean-first Web localization·language selection
+  - 전체 Web product workflow에 `한국어 | English` 선택을 제공하고 최초 기본값을 browser 설정과 관계없이
+    한국어로 고정한다.
+  - versioned client-only preference를 유효한 경우에만 복구하고 locale 전환이 source, diagram, query cache,
+    layout session과 visual form draft를 remount·초기화하지 않도록 한다.
+  - 검증: `pnpm --filter @er-diagram/web test test/localization.test.tsx`
+- [ ] `P0-RELEASE` M4-012~M4-015 디자인·언어 재정비, `pnpm ci:verify`, Release Gate A~F, OrbStack restore drill,
       source/image mapping과 exact candidate approval 통과 후에만 `v0.1.0` tag 생성
   - preparation gate는 `P0_RELEASE_EVIDENCE_VERSION = 1` profile과 `pnpm test:p0-release`로 online backup,
     source volume 제거, plan-hash Apply와 replacement restart를 검증한다.

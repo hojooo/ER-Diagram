@@ -1184,7 +1184,22 @@ virtualization, viewport culling, label LOD, edge simplification을 순서대로
 - Axe는 전체 WCAG 적합성 인증으로 표현하지 않는다. Current stable Chromium의 versioned manual keyboard
   checklist가 함께 PASS한 뒤에만 accessibility gate를 완료한다.
 
-### 16.4 호환성
+### 16.4 언어와 localization
+
+- Web UI는 `한국어 | English`를 제공하며 최초 기본 언어는 browser·OS locale과 관계없이
+  한국어다.
+- 선택한 언어는 versioned browser-local preference에만 저장하고 URL, project data, server log·API에
+  전송하지 않는다. 저장소가 없거나 손상됐거나 접근이 실패하면 한국어로 fallback한다.
+- Locale 전환은 current route, Query cache, Monaco model, diagram, source·layout session과 visual form draft를
+  remount·초기화하지 않는다.
+- Project Home, Canvas workspace, Source·Outline·Inspector, 20종 visual command, history, SQL import·export,
+  portable bundle, startup·route·error과 접근성 문구는 한국어·영어 catalog를 동일한 계약으로 제공한다.
+- Project·schema name, DBML·SQL source, note·comment, hash, code, correlation ID와 download byte는
+  번역하지 않는다. Parser·server diagnostic message도 정확성을 위해 원문을 유지하고 제목,
+  상태와 recovery action만 locale에 맞게 표시한다.
+- 날짜·숫자 formatting은 각각 `ko-KR`, `en-US`를 명시해 runtime environment에 따른 drift를 막는다.
+
+### 16.5 호환성
 
 - 표준 DBML file은 별도 제품 metadata 없이 내보낼 수 있어야 한다.
 - layout은 optional sidecar이므로 제거해도 schema 의미가 바뀌지 않는다.
