@@ -1348,8 +1348,11 @@ nullable source/image reference를 사용한다. Release build는 stable SemVer,
 `ghcr.io/hojooo/er-diagram:<version>`이 모두 일치해야 한다. Production은 packaged `/app/release.json`을 SQLite open
 전에 검증하고 Project Home과 단일 `SERVER_RELEASE_IDENTITY` operational event가 같은 evidence를 표시한다.
 
-`workflow_dispatch`는 arbitrary ref의 gate와 `linux/amd64`, `linux/arm64` dry run만 수행하며 registry write 권한을
-사용하지 않는다. Exact `vMAJOR.MINOR.PATCH` tag가 `main` ancestry에 있을 때만 GHCR와 GitHub Release를 게시한다.
+`workflow_dispatch`는 arbitrary ref, stable version과 full expected revision의 exact match를 검증한 뒤 gate와
+`linux/amd64`, `linux/arm64` dry run만 수행하며 registry write 권한을 사용하지 않는다. Exact
+`vMAJOR.MINOR.PATCH` tag가 `main` ancestry에 있고 tag version·peeled commit이 repository의
+`RELEASE_APPROVED_VERSION`, `RELEASE_APPROVED_REVISION`과 일치할 때만 GHCR와 GitHub Release를 게시한다. Approval
+검사는 registry login과 모든 write보다 먼저 수행하며 variable에는 credential을 저장하지 않는다.
 Exact version은 immutable하며 같은 source·OCI evidence replay만 허용한다. `latest`는 가장 높은 stable version에만
 부여하고 major/minor floating tag와 prerelease는 만들지 않는다.
 
@@ -1357,8 +1360,9 @@ Index와 manifest annotation 및 platform config label은 source repository, rev
 description을 포함한다. 두 platform에서 non-root user, packaged Web, native SQLite와 resource worker를 실행하고
 authentication을 제거한 digest pull이 성공해야 GitHub Release를 만든다. Image digest는 self-reference이므로 image
 내부에 넣지 않고 한글 GitHub Release evidence가 tag·commit·digest를 연결한다. 첫 GHCR package가 private이면
-Public 전환 뒤 같은 workflow를 replay하며 exact image는 다시 push하지 않는다. 실제 P0 tag는 M4-011과
-`P0-RELEASE`가 완료된 뒤에만 생성한다.
+Public 전환 뒤 같은 workflow를 replay하며 exact image는 다시 push하지 않는다. 최초 public identity는
+`v0.1.0`·`ghcr.io/hojooo/er-diagram:0.1.0`이다. Preparation gate와 candidate approval을 완료한 뒤 tag를 생성하며,
+`P0-RELEASE` task 자체는 원격 image·Release·asset 검증 뒤 별도 evidence 변경에서 완료한다.
 
 ### 18.4 P0 SBOM과 third-party source evidence
 
@@ -1395,8 +1399,15 @@ Acceptance는 external connectivity가 없는 application network에서 다음�
 - runtime release identity, CSP, operational-log redaction과 outbound request 부재
 
 `pnpm test:p0-gate`는 test-owned container, internal/ingress network와 두 named volume만 사용하고 source-free JSON
-evidence를 출력한다. 이 gate의 성공 상태는 `READY_FOR_P0_RELEASE`다. Stable tag 생성, GHCR publish와 운영자
-OrbStack whole-volume restore drill은 별도 `P0-RELEASE` gate가 완료되기 전까지 실행하지 않는다.
+evidence를 출력한다. 이 gate의 성공 상태는 `READY_FOR_P0_RELEASE`다. 별도 `pnpm test:p0-release`는 exact
+`orbstack` context와 clean tracked tree에서 `v0.1.0 + full HEAD` image를 build하고, product table 전체를 채운 실행 중
+SQLite를 online backup한 뒤 source container·volume을 제거한다. Fresh volume의 restore dry-run이 발급한 exact
+plan hash로 Apply하고 restored server와 replacement server에서 project/revision/layout/artifact/receipt,
+`app_metadata`, migration journal과 release identity를 read-back한다. 이 gate는 원본 source, SQL, filesystem path와
+container resource name을 evidence에 포함하지 않는다.
+
+실제 tag는 final `main`의 complete gate, release-mode dry run, OrbStack drill과 exact candidate approval 뒤에만 만든다.
+GHCR·GitHub Release 게시와 `verify:release` 원격 검증 전까지 `P0-RELEASE`는 미완료다.
 
 ## 19. 관측성과 오류 모델
 
@@ -1540,6 +1551,7 @@ P0 release는 다음 조건을 모두 충족해야 한다.
 
 - mounted volume persistence
 - backup/restore drill 통과
+- OrbStack에서 online whole-volume backup, source volume 제거, plan-hash restore와 replacement restart 통과
 - version·healthcheck 노출
 - core workflow offline 동작
 
@@ -1550,10 +1562,14 @@ P0 release는 다음 조건을 모두 충족해야 한다.
 - `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES`, deterministic CycloneDX 제공
 - `linux/amd64`, `linux/arm64` image manifest별 SPDX attestation 검증
 - Apache-2.0·MIT·EPL-2.0 dependency의 고지와 exact ELK source archive 제공 조건 검토
+- approved version·full source revision과 tag commit의 exact match
+- exact version·`latest` digest, anonymous pull과 GitHub Release asset 원격 검증
 
 Gate A~F의 package-level evidence와 production boundary를 함께 닫는 focused command는
 `pnpm test:p0-gate`다. 이 명령은 Gate A~F의 기존 명령을 대체하지 않고 서로 다른 package evidence가 동일한
-packaged runtime에서 연결되는지를 검증한다.
+packaged runtime에서 연결되는지를 검증한다. 최초 publication의 operational recovery와 image/source mapping은
+`pnpm test:p0-release`, 실제 원격 publication은 `pnpm verify:release --version 0.1.0 --revision <final-main-SHA>`가
+추가로 닫는다.
 
 ## 23. 단계별 개발 순서
 

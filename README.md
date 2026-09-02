@@ -74,11 +74,22 @@ pnpm test:p0-gate
 두 named volume만 생성하고 정리한다. 통과는 `READY_FOR_P0_RELEASE` evidence이며 실제 tag 생성이나 운영 volume
 restore drill을 대신하지 않는다.
 
+최초 public candidate `v0.1.0`의 release identity와 OrbStack whole-volume online backup→source volume 제거→fresh
+volume restore→restart를 검증하려면 clean final candidate에서 다음을 실행한다.
+
+```sh
+pnpm test:release --version 0.1.0 --revision <full-HEAD>
+pnpm test:p0-release
+```
+
+`test:p0-release`는 active Docker context가 정확히 `orbstack`일 때만 실행되며 원본 source 대신 hash, row inventory와
+ordered assertion ID만 출력한다.
+
 Stable release image는 `ghcr.io/hojooo/er-diagram:<version>`으로 게시한다. 운영 배포는 GitHub Release가 기록한
 immutable digest를 우선한다.
 
 ```sh
-docker pull ghcr.io/hojooo/er-diagram:1.0.0
+docker pull ghcr.io/hojooo/er-diagram:0.1.0
 docker pull ghcr.io/hojooo/er-diagram@sha256:<release-digest>
 ```
 
@@ -150,6 +161,7 @@ docs/
 - [ADR 0015: Immutable multi-architecture GHCR release](docs/adr/0015-multi-architecture-ghcr-release.md)
 - [ADR 0016: CycloneDX·SPDX SBOM과 EPL source evidence](docs/adr/0016-sbom-and-epl-source-evidence.md)
 - [ADR 0017: Complete P0 production acceptance](docs/adr/0017-complete-p0-acceptance.md)
+- [ADR 0018: P0 v0.1.0 release candidate와 OrbStack recovery gate](docs/adr/0018-p0-release-gate.md)
 
 운영 backup, restore dry-run/apply와 pre-migration 절차는
 [SQLite volume backup·restore runbook](docs/operations/backup-restore.md)을 따른다.
