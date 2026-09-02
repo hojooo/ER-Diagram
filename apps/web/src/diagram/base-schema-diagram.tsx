@@ -2,7 +2,6 @@ import {
   applyNodeChanges,
   Background,
   BackgroundVariant,
-  Controls,
   type EdgeTypes,
   type NodeTypes,
   ReactFlow,
@@ -531,13 +530,6 @@ export function BaseSchemaDiagram({
           onlyRenderVisibleElements
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
-          <Controls
-            showInteractive={false}
-            style={{
-              right: Math.max(10, viewportInsets.right + 10),
-              bottom: Math.max(10, viewportInsets.bottom + 10),
-            }}
-          />
         </ReactFlow>
       </DiagramInteractionContext.Provider>
     </div>

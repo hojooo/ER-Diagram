@@ -1,7 +1,6 @@
 import {
   Background,
   BackgroundVariant,
-  Controls,
   type EdgeTypes,
   type NodeTypes,
   ReactFlow,
@@ -163,7 +162,6 @@ export function LayoutSpikePage() {
             onlyRenderVisibleElements
           >
             <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
-            <Controls showInteractive={false} />
           </ReactFlow>
         </DiagramInteractionContext.Provider>
       </section>
