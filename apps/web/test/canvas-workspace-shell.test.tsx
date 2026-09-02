@@ -40,6 +40,7 @@ describe("canvas workspace shell", () => {
     expect(document.getElementById("workspace-right-panel-content")).not.toHaveAttribute("inert");
     const tools = screen.getByRole("complementary", { name: "Workspace tools" });
     expect(tools).toHaveClass("inset-y-0", "right-0");
+    expect(tools).toHaveStyle({ width: "512px" });
     expect(within(tools).getByText("Editable ER diagram")).toBeVisible();
     expect(within(tools).getByText("Inspector content")).toBeVisible();
     expect(screen.getByTestId("workspace-diagram-tools")).toHaveClass(
@@ -100,6 +101,7 @@ describe("canvas workspace shell", () => {
       "aria-modal",
       "true",
     );
+    expect(screen.queryByRole("separator", { name: "Resize workspace tools" })).toBeNull();
   });
 
   it("preserves source and inspector drafts while their mounted surfaces are off canvas", () => {
@@ -130,13 +132,51 @@ describe("canvas workspace shell", () => {
       "data-panel-state",
       "collapsed",
     );
-    expect(screen.getByTestId("workspace-right-tool-dock")).toHaveClass("w-14");
+    expect(screen.getByTestId("workspace-right-tool-dock")).toHaveStyle({ width: "56px" });
     expect(document.getElementById("workspace-right-panel-content")).toHaveAttribute("inert");
 
     fireEvent.click(screen.getByRole("button", { name: "Select users table" }));
 
     expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByText("Table public.users")).toBeVisible();
+  });
+
+  it("places a compact toggle before the panel and supports pointer and keyboard resizing", () => {
+    const { unmount } = render(<Harness />);
+
+    const dock = screen.getByTestId("workspace-right-tool-dock");
+    const toggle = screen.getByRole("button", { name: "Collapse workspace tools" });
+    const resizeHandle = screen.getByRole("separator", { name: "Resize workspace tools" });
+
+    expect(toggle).toHaveClass("absolute", "left-0", "size-6");
+    expect(resizeHandle).toHaveAttribute("aria-valuemin", "360");
+    expect(resizeHandle).toHaveAttribute("aria-valuemax", "768");
+    expect(resizeHandle).toHaveAttribute("aria-valuenow", "512");
+
+    fireEvent.pointerDown(resizeHandle, { button: 0, clientX: 768, pointerId: 7 });
+    fireEvent.pointerMove(resizeHandle, { clientX: 688, pointerId: 7 });
+    fireEvent.pointerUp(resizeHandle, { clientX: 688, pointerId: 7 });
+
+    expect(dock).toHaveStyle({ width: "592px" });
+    expect(resizeHandle).toHaveAttribute("aria-valuenow", "592");
+
+    fireEvent.keyDown(resizeHandle, { key: "ArrowRight" });
+    expect(dock).toHaveStyle({ width: "576px" });
+    fireEvent.keyDown(resizeHandle, { key: "Home" });
+    expect(dock).toHaveStyle({ width: "360px" });
+    fireEvent.keyDown(resizeHandle, { key: "End" });
+    expect(dock).toHaveStyle({ width: "768px" });
+
+    fireEvent.click(toggle);
+    expect(dock).toHaveStyle({ width: "56px" });
+    expect(screen.queryByRole("separator", { name: "Resize workspace tools" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace tools" }));
+    expect(dock).toHaveStyle({ width: "768px" });
+
+    unmount();
+    render(<Harness />);
+    expect(screen.getByTestId("workspace-right-tool-dock")).toHaveStyle({ width: "512px" });
   });
 
   it("closes the narrow dialog with Escape and returns focus to its trigger", () => {
@@ -203,7 +243,8 @@ describe("canvas workspace shell", () => {
       }
       if (this instanceof HTMLElement && this.dataset.testid === "workspace-right-tool-dock") {
         const expanded = this.dataset.panelState === "open";
-        return testRect(0, 720, expanded ? 512 : 56, expanded ? 768 : 1_224);
+        const width = expanded ? Number.parseFloat(this.style.width) || 512 : 56;
+        return testRect(0, 720, width, 1_280 - width);
       }
       if (this instanceof HTMLElement && this.classList.contains("top-3")) {
         return testRect(12, 70, 1_120);
@@ -219,6 +260,11 @@ describe("canvas workspace shell", () => {
     expect(await screen.findByText(/"top":82/)).toBeVisible();
     expect(screen.getByText(/"right":524/)).toBeVisible();
     expect(screen.getByText(/"bottom":72/)).toBeVisible();
+
+    fireEvent.keyDown(screen.getByRole("separator", { name: "Resize workspace tools" }), {
+      key: "ArrowLeft",
+    });
+    expect(await screen.findByText(/"right":540/)).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Tools" }));
     expect(await screen.findByText(/"right":68/)).toBeVisible();

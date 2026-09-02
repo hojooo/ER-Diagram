@@ -234,8 +234,8 @@ P2 항목은 P0 요구사항으로 해석하지 않는다. 특히 database conne
 │                                                                        │
 │ Outline / Source       Diagram Canvas        Right tool dock           │
 │ dismissible left dock  persistent background ┌──────┬────────────────┐ │
-│                                              │ rail │ Editable ERD   │ │
-│                                              │ 56px │ view/search/LOD│ │
+│                                   resize ──▶ │ rail │ Editable ERD   │ │
+│                                      toggle  │ 56px │ view/search/LOD│ │
 │                                              │      │ layout         │ │
 │                                              │      ├────────────────┤ │
 │                                              │      │ Inspector      │ │
@@ -256,6 +256,12 @@ workspace는 넓은 화면에서 dock을 연 상태로 시작하고, 좁은 화�
 Diagram controls와 Visual Inspector는 mount를 유지하되 `inert`와 `aria-hidden`으로 비활성화해 검색 상태와 visual
 form draft를 보존한다.
 
+넓은 화면의 dock은 기본 512px이고, panel 앞쪽 경계를 pointer로 끌거나 keyboard separator의 `ArrowLeft`,
+`ArrowRight`, `Home`, `End`를 사용해 360–768px 범위에서 조절할 수 있다. 작은 open/collapse toggle은 rail 내부가
+아니라 panel 앞쪽 경계에 부착해 canvas에서 바로 찾을 수 있게 한다. 조절한 폭은 현재 workspace route session에만
+유지하며 DBML, diagram layout, revision 또는 `localStorage`에는 저장하지 않는다. 좁은 화면의 full-screen dialog에는
+resize handle을 표시하지 않는다.
+
 Dock 상단에는 `Editable ER diagram`, source-defined `DiagramView`, current-view 검색, LOD와 명시적 layout action을
 모은다. 상단 영역은 전체 높이의 절반까지만 사용하고 자체 scroll하며, Visual Inspector는 남은 높이에서 독립적으로
 scroll한다. 검색 결과는 panel flow 안에서 펼쳐져 Inspector나 canvas와 겹치지 않는다. 접힌 rail은 현재 선택한
@@ -268,9 +274,10 @@ Severity 배치는 diagnostic을 숨기거나 source range를 제거하지 않�
 Source surface를 연다.
 
 Overlay는 canvas pan·zoom·drag와 명확한 pointer/wheel boundary를 가져야 하고, keyboard focus order, visible
-focus, Escape/trigger focus return과 narrow viewport의 reflow를 보장해야 한다. Diagram safe area는 열린 right
-panel의 전체 폭 또는 접힌 rail 폭과 command/status/contextual surface만 반영한다. Panel open/close는 현재 camera를
-이동하거나 viewport를 저장하지 않으며, 초기 fit, 검색 focus와 명시적 auto-layout만 최신 safe area를 사용한다.
+focus, Escape/trigger focus return과 narrow viewport의 reflow를 보장해야 한다. Diagram safe area는 조절된 right
+panel의 현재 전체 폭 또는 접힌 rail 폭과 command/status/contextual surface만 반영한다. Panel open/close와 resize는
+현재 camera를 이동하거나 viewport를 저장하지 않으며, 초기 fit, 검색 focus와 명시적 auto-layout만 최신 safe area를
+사용한다.
 Source editing처럼 넓은 작업 면적이 필요한 surface는 확장할 수 있지만 diagram을 별도 sibling page로 교체하지
 않는다. Project Home과 독립적인 SQL import/export·bundle 화면까지 diagram background를 적용하는 것은 이번
 결정에 포함하지 않는다.

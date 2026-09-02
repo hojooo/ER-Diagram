@@ -339,6 +339,8 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
 - [x] `M4-013` workspace overlay interaction·responsive system
   - Full-height right tool dock에 DiagramView·검색·LOD·layout과 Visual Inspector를 통합하고 접힌 56px rail에서도
     현재 selection summary와 명시적 reopen action을 유지한다.
+  - 넓은 화면에서는 panel 앞쪽의 작은 toggle과 accessible separator로 폭을 360–768px 범위에서 조절하고,
+    조절값은 route session에만 유지하며 현재 폭을 diagram safe area에 반영한다.
   - 넓은 valid workspace 기본 open, 좁은 화면 기본 collapsed·full-screen dialog, 독립 scroll, pointer boundary,
     focus trap·Escape·trigger focus return과 panel/rail 기준 safe area를 보장한다.
   - 검증: `pnpm --filter @er-diagram/web test test/workspace-overlays.test.tsx`
