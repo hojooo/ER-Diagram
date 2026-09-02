@@ -34,6 +34,30 @@ test("pins the BuildKit SPDX generator by immutable digest", () => {
   }
 });
 
+test("requires exact approval before tag publication and pins dispatch candidates", () => {
+  const workflow = readFileSync(join(process.cwd(), ".github", "workflows", "release.yml"), "utf8");
+  for (const requiredPolicy of [
+    "expectedRevision:",
+    "RELEASE_EXPECTED_REVISION:",
+    "RELEASE_APPROVED_VERSION:",
+    "RELEASE_APPROVED_REVISION:",
+    "node scripts/check-release-approval.mjs",
+    "pnpm test:release",
+    "needs.validate.outputs.version",
+    "needs.validate.outputs.revision",
+  ]) {
+    assert.ok(
+      workflow.includes(requiredPolicy),
+      `Missing release approval policy: ${requiredPolicy}`,
+    );
+  }
+  assert.ok(
+    workflow.indexOf("node scripts/check-release-approval.mjs") <
+      workflow.indexOf("docker/login-action"),
+    "Candidate approval must precede GHCR authentication",
+  );
+});
+
 test("accepts stable tags only", () => {
   assert.equal(stableVersionFromTag("v1.2.3"), VERSION);
   for (const invalid of ["1.2.3", "v1.2", "v01.2.3", "v1.2.3-rc.1", "v1.2.3+1"]) {

@@ -12,6 +12,19 @@ export {
 } from "./p0-acceptance-profile.js";
 
 export type {
+  P0ReleaseAssertionId,
+  P0ReleaseEvidenceProfile,
+} from "./p0-release-evidence.js";
+export {
+  P0_RELEASE_EVIDENCE_PROFILE_HASH,
+  P0_RELEASE_EVIDENCE_VERSION,
+  P0_RELEASE_IMAGE,
+  P0_RELEASE_TAG,
+  P0_RELEASE_VERSION,
+  p0ReleaseEvidenceProfile,
+} from "./p0-release-evidence.js";
+
+export type {
   M4PerformanceProfile,
   PerformanceFixtureEvidence,
 } from "./performance-profile.js";

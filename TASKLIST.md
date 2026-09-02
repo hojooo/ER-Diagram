@@ -331,7 +331,11 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - Gate A~F command wiring과 outbound·log redaction evidence를 fail-closed로 고정한다.
   - 검증: `pnpm test:p0-gate`
 - [ ] `P0-RELEASE` `pnpm ci:verify`, Release Gate A~F, OrbStack restore drill,
-      source/image mapping 통과 후에만 P0 tag 생성
+      source/image mapping과 exact candidate approval 통과 후에만 `v0.1.0` tag 생성
+  - preparation gate는 `P0_RELEASE_EVIDENCE_VERSION = 1` profile과 `pnpm test:p0-release`로 online backup,
+    source volume 제거, plan-hash Apply와 replacement restart를 검증한다.
+  - 실제 GHCR·GitHub Release 게시와 `pnpm verify:release --version 0.1.0 --revision <final-main-SHA>` 통과 전에는
+    완료 처리하지 않는다.
 
 ### Milestone 5 — P1 Static SELECT Lineage
 

@@ -17,10 +17,35 @@ import {
   validateReleaseAssetDirectory,
   writeSpdxReleaseAssets,
 } from "./release-sbom-assets.mjs";
+import {
+  parseReleaseCandidateArguments,
+  ReleaseCandidateError,
+  validateCandidateCheckoutRevision,
+} from "./release-candidate.mjs";
 
 const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-const sourceRevision = capture("git", ["rev-parse", "HEAD"]);
-const version = "0.0.0";
+const currentRevision = capture("git", ["rev-parse", "HEAD"]);
+let candidate;
+try {
+  candidate = parseReleaseCandidateArguments(process.argv.slice(2), {
+    defaultRevision: currentRevision,
+    defaultVersion: "0.0.0",
+  });
+} catch (error) {
+  const code =
+    error instanceof ReleaseCandidateError ? error.code : "RELEASE_CANDIDATE_ARGUMENT_INVALID";
+  process.stderr.write(`${code}\n`);
+  process.exit(1);
+}
+try {
+  validateCandidateCheckoutRevision(candidate.revision, currentRevision);
+} catch (error) {
+  const code =
+    error instanceof ReleaseCandidateError ? error.code : "RELEASE_CANDIDATE_REVISION_MISMATCH";
+  process.stderr.write(`${code}\n`);
+  process.exit(1);
+}
+const { revision: sourceRevision, version } = candidate;
 const imageReference = `ghcr.io/hojooo/er-diagram:${version}`;
 const temporaryDirectory = mkdtempSync(join(tmpdir(), "er-diagram-release-test-"));
 const archive = join(temporaryDirectory, "image.oci.tar");
