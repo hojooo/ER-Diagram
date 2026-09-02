@@ -74,6 +74,7 @@ profile version 1은 source hash
 | `DEC-015` | 배포 모델 | `CONFIRMED` | source repository와 release image를 open source로 공개한다. 공개 release는 source tag·commit과 대응해야 한다. |
 | `DEC-016` | history와 restore | `CONFIRMED` | Undo·redo는 project별 100단계 browser session history이고 새 `SOURCE_EDIT` revision으로 저장한다. 명시적 revision restore만 pruning되지 않는 `RESTORE` checkpoint를 만들며 layout은 복구하지 않는다. |
 | `DEC-017` | Web·bundle security | `CONFIRMED` | Script·worker는 same-origin CSP로 제한하고 외부 embedding을 차단한다. Portable archive는 bounded ZIP reader로 검증하며 operational log는 allowlist metadata만 기록한다. |
+| `DEC-018` | Canvas-first workspace | `CONFIRMED` | Schema Workspace는 Diagram Canvas를 full-bleed 기본 배경이자 지속적인 작업 맥락으로 유지하고, command bar·source·outline·inspector·history·status surface를 그 위의 overlay로 배치한다. Project Home과 독립 import/export 화면은 별도 결정 전까지 기존 document layout을 유지한다. |
 | `LICENSE-DEC-001` | 정확한 SPDX license | `CONFIRMED` | project source와 자체 산출물은 `Apache-2.0`으로 배포한다. third-party dependency는 각자의 license와 notice 의무를 유지한다. |
 
 24장은 위 결정을 적용한 범위와 open-source release packaging 조건을 기록한다.
@@ -228,17 +229,27 @@ P2 항목은 P0 요구사항으로 해석하지 않는다. 특히 database conne
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ Project / Dialect / Parse Status / Undo / Redo / Export     │
+│ Diagram Canvas · full-bleed persistent background            │
 ├──────────────────────┬───────────────────────────────────────┤
-│ Source Editor        │ Diagram Canvas                        │
-│ - DBML               │ - View selector                       │
-│ - SQL import preview │ - Group controls                      │
-│ - Diagnostics        │ - Search / Detail level               │
-│                      │ - Visual edit inspector               │
+│ Outline / Source     │ Inspector / History overlays          │
+│ - dismiss / expand   │ - visual edit / diagnostics           │
+│ - DBML / Problems    │ - revision / change summary           │
+│ Canvas stays interactive behind explicit overlay boundaries  │
+│ View / Search / LOD / Group controls stay on canvas          │
 ├──────────────────────┴───────────────────────────────────────┤
-│ Conversion report / Problems / Outline / Change summary     │
+│ Save / Parse / Conflict · contextual commands                │
 └──────────────────────────────────────────────────────────────┘
 ```
+
+Diagram Canvas는 workspace의 전체 viewport를 차지하며 route 내 source·visual·layout 작업 동안 remount되지
+않는 기본 layer다. Source editor, outline, visual inspector, history, problems와 command controls는 diagram
+위에 배치되는 dismissible 또는 resizable surface다. Surface를 열고 닫는 동작은 diagram의 saved position,
+viewport, selection과 schema/layout revision을 암묵적으로 변경하지 않는다.
+
+Overlay는 canvas pan·zoom·drag와 명확한 pointer boundary를 가져야 하고, keyboard focus order, visible focus,
+Escape/trigger focus return과 narrow viewport의 reflow를 보장해야 한다. Source editing처럼 넓은 작업 면적이
+필요한 surface는 확장할 수 있지만 diagram을 별도 sibling page로 교체하지 않는다. Project Home과 독립적인
+SQL import/export·bundle 화면까지 diagram background를 적용하는 것은 이번 결정에 포함하지 않는다.
 
 ### 9.3 Import Preview
 
