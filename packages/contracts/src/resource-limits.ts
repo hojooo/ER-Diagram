@@ -1,4 +1,9 @@
 import { z } from "./zod.js";
+import {
+  DEVELOPMENT_RUNTIME_RELEASE_IDENTITY,
+  RUNTIME_CONFIG_VERSION,
+  runtimeReleaseIdentitySchema,
+} from "./runtime-release.js";
 
 export const RESOURCE_LIMITS_VERSION = 1 as const;
 
@@ -74,7 +79,8 @@ export type RuntimeResourceLimits = z.infer<typeof runtimeResourceLimitsSchema>;
 
 export const runtimeConfigResponseSchema = z
   .object({
-    configVersion: z.literal(RESOURCE_LIMITS_VERSION),
+    configVersion: z.literal(RUNTIME_CONFIG_VERSION),
+    release: runtimeReleaseIdentitySchema,
     resourceLimits: runtimeResourceLimitsSchema,
   })
   .strict();
@@ -111,6 +117,14 @@ export const DEFAULT_RUNTIME_RESOURCE_LIMITS = runtimeResourceLimitsSchema.parse
     maxEntries: 2_048,
   },
 });
+
+export const DEFAULT_RUNTIME_CONFIG_RESPONSE = Object.freeze(
+  runtimeConfigResponseSchema.parse({
+    configVersion: RUNTIME_CONFIG_VERSION,
+    release: DEVELOPMENT_RUNTIME_RELEASE_IDENTITY,
+    resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS,
+  }),
+);
 
 /** Returns the byte length produced by the platform UTF-8 encoder. */
 export function utf8ByteLength(value: string): number {

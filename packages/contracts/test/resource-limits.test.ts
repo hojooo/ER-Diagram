@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_RUNTIME_RESOURCE_LIMITS,
-  RESOURCE_LIMITS_VERSION,
+  DEVELOPMENT_RUNTIME_RELEASE_IDENTITY,
+  RUNTIME_CONFIG_VERSION,
   runtimeConfigResponseSchema,
   runtimeResourceLimitsSchema,
   utf8ByteLength,
@@ -14,7 +15,8 @@ const cloneStructured = (globalThis as unknown as { structuredClone<T>(value: T)
 describe("runtime resource limit contract", () => {
   it("publishes the balanced P0 profile as strict cloneable plain data", () => {
     const response = runtimeConfigResponseSchema.parse({
-      configVersion: RESOURCE_LIMITS_VERSION,
+      configVersion: RUNTIME_CONFIG_VERSION,
+      release: DEVELOPMENT_RUNTIME_RELEASE_IDENTITY,
       resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS,
     });
 

@@ -16,6 +16,7 @@ import {
   type SqliteStorage,
   toUtcIsoTimestamp,
 } from "@er-diagram/storage-sqlite";
+import type { RuntimeReleaseIdentity } from "@er-diagram/contracts";
 import type { FastifyInstance } from "fastify";
 
 import { createServer } from "./app.js";
@@ -44,6 +45,7 @@ export interface CreateSqliteServerOptions {
   readonly trustedProxyCidrs?: readonly string[];
   readonly hstsMaxAgeSeconds?: number;
   readonly closeOwnedResources?: () => void | Promise<void>;
+  readonly releaseIdentity?: RuntimeReleaseIdentity;
 }
 
 export function createSqliteServer(options: CreateSqliteServerOptions): FastifyInstance {
@@ -103,6 +105,7 @@ export function createSqliteServer(options: CreateSqliteServerOptions): FastifyI
       : {}),
     operationalLogSink,
     resourceLimits,
+    ...(options.releaseIdentity ? { releaseIdentity: options.releaseIdentity } : {}),
     ...(options.staticWeb ? { staticWeb: options.staticWeb } : {}),
     ...(options.readinessProbe ? { readinessProbe: options.readinessProbe } : {}),
     ...(options.trustedProxyCidrs ? { trustedProxyCidrs: options.trustedProxyCidrs } : {}),

@@ -21,6 +21,7 @@ export {
   type ResourceOperationKind,
   type ResourceOperationOperationalLog,
   type ServerLifecycleOperationalLog,
+  type ServerReleaseIdentityOperationalLog,
   type ServerLifecycleState,
 } from "./operational-logging.js";
 export {
@@ -34,6 +35,7 @@ export {
   type StartupMigrationMode,
 } from "./production-config.js";
 export { ResourceOperationError, type ResourceOperationErrorCode } from "./resource-errors.js";
+export { readRuntimeReleaseIdentityFile } from "./runtime-release.js";
 export {
   BoundedResourceWorkerPool,
   type CreateResourceExecutorOptions,

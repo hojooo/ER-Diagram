@@ -314,8 +314,11 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - deterministic Derived layout으로 일반 진입·view·LOD·collapse 변경에서 implicit ELK와 background node 이동을 제거한다.
   - versioned fidelity·scale evidence로 production Chrome의 parse, cold interactive, first-uncached view switch, FPS와 long task를 fail-closed 검증한다.
   - 검증: `pnpm test:perf`
-- [ ] `M4-009` tag-triggered amd64/arm64 GHCR release와 immutable digest
-  - 검증: release dry run과 image inspect
+- [x] `M4-009` tag-triggered amd64/arm64 GHCR release와 immutable digest
+  - runtime config v2, packaged release identity와 OCI label/annotation으로 source version을 노출한다.
+  - dispatch dry run과 main ancestry의 stable tag publish를 분리하고 immutable conflict·anonymous digest를 검증한다.
+  - exact SemVer와 highest-stable `latest`, 한글 GitHub Release evidence를 fail-closed로 관리한다.
+  - 검증: `pnpm test:release`
 - [ ] `M4-010` CycloneDX/SPDX SBOM, license inventory, EPL source 안내
   - 검증: `pnpm licenses:check && pnpm sbom:check`
 - [ ] `M4-011` complete P0 end-to-end acceptance suite

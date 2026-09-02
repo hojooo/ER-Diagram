@@ -1290,12 +1290,12 @@ Decoded source 초과와 raw body 초과는 각각 `RESOURCE_SOURCE_TOO_LARGE`, 
 | `OPS-003` | project data는 명시적 mounted volume에 저장한다. container 교체로 data가 사라지지 않는다. |
 | `OPS-004` | `/health/live`와 `/health/ready` 또는 동등한 healthcheck를 제공한다. |
 | `OPS-005` | schema migration은 startup 전 backup과 version check를 거친다. 실패 시 이전 data를 변경하지 않는다. |
-| `OPS-006` | image version, parser version, bundle schema version을 UI와 logs에서 확인할 수 있다. |
+| `OPS-006` | runtime config v2의 image version, full source revision, parser version, bundle schema version을 UI와 source-free logs에서 확인할 수 있다. |
 | `OPS-007` | one-command backup/export와 restore 검증 절차를 문서화한다. |
 | `OPS-008` | outbound network가 없어도 core feature가 동작한다. font·asset도 image에 포함한다. |
 | `OPS-009` | graceful shutdown 시 pending atomic write를 완료하거나 rollback한다. |
 | `OPS-010` | release image에 dependency version inventory와 SBOM을 제공하고 parser·renderer license를 검토한다. |
-| `OPS-011` | public release tag·source commit·OCI image digest를 서로 추적할 수 있게 한다. |
+| `OPS-011` | stable public release tag·source commit·multi-architecture OCI image digest를 GitHub Release evidence로 서로 추적할 수 있게 한다. |
 | `OPS-012` | repository root에 project `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES`와 dependency source·license 안내를 제공한다. |
 
 ### 18.1 P0 container profile
@@ -1339,6 +1339,26 @@ Proxy trust와 HSTS는 기본 off다. Proxy는 IP/CIDR만 allowlist로 받고 ho
 HSTS는 trusted proxy를 통과해 HTTPS로 판정된 response에만 제한된 `max-age`를 추가한다. 기본 localhost Compose는
 유지하되, 별도 internal-network acceptance에서 external hostname·literal IP 연결 없이 Project Home, Monaco,
 parser worker, React Flow·ELK, source autosave와 reload가 동작해야 한다.
+
+### 18.3 P0 release identity와 GHCR profile
+
+Runtime config version 2는 `DEVELOPMENT|RELEASE` identity, image version, full source revision, parser `9.1.1`과
+portable bundle schema version `1`을 strict plain data로 제공한다. Development build는 version `development`와
+nullable source/image reference를 사용한다. Release build는 stable SemVer, lowercase full commit SHA와
+`ghcr.io/hojooo/er-diagram:<version>`이 모두 일치해야 한다. Production은 packaged `/app/release.json`을 SQLite open
+전에 검증하고 Project Home과 단일 `SERVER_RELEASE_IDENTITY` operational event가 같은 evidence를 표시한다.
+
+`workflow_dispatch`는 arbitrary ref의 gate와 `linux/amd64`, `linux/arm64` dry run만 수행하며 registry write 권한을
+사용하지 않는다. Exact `vMAJOR.MINOR.PATCH` tag가 `main` ancestry에 있을 때만 GHCR와 GitHub Release를 게시한다.
+Exact version은 immutable하며 같은 source·OCI evidence replay만 허용한다. `latest`는 가장 높은 stable version에만
+부여하고 major/minor floating tag와 prerelease는 만들지 않는다.
+
+Index와 manifest annotation 및 platform config label은 source repository, revision, version, Apache-2.0, title과
+description을 포함한다. 두 platform에서 non-root user, packaged Web, native SQLite와 resource worker를 실행하고
+authentication을 제거한 digest pull이 성공해야 GitHub Release를 만든다. Image digest는 self-reference이므로 image
+내부에 넣지 않고 한글 GitHub Release evidence가 tag·commit·digest를 연결한다. 첫 GHCR package가 private이면
+Public 전환 뒤 같은 workflow를 replay하며 exact image는 다시 push하지 않는다. 실제 P0 tag는 M4-010, M4-011과
+`P0-RELEASE`가 완료된 뒤에만 생성한다.
 
 ## 19. 관측성과 오류 모델
 

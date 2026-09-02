@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DEVELOPMENT_RUNTIME_RELEASE_IDENTITY } from "@er-diagram/contracts";
 import {
   openSqliteStorage,
   SQLITE_STORAGE_SCHEMA_VERSION,
@@ -70,7 +71,11 @@ describe("packaged production entrypoint", () => {
   });
 });
 
-function createFixture(): { readonly databaseFilename: string; readonly staticWebRoot: string } {
+function createFixture(): {
+  readonly databaseFilename: string;
+  readonly staticWebRoot: string;
+  readonly releaseManifestFilename: string;
+} {
   const directory = mkdtempSync(join(tmpdir(), "er-diagram-production-entrypoint-"));
   directories.add(directory);
   const staticWebRoot = join(directory, "web");
@@ -79,8 +84,14 @@ function createFixture(): { readonly databaseFilename: string; readonly staticWe
     join(staticWebRoot, "index.html"),
     "<!doctype html><html><body>packaged production app</body></html>\n",
   );
+  const releaseManifestFilename = join(directory, "release.json");
+  writeFileSync(
+    releaseManifestFilename,
+    `${JSON.stringify(DEVELOPMENT_RUNTIME_RELEASE_IDENTITY)}\n`,
+  );
   return {
     databaseFilename: join(directory, "database.sqlite"),
     staticWebRoot,
+    releaseManifestFilename,
   };
 }

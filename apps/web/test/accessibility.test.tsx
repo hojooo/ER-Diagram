@@ -2,7 +2,7 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { DEFAULT_RUNTIME_RESOURCE_LIMITS } from "@er-diagram/contracts";
+import { DEFAULT_RUNTIME_CONFIG_RESPONSE } from "@er-diagram/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryRouter } from "react-router-dom";
@@ -66,10 +66,7 @@ function createAccessibilityApi(): ProjectApi {
   };
 
   return {
-    getRuntimeConfig: async () => ({
-      configVersion: 1,
-      resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS,
-    }),
+    getRuntimeConfig: async () => DEFAULT_RUNTIME_CONFIG_RESPONSE,
     listProjects: async () => ({ projects: [] }),
     getProject: unsupported,
     listRevisions: unsupported,

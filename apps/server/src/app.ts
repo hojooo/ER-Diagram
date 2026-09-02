@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import {
   correlationIdSchema,
+  DEVELOPMENT_RUNTIME_RELEASE_IDENTITY,
   healthLiveResponseSchema,
   healthReadyResponseSchema,
-  RESOURCE_LIMITS_VERSION,
+  RUNTIME_CONFIG_VERSION,
   runtimeConfigResponseSchema,
+  type RuntimeReleaseIdentity,
 } from "@er-diagram/contracts";
 import type {
   LayoutApplication,
@@ -51,6 +53,7 @@ export interface CreateServerOptions {
   readonly readinessProbe?: () => boolean | Promise<boolean>;
   readonly trustedProxyCidrs?: readonly string[];
   readonly hstsMaxAgeSeconds?: number;
+  readonly releaseIdentity?: RuntimeReleaseIdentity;
 }
 
 export function createServer(options: CreateServerOptions): FastifyInstance {
@@ -98,7 +101,8 @@ export function createServer(options: CreateServerOptions): FastifyInstance {
     reply.header("cache-control", "no-store");
     return reply.send(
       runtimeConfigResponseSchema.parse({
-        configVersion: RESOURCE_LIMITS_VERSION,
+        configVersion: RUNTIME_CONFIG_VERSION,
+        release: options.releaseIdentity ?? DEVELOPMENT_RUNTIME_RELEASE_IDENTITY,
         resourceLimits: toRuntimeResourceLimits(resourceLimits),
       }),
     );

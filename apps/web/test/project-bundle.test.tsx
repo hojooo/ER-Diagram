@@ -2,7 +2,11 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { DEFAULT_RUNTIME_RESOURCE_LIMITS, type ProjectState } from "@er-diagram/contracts";
+import {
+  DEFAULT_RUNTIME_CONFIG_RESPONSE,
+  DEFAULT_RUNTIME_RESOURCE_LIMITS,
+  type ProjectState,
+} from "@er-diagram/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -76,10 +80,7 @@ function fakeApi(state = projectState()): ProjectApi {
       : null,
   };
   return {
-    getRuntimeConfig: vi.fn(async () => ({
-      configVersion: 1 as const,
-      resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS,
-    })),
+    getRuntimeConfig: vi.fn(async () => DEFAULT_RUNTIME_CONFIG_RESPONSE),
     listProjects: vi.fn(async () => ({ projects: [] })),
     getProject: vi.fn(async () => ({ state })),
     listRevisions: vi.fn(async () => ({ revisions: [] })),
@@ -230,7 +231,7 @@ function renderRoute(input: {
     },
   };
   render(
-    <RuntimeConfigProvider config={{ configVersion: 1, resourceLimits }}>
+    <RuntimeConfigProvider config={{ ...DEFAULT_RUNTIME_CONFIG_RESPONSE, resourceLimits }}>
       <ProjectApiProvider api={input.api}>
         <QueryClientProvider client={queryClient}>
           <RouterProvider router={router} />

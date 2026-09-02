@@ -22,9 +22,11 @@ const requiredFiles = [
   "docs/adr/0012-production-lifecycle-and-offline-runtime.md",
   "docs/adr/0013-core-flow-accessibility.md",
   "docs/adr/0014-large-erd-performance-acceptance.md",
+  "docs/adr/0015-multi-architecture-ghcr-release.md",
   "docs/operations/accessibility-checklist.md",
   "docs/operations/backup-restore.md",
   "docs/operations/container.md",
+  "docs/operations/release.md",
 ];
 const forbiddenMarkers = /PROPOSED|OPEN-|IMPLEMENTATION_BLOCKER/u;
 const ineffectivePnpmTestFilter =

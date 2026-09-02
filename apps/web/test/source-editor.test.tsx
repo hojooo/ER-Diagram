@@ -4,7 +4,7 @@ import "@testing-library/jest-dom/vitest";
 
 import { createHash } from "node:crypto";
 import {
-  DEFAULT_RUNTIME_RESOURCE_LIMITS,
+  DEFAULT_RUNTIME_CONFIG_RESPONSE,
   type Diagnostic,
   type ProjectMutationResponse,
   type ProjectState,
@@ -803,7 +803,7 @@ class SourceProjectApi implements ProjectApi {
   constructor(public state: ProjectState) {}
 
   async getRuntimeConfig() {
-    return { configVersion: 1 as const, resourceLimits: DEFAULT_RUNTIME_RESOURCE_LIMITS };
+    return DEFAULT_RUNTIME_CONFIG_RESPONSE;
   }
 
   async listProjects() {

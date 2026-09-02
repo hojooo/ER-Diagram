@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { DEVELOPMENT_RUNTIME_RELEASE_IDENTITY } from "@er-diagram/contracts";
 import {
   APP_METADATA_STORAGE_SCHEMA_VERSION_KEY,
   acquireSqliteVolumeLock,
@@ -66,6 +67,15 @@ describe("production SQLite lifecycle", () => {
     expect(
       events.filter((event) => event.event === "SERVER_LIFECYCLE").map((event) => event.state),
     ).toEqual(["STARTING", "READY", "SHUTTING_DOWN", "STOPPED"]);
+    expect(events.filter((event) => event.event === "SERVER_RELEASE_IDENTITY")).toEqual([
+      expect.objectContaining({
+        channel: "DEVELOPMENT",
+        version: "development",
+        sourceRevision: null,
+        parserVersion: "9.1.1",
+        bundleSchemaVersion: 1,
+      }),
+    ]);
     expect(flushes).toBe(1);
     expect(JSON.stringify(events)).not.toContain(fixture.databaseFilename);
   });
@@ -126,7 +136,11 @@ describe("production SQLite lifecycle", () => {
   });
 });
 
-function createFixture(): { readonly databaseFilename: string; readonly staticWebRoot: string } {
+function createFixture(): {
+  readonly databaseFilename: string;
+  readonly staticWebRoot: string;
+  readonly releaseManifestFilename: string;
+} {
   const directory = mkdtempSync(path.join(tmpdir(), "er-diagram-production-lifecycle-"));
   directories.add(directory);
   const staticWebRoot = path.join(directory, "web");
@@ -135,7 +149,16 @@ function createFixture(): { readonly databaseFilename: string; readonly staticWe
     path.join(staticWebRoot, "index.html"),
     "<!doctype html><html><body>production lifecycle fixture</body></html>\n",
   );
-  return { databaseFilename: path.join(directory, "database.sqlite"), staticWebRoot };
+  const releaseManifestFilename = path.join(directory, "release.json");
+  writeFileSync(
+    releaseManifestFilename,
+    `${JSON.stringify(DEVELOPMENT_RUNTIME_RELEASE_IDENTITY)}\n`,
+  );
+  return {
+    databaseFilename: path.join(directory, "database.sqlite"),
+    staticWebRoot,
+    releaseManifestFilename,
+  };
 }
 
 function createVersionOneDatabase(filename: string): void {

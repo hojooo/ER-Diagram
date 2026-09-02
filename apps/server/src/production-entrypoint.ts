@@ -16,6 +16,7 @@ import {
   validateSqliteVolumeDatabase,
 } from "@er-diagram/storage-sqlite";
 import type { FastifyInstance } from "fastify";
+import type { RuntimeReleaseIdentity } from "@er-diagram/contracts";
 
 import {
   createJsonLineOperationalLogSink,
@@ -35,14 +36,17 @@ import {
 } from "./production-config.js";
 import { createResourceExecutor, type ResourceExecutor } from "./resource-executor.js";
 import { createSqliteServer } from "./sqlite-server.js";
+import { readRuntimeReleaseIdentityFile } from "./runtime-release.js";
 
 export const PRODUCTION_SERVER_HOST = "0.0.0.0";
 export const PRODUCTION_SERVER_PORT = 8080;
 export const PRODUCTION_DATABASE_FILENAME = "/data/er-diagram.sqlite";
 export const PRODUCTION_WEB_ROOT = "/app/web";
+export const PRODUCTION_RELEASE_MANIFEST_FILENAME = "/app/release.json";
 
 export type ProductionServerStartupErrorCode =
   | "SERVER_CONFIGURATION_INVALID"
+  | "SERVER_RELEASE_IDENTITY_INVALID"
   | "SERVER_STATIC_ASSETS_INVALID"
   | "SERVER_STORAGE_INVALID"
   | "SERVER_STORAGE_LOCKED"
@@ -67,6 +71,7 @@ export interface CreateProductionServerOptions {
   readonly staticWebRoot?: string;
   readonly configuration?: ProductionConfiguration;
   readonly operationalLogSink?: OperationalLogSink;
+  readonly releaseManifestFilename?: string;
 }
 
 export interface ProductionRuntime {
@@ -80,6 +85,8 @@ export async function createProductionRuntime(
 ): Promise<ProductionRuntime> {
   const databaseFilename = options.databaseFilename ?? PRODUCTION_DATABASE_FILENAME;
   const staticWebRoot = options.staticWebRoot ?? PRODUCTION_WEB_ROOT;
+  const releaseManifestFilename =
+    options.releaseManifestFilename ?? PRODUCTION_RELEASE_MANIFEST_FILENAME;
   const configuration = options.configuration ?? DEFAULT_PRODUCTION_CONFIGURATION;
   const operationalLogSink =
     options.operationalLogSink ??
@@ -97,6 +104,8 @@ export async function createProductionRuntime(
   writeLifecycleLog(operationalLogSink, state);
   try {
     assertStaticWebRoot(staticWebRoot);
+    const releaseIdentity = readProductionReleaseIdentity(releaseManifestFilename);
+    writeReleaseIdentityLog(operationalLogSink, releaseIdentity);
     await prepareProductionDatabase(databaseFilename, configuration);
     volumeLock = acquireProductionVolumeLock(databaseFilename);
     if (existsSync(databaseFilename)) await assertCurrentDatabase(databaseFilename);
@@ -131,6 +140,7 @@ export async function createProductionRuntime(
       trustedProxyCidrs: configuration.trustedProxyCidrs,
       hstsMaxAgeSeconds: configuration.hstsMaxAgeSeconds,
       closeOwnedResources,
+      releaseIdentity,
     });
     state = "READY";
     writeLifecycleLog(operationalLogSink, state);
@@ -178,6 +188,18 @@ export async function createProductionRuntime(
       volumeLock?.release();
     }
     throw normalizeStartupError(error);
+  }
+}
+
+function readProductionReleaseIdentity(filename: string): RuntimeReleaseIdentity {
+  try {
+    return readRuntimeReleaseIdentityFile(filename);
+  } catch (error) {
+    throw startupError(
+      "SERVER_RELEASE_IDENTITY_INVALID",
+      "The packaged release identity is unavailable or invalid.",
+      error,
+    );
   }
 }
 
@@ -378,6 +400,20 @@ function writeLifecycleLog(
     timestamp: utcTimestamp(),
     state,
     ...(reasonCode === undefined ? {} : { reasonCode: safeReasonCode(reasonCode) }),
+  });
+}
+
+function writeReleaseIdentityLog(sink: OperationalLogSink, identity: RuntimeReleaseIdentity): void {
+  writeOperationalLog(sink, {
+    logVersion: OPERATIONAL_LOG_VERSION,
+    event: "SERVER_RELEASE_IDENTITY",
+    timestamp: utcTimestamp(),
+    channel: identity.channel,
+    version: identity.version,
+    sourceRevision: identity.sourceRevision,
+    imageReference: identity.imageReference,
+    parserVersion: identity.parserVersion,
+    bundleSchemaVersion: identity.bundleSchemaVersion,
   });
 }
 
