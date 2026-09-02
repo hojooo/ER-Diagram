@@ -1,5 +1,5 @@
-import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { RuntimeConfigResponse } from "@er-diagram/contracts";
+import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   type ComponentProps,
   type MouseEvent as ReactMouseEvent,
@@ -14,18 +14,18 @@ import {
   type RouteObject,
   RouterProvider,
   useLocation,
+  useMatches,
   useRouteError,
 } from "react-router-dom";
-
+import type { ProjectBundlePageAdapters } from "./project-bundle/project-bundle-page.js";
 import type { ProjectApi } from "./projects/project-api.js";
 import { ProjectApiProvider } from "./projects/project-api-context.js";
 import { ProjectHomePage } from "./projects/project-home-page.js";
 import { RootErrorBoundary } from "./root-error-boundary.js";
 import { RuntimeConfigProvider } from "./runtime-config.js";
 import type { ProjectWorkspaceAdapters } from "./source-editor/project-source-workspace.js";
-import type { SqlImportPageAdapters } from "./sql-import/sql-import-page.js";
 import type { SqlExportPageAdapters } from "./sql-export/sql-export-page.js";
-import type { ProjectBundlePageAdapters } from "./project-bundle/project-bundle-page.js";
+import type { SqlImportPageAdapters } from "./sql-import/sql-import-page.js";
 
 type DataRouter = ComponentProps<typeof RouterProvider>["router"];
 
@@ -199,6 +199,7 @@ export function createAppRoutes(
         },
         {
           path: "projects/:projectId",
+          handle: { layout: "CANVAS_WORKSPACE" },
           lazy: async () => {
             const module = await import("./projects/project-workspace-page.js");
             return {
@@ -232,6 +233,14 @@ export function createAppRoutes(
 
 function AppShell() {
   const location = useLocation();
+  const matches = useMatches();
+  const canvasWorkspace = matches.some(
+    (match) =>
+      typeof match.handle === "object" &&
+      match.handle !== null &&
+      "layout" in match.handle &&
+      match.handle.layout === "CANVAS_WORKSPACE",
+  );
   const previousLocationKey = useRef<string | null>(null);
 
   useEffect(() => {
@@ -286,7 +295,9 @@ function AppShell() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div
+      className={`${canvasWorkspace ? "h-dvh overflow-hidden" : "min-h-screen"} bg-slate-950 text-slate-100`}
+    >
       <a
         className="fixed left-4 top-4 z-[100] -translate-y-24 rounded-lg bg-cyan-300 px-4 py-3 font-semibold text-slate-950 shadow-lg transition-transform focus:translate-y-0 focus:outline-2 focus:outline-offset-2 focus:outline-white"
         href={`#${MAIN_CONTENT_ID}`}
@@ -294,25 +305,31 @@ function AppShell() {
       >
         Skip to main content
       </a>
-      <header className="border-b border-slate-800 bg-slate-950/95">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-5 py-4 sm:px-8">
-          <div>
-            <Link
-              className="text-lg font-semibold tracking-tight text-white no-underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
-              to="/"
-            >
-              DBML·SQL ERD Studio
-            </Link>
-            <p className="mt-1 text-xs text-slate-400">Self-hosted schema workspace</p>
+      {canvasWorkspace ? null : (
+        <header className="border-b border-slate-800 bg-slate-950/95">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-5 py-4 sm:px-8">
+            <div>
+              <Link
+                className="text-lg font-semibold tracking-tight text-white no-underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
+                to="/"
+              >
+                DBML·SQL ERD Studio
+              </Link>
+              <p className="mt-1 text-xs text-slate-400">Self-hosted schema workspace</p>
+            </div>
+            <span className="rounded-full border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-300">
+              Single user
+            </span>
           </div>
-          <span className="rounded-full border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-300">
-            Single user
-          </span>
-        </div>
-      </header>
+        </header>
+      )}
       <main
         id={MAIN_CONTENT_ID}
-        className="mx-auto w-full max-w-7xl px-5 py-8 outline-none sm:px-8 sm:py-10"
+        className={
+          canvasWorkspace
+            ? "h-full w-full overflow-hidden outline-none"
+            : "mx-auto w-full max-w-7xl px-5 py-8 outline-none sm:px-8 sm:py-10"
+        }
         tabIndex={-1}
       >
         <Outlet />

@@ -9,7 +9,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 const flowSpies = vi.hoisted(() => ({
   fitView: vi.fn(async () => true),
-  setViewport: vi.fn(async () => true),
+  setViewport: vi.fn(async (_viewport: unknown, _options?: unknown) => true),
   getViewport: vi.fn(() => ({ x: 10, y: 20, zoom: 0.75 })),
 }));
 
@@ -134,8 +134,8 @@ vi.mock("@xyflow/react", async () => {
 });
 
 import { BaseSchemaDiagram } from "../src/diagram/base-schema-diagram.js";
-import { shouldShowDiagramEdgeLabels } from "../src/diagram/diagram-components.js";
 import { demoSchemaGraph } from "../src/diagram/demo-schema.js";
+import { shouldShowDiagramEdgeLabels } from "../src/diagram/diagram-components.js";
 import {
   createBaseDiagramProjection,
   createDiagramProjection,
@@ -201,6 +201,7 @@ beforeAll(() => {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   flowSpies.fitView.mockClear();
   flowSpies.setViewport.mockClear();
   flowSpies.getViewport.mockClear();
@@ -541,6 +542,7 @@ describe("base schema diagram canvas", () => {
       .mockImplementationOnce(() => secondLayout.promise);
     const selectionStore = createDiagramSelectionStore();
     const onNavigateSource = vi.fn();
+    const onActivateElement = vi.fn();
     const rendered = render(
       <BaseSchemaDiagram
         graph={firstGraph}
@@ -551,6 +553,7 @@ describe("base schema diagram canvas", () => {
         sourceNavigationEnabled
         onToggleGroup={vi.fn()}
         onNavigateSource={onNavigateSource}
+        onActivateElement={onActivateElement}
         requestLayout={requestLayout}
         layoutRequest={{ requestId: 1, mode: "PREVIEW" }}
       />,
@@ -566,6 +569,7 @@ describe("base schema diagram canvas", () => {
         sourceNavigationEnabled
         onToggleGroup={vi.fn()}
         onNavigateSource={onNavigateSource}
+        onActivateElement={onActivateElement}
         requestLayout={requestLayout}
         layoutRequest={{ requestId: 2, mode: "PREVIEW" }}
       />,
@@ -585,7 +589,8 @@ describe("base schema diagram canvas", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Canvas table second" }));
     expect(selectionStore.getState().selection).toMatchObject({ kind: "table" });
-    expect(onNavigateSource).toHaveBeenCalledOnce();
+    expect(onNavigateSource).not.toHaveBeenCalled();
+    expect(onActivateElement).toHaveBeenCalledOnce();
     await waitFor(() => expect(flowSpies.fitView).toHaveBeenCalled());
   });
 
@@ -667,6 +672,56 @@ describe("base schema diagram canvas", () => {
     expect(onViewportCommit).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Simulate user pan" }));
     expect(onViewportCommit).toHaveBeenCalledWith({ x: 30, y: 40, zoom: 1.2 });
+  });
+
+  it("uses safe-area insets for initial fit without moving the viewport when overlays toggle", async () => {
+    const width = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(1_000);
+    const height = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(800);
+    const graph = await parseGraph("Table safe_area { id int [pk] }");
+    const selectionStore = createDiagramSelectionStore();
+    const sharedProps = {
+      graph,
+      viewKey: "GLOBAL",
+      detailLevel: "FULL" as const,
+      collapsedGroupKeys: new Set<string>(),
+      selectionStore,
+      sourceNavigationEnabled: true,
+      onToggleGroup: vi.fn(),
+      onNavigateSource: vi.fn(),
+      requestLayout: vi.fn(async (projection: DiagramProjection) => projection),
+      fillContainer: true,
+    };
+
+    const { rerender } = render(
+      <BaseSchemaDiagram
+        {...sharedProps}
+        viewportInsets={{ top: 120, right: 260, bottom: 80, left: 340 }}
+      />,
+    );
+
+    await waitFor(() => expect(flowSpies.setViewport).toHaveBeenCalled());
+    const initialCalls = flowSpies.setViewport.mock.calls.length;
+    const initialViewport = flowSpies.setViewport.mock.calls.at(-1)?.[0];
+    expect(initialViewport).toEqual(
+      expect.objectContaining({
+        x: expect.any(Number),
+        y: expect.any(Number),
+        zoom: expect.any(Number),
+      }),
+    );
+
+    rerender(
+      <BaseSchemaDiagram
+        {...sharedProps}
+        viewportInsets={{ top: 120, right: 0, bottom: 80, left: 0 }}
+      />,
+    );
+    await act(async () => Promise.resolve());
+
+    expect(flowSpies.setViewport).toHaveBeenCalledTimes(initialCalls);
+    expect(flowSpies.fitView).not.toHaveBeenCalled();
+    width.mockRestore();
+    height.mockRestore();
   });
 
   it("reports failed preview layout without treating fallback positions as applicable", async () => {

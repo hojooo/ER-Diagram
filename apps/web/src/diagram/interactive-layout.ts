@@ -1,5 +1,6 @@
 import type { DiagramPosition, DiagramViewport } from "@er-diagram/contracts";
 
+import type { DiagramViewportInsets } from "./base-schema-diagram-contract.js";
 import type {
   DiagramProjection,
   GroupDiagramNode,
@@ -44,6 +45,8 @@ export interface InteractiveViewportOptions {
   readonly padding?: number;
   readonly minZoom?: number;
   readonly maxZoom?: number;
+  readonly insets?: DiagramViewportInsets;
+  readonly targetNodeIds?: ReadonlySet<string>;
 }
 
 /**
@@ -282,13 +285,19 @@ export function deriveInteractiveViewport(
   const padding = options.padding ?? 0.15;
   const minZoom = options.minZoom ?? 0.15;
   const maxZoom = options.maxZoom ?? 1.75;
+  const insets = options.insets ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  const availableWidth = size.width - insets.left - insets.right;
+  const availableHeight = size.height - insets.top - insets.bottom;
   if (
     !Number.isFinite(padding) ||
     padding < 0 ||
     !Number.isFinite(minZoom) ||
     minZoom <= 0 ||
     !Number.isFinite(maxZoom) ||
-    maxZoom < minZoom
+    maxZoom < minZoom ||
+    !validViewportInsets(insets) ||
+    availableWidth <= 0 ||
+    availableHeight <= 0
   ) {
     return null;
   }
@@ -299,6 +308,7 @@ export function deriveInteractiveViewport(
   let maximumX = Number.NEGATIVE_INFINITY;
   let maximumY = Number.NEGATIVE_INFINITY;
   for (const node of projection.nodes) {
+    if (options.targetNodeIds && !options.targetNodeIds.has(node.id)) continue;
     const position = absolutePositions.get(node.id);
     if (!position) return null;
     const dimensions = nodeSize(node);
@@ -307,19 +317,26 @@ export function deriveInteractiveViewport(
     maximumX = Math.max(maximumX, position.x + dimensions.width);
     maximumY = Math.max(maximumY, position.y + dimensions.height);
   }
+  if (!Number.isFinite(minimumX)) return null;
   const boundsWidth = Math.max(1, maximumX - minimumX);
   const boundsHeight = Math.max(1, maximumY - minimumY);
   const paddedWidth = boundsWidth * (1 + padding * 2);
   const paddedHeight = boundsHeight * (1 + padding * 2);
   const zoom = Math.min(
     maxZoom,
-    Math.max(minZoom, Math.min(size.width / paddedWidth, size.height / paddedHeight)),
+    Math.max(minZoom, Math.min(availableWidth / paddedWidth, availableHeight / paddedHeight)),
   );
   return {
-    x: size.width / 2 - (minimumX + boundsWidth / 2) * zoom,
-    y: size.height / 2 - (minimumY + boundsHeight / 2) * zoom,
+    x: insets.left + availableWidth / 2 - (minimumX + boundsWidth / 2) * zoom,
+    y: insets.top + availableHeight / 2 - (minimumY + boundsHeight / 2) * zoom,
     zoom,
   };
+}
+
+function validViewportInsets(insets: DiagramViewportInsets): boolean {
+  return [insets.top, insets.right, insets.bottom, insets.left].every(
+    (value) => Number.isFinite(value) && value >= 0,
+  );
 }
 
 function placeGroup(
