@@ -1,4 +1,5 @@
 import type {
+  Diagnostic,
   DiagramLayoutValue,
   DiagramPosition,
   DiagramViewport,
@@ -1066,6 +1067,11 @@ export function ProjectSourceWorkspace({
   }
 
   const { serverState } = sessionSnapshot;
+  const compilerInformationDiagnostics =
+    sessionSnapshot.diagnostics.filter(isDbmlCompilerInformation);
+  const problemDiagnostics = sessionSnapshot.diagnostics.filter(
+    (diagnostic) => !isDbmlCompilerInformation(diagnostic),
+  );
   const visualInteractionDisabled =
     layoutInteractionLocked || !sessionSnapshot.canUseValidSchema || visualCommandSession === null;
   return (
@@ -1292,20 +1298,33 @@ export function ProjectSourceWorkspace({
           </div>
         }
         outline={
-          activeGraph && visibility ? (
-            <SchemaOutline
-              graph={activeGraph}
-              visibility={visibility}
-              viewLabel={viewLabel}
-              collapsedGroupKeys={activeCollapsedGroupKeys}
-              selectionStore={selectionStore}
-              sourceNavigationEnabled={sourceNavigationEnabled}
-              onToggleGroup={handleToggleGroup}
-              onNavigateSource={handleNavigateSource}
-            />
-          ) : (
-            <p className="text-sm text-slate-300">{messages["source.outlineRequiresValid"]}</p>
-          )
+          <div className="flex min-h-full flex-col gap-4">
+            {activeGraph && visibility ? (
+              <SchemaOutline
+                graph={activeGraph}
+                visibility={visibility}
+                viewLabel={viewLabel}
+                collapsedGroupKeys={activeCollapsedGroupKeys}
+                selectionStore={selectionStore}
+                sourceNavigationEnabled={sourceNavigationEnabled}
+                onToggleGroup={handleToggleGroup}
+                onNavigateSource={handleNavigateSource}
+              />
+            ) : (
+              <p className="text-sm text-slate-300">{messages["source.outlineRequiresValid"]}</p>
+            )}
+            {compilerInformationDiagnostics.length > 0 ? (
+              <CompilerInformationPanel
+                diagnostics={compilerInformationDiagnostics}
+                onNavigate={(diagnostic) => {
+                  openSourceSurface(diagnostic.range ?? null);
+                  window.requestAnimationFrame(() =>
+                    editorRef.current?.navigateToDiagnostic(diagnostic),
+                  );
+                }}
+              />
+            ) : null}
+          </div>
         }
         inspector={
           activeGraph && visualCommandSession ? (
@@ -1372,9 +1391,9 @@ export function ProjectSourceWorkspace({
                   editorRef.current?.replaceSource(source);
               }}
             />
-            {sessionSnapshot.diagnostics.length > 0 ? (
+            {problemDiagnostics.length > 0 ? (
               <ProblemsPanel
-                diagnostics={sessionSnapshot.diagnostics}
+                diagnostics={problemDiagnostics}
                 onNavigate={(diagnostic) => {
                   openSourceSurface(diagnostic.range ?? null);
                   window.requestAnimationFrame(() =>
@@ -2048,6 +2067,104 @@ function ProblemsPanel({
       )}
     </section>
   );
+}
+
+function CompilerInformationPanel({
+  diagnostics,
+  onNavigate,
+}: {
+  readonly diagnostics: readonly Diagnostic[];
+  readonly onNavigate: (diagnostic: Diagnostic) => void;
+}) {
+  const { messages } = useUiLocale();
+  const groups = groupDiagnosticsByMessage(diagnostics);
+  return (
+    <section
+      className="mt-auto rounded-2xl border border-sky-800/70 bg-sky-950/40 p-5"
+      aria-label={messages["outline.compilerInformation"]}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-semibold text-white">{messages["outline.compilerInformation"]}</h2>
+        <span className="rounded-full bg-sky-950 px-2.5 py-1 text-xs font-semibold text-sky-200">
+          {diagnostics.length}
+        </span>
+      </div>
+      <p className="mt-2 text-xs text-slate-300">
+        {messages["outline.compilerInformationDescription"]}
+      </p>
+      <ol className="mt-4 space-y-3">
+        {groups.map((group) => (
+          <li
+            className="rounded-lg border border-sky-900/80 bg-slate-950/60 p-3"
+            key={`${group.code}:${group.message}`}
+          >
+            <p className="break-words text-sm text-slate-200">{group.message}</p>
+            <p className="mt-2 break-all text-[0.7rem] text-slate-400">{group.code}</p>
+            {group.diagnostics.some((diagnostic) => diagnostic.range) ? (
+              <details className="mt-3 text-xs text-slate-300">
+                <summary className="cursor-pointer font-semibold text-sky-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300">
+                  {messages["outline.compilerInformationLocations"](group.diagnostics.length)}
+                </summary>
+                <ol className="mt-2 flex flex-wrap gap-2">
+                  {group.diagnostics.map((diagnostic, index) => (
+                    <li key={diagnosticIdentity(diagnostic, index)}>
+                      {diagnostic.range ? (
+                        <button
+                          className="rounded border border-slate-700 px-2 py-1 font-semibold text-cyan-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+                          type="button"
+                          aria-label={messages["outline.openCompilerInformation"](
+                            diagnostic.code,
+                            diagnostic.range.startLine,
+                            diagnostic.range.startColumn,
+                          )}
+                          onClick={() => onNavigate(diagnostic)}
+                        >
+                          {diagnostic.range.startLine}:{diagnostic.range.startColumn}
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            ) : (
+              <p className="mt-3 text-xs text-slate-400">
+                {messages["outline.compilerInformationNoLocation"]}
+              </p>
+            )}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function isDbmlCompilerInformation(diagnostic: Diagnostic): boolean {
+  return diagnostic.severity === "INFO" && diagnostic.code.startsWith("DBML_");
+}
+
+function groupDiagnosticsByMessage(diagnostics: readonly Diagnostic[]): ReadonlyArray<{
+  readonly code: string;
+  readonly message: string;
+  readonly diagnostics: readonly Diagnostic[];
+}> {
+  const groups = new Map<string, { code: string; message: string; diagnostics: Diagnostic[] }>();
+  for (const diagnostic of diagnostics) {
+    const key = `${diagnostic.code}\u0000${diagnostic.message}`;
+    const current = groups.get(key);
+    if (current) current.diagnostics.push(diagnostic);
+    else {
+      groups.set(key, {
+        code: diagnostic.code,
+        message: diagnostic.message,
+        diagnostics: [diagnostic],
+      });
+    }
+  }
+  return [...groups.values()];
+}
+
+function diagnosticIdentity(diagnostic: Diagnostic, index: number): string {
+  return `${diagnostic.range?.filepath ?? "none"}:${diagnostic.range?.startOffset ?? "none"}:${diagnostic.range?.endOffset ?? "none"}:${index}`;
 }
 
 function ConflictLoadDialog({

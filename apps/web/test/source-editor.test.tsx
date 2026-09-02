@@ -41,6 +41,16 @@ const CREATED_AT = "2026-08-27T01:02:03.004Z";
 const VALID_SOURCE = "Table users {\r\n  id int [pk]\r\n}\r\n";
 const SECOND_VALID_SOURCE = "Table users {\r\n  id int [pk]\r\n  email varchar\r\n}\r\n";
 const INVALID_SOURCE = "Table users {\r\n  id int [pk]\r\n";
+const INFO_SOURCE = `Table parents {
+  id int [pk]
+}
+
+Table children {
+  parent_id int
+}
+
+Ref: children.parent_id > parents.id
+`;
 const SERVER_SOURCE = "Table server_state { id int [pk] }";
 const VIEW_SOURCE = `TableGroup Identity {
   accounts
@@ -92,6 +102,38 @@ afterEach(() => {
 });
 
 describe("DBML source workspace", () => {
+  it("shows DBML compiler information at the bottom of the outline instead of Problems", async () => {
+    const api = new SourceProjectApi(projectState(INFO_SOURCE, 1, "VALID"));
+    renderWorkspace(api);
+
+    await screen.findByText("Canonical DBML source");
+    await findWorkspaceStatus("Draft valid");
+    expect(screen.queryByRole("heading", { name: "Problems" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Outline" }));
+    const compilerInformation = await screen.findByRole("region", {
+      name: "DBML compiler information",
+    });
+    expect(within(compilerInformation).getByText("2")).toBeVisible();
+    expect(
+      within(compilerInformation).getByText(
+        "Column 'children.parent_id' is nullable but operator '>' requires it to be NOT NULL",
+      ),
+    ).toBeVisible();
+    expect(within(compilerInformation).getByText("2 source locations")).toBeVisible();
+
+    fireEvent.click(within(compilerInformation).getByText("2 source locations"));
+    const [firstSourceLocation] = within(compilerInformation).getAllByRole("button", {
+      name: /Open DBML_SEMANTIC_INVALID_REF_RELATIONSHIP at line/,
+    });
+    if (firstSourceLocation === undefined) {
+      throw new Error("Expected a DBML compiler source location action");
+    }
+    fireEvent.click(firstSourceLocation);
+    await act(() => new Promise((resolve) => window.requestAnimationFrame(resolve)));
+    expect(navigateToDiagnostic).toHaveBeenCalledOnce();
+  });
+
   it("autosaves valid → invalid → valid source without losing the last-valid graph", async () => {
     const api = new SourceProjectApi(projectState(VALID_SOURCE, 1, "VALID"));
     renderWorkspace(api);

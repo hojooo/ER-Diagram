@@ -213,6 +213,14 @@ export const englishMessages = {
   "outline.sourceUnavailable":
     "Source navigation is unavailable while showing the last-valid diagram.",
   "outline.line": (line: string) => `Line ${line}`,
+  "outline.compilerInformation": "DBML compiler information",
+  "outline.compilerInformationDescription":
+    "Non-blocking information from the DBML compiler. Matching messages are grouped; expand a group to open any source location.",
+  "outline.compilerInformationLocations": (count: number) =>
+    `${count} source ${count === 1 ? "location" : "locations"}`,
+  "outline.openCompilerInformation": (code: string, line: number, column: number) =>
+    `Open ${code} at line ${line}, column ${column}`,
+  "outline.compilerInformationNoLocation": "No source location was provided.",
   "diagram.groupAccessibleName": (name: string, tables: number, state: string, color: string) =>
     `Table group ${name}, ${tables} tables, ${state}, Color ${color}`,
   "diagram.stateCollapsed": "collapsed",
@@ -919,6 +927,13 @@ export const koreanMessages = {
   "outline.openSource": (kind: string, line: string) => `${line}번 행에서 ${kind} source 열기`,
   "outline.sourceUnavailable": "Last-valid diagram을 표시하는 동안 source로 이동할 수 없습니다.",
   "outline.line": (line: string) => `${line}번 행`,
+  "outline.compilerInformation": "DBML 컴파일러 정보",
+  "outline.compilerInformationDescription":
+    "DBML 컴파일러가 제공한 비차단 정보입니다. 같은 메시지는 묶어서 표시하며 펼치면 각 source 위치를 열 수 있습니다.",
+  "outline.compilerInformationLocations": (count: number) => `소스 위치 ${count}개`,
+  "outline.openCompilerInformation": (code: string, line: number, column: number) =>
+    `${line}번 행 ${column}번 컬럼에서 ${code} 열기`,
+  "outline.compilerInformationNoLocation": "제공된 source 위치가 없습니다.",
   "diagram.groupAccessibleName": (name: string, tables: number, state: string, color: string) =>
     `테이블 그룹 ${name}, 테이블 ${tables}개, ${state}, 색상 ${color}`,
   "diagram.stateCollapsed": "접힘",
