@@ -199,7 +199,6 @@ describe("DBML source workspace", () => {
     const undo = screen.getByRole("button", { name: /Undo schema change, 1 step/ });
     expect(undo).toBeEnabled();
     vi.useRealTimers();
-    fireEvent.click(screen.getByRole("button", { name: "Inspector" }));
     fireEvent.click(screen.getByRole("button", { name: "Create table" }));
     const tableName = await screen.findByLabelText("Table name");
     fireEvent.keyDown(tableName, { key: "z", ctrlKey: true });
@@ -428,10 +427,11 @@ describe("DBML source workspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Source" }));
     fireEvent.click(screen.getByRole("button", { name: "Outline" }));
-    fireEvent.click(screen.getByRole("button", { name: "Inspector" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
     fireEvent.click(screen.getByRole("button", { name: "Outline" }));
 
     expect(screen.getByRole("application", { name: "ER diagram canvas" })).toBe(diagram);
+    expect(screen.queryByTestId("diagram-controls")).not.toBeInTheDocument();
     expect(parserClient.parseCalls).toBe(initialParseCalls);
     expect(api.getLayoutInputs).toHaveLength(initialLayoutReads);
     expect(api.saveDraftInputs).toHaveLength(0);
@@ -468,12 +468,12 @@ describe("DBML source workspace", () => {
     fireEvent.select(editor);
     expect(await screen.findByTestId("fake-diagram-selection")).toHaveTextContent("column");
 
+    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(screen.getByRole("button", { name: "Select first diagram table" }));
     expect(revealSourceRange).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Inspector" })).toHaveAttribute(
-      "aria-expanded",
-      "true",
-    );
+    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTitle(/Selected table .*users/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Outline" }));
     const openSource = await screen.findByRole("button", {
       name: /Open source for table at line/,
@@ -504,6 +504,7 @@ describe("DBML source workspace", () => {
     renderWorkspace(api);
 
     expect(await screen.findByText("No valid diagram yet")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "false");
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute(
         "aria-expanded",

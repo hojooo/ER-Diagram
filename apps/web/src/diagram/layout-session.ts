@@ -3,6 +3,9 @@ import type { DiagramLayoutValue, LayoutResponse } from "@er-diagram/contracts";
 import type { ProjectApiError, SaveLayoutInput } from "../projects/project-api.js";
 
 export const LAYOUT_AUTOSAVE_DEBOUNCE_MS = 500;
+// The v1 wire/storage shape still requires viewport. Camera position is session-only, so Web
+// normalizes that compatibility field instead of restoring or persisting a user's pan/zoom state.
+const EPHEMERAL_VIEWPORT_PLACEHOLDER = { x: 0, y: 0, zoom: 1 } as const;
 
 export type LayoutPersistenceStatus =
   | "LOADING"
@@ -412,7 +415,7 @@ export function createDefaultLayoutValue(schemaHash: string): DiagramLayoutValue
     positions: {},
     collapsedGroupKeys: [],
     hiddenElementKeys: [],
-    viewport: { x: 0, y: 0, zoom: 1 },
+    viewport: { ...EPHEMERAL_VIEWPORT_PLACEHOLDER },
     detailLevel: "FULL",
     baseSchemaHash: schemaHash,
   };
@@ -423,7 +426,7 @@ function stripIdentity(layout: NonNullable<LayoutResponse["layout"]>): DiagramLa
     positions: clonePositions(layout.positions),
     collapsedGroupKeys: [...layout.collapsedGroupKeys],
     hiddenElementKeys: [...layout.hiddenElementKeys],
-    viewport: { ...layout.viewport },
+    viewport: { ...EPHEMERAL_VIEWPORT_PLACEHOLDER },
     detailLevel: layout.detailLevel,
     baseSchemaHash: layout.baseSchemaHash,
   };
@@ -434,7 +437,7 @@ function cloneLayout(layout: DiagramLayoutValue): DiagramLayoutValue {
     positions: clonePositions(layout.positions),
     collapsedGroupKeys: [...layout.collapsedGroupKeys],
     hiddenElementKeys: [...layout.hiddenElementKeys],
-    viewport: { ...layout.viewport },
+    viewport: { ...EPHEMERAL_VIEWPORT_PLACEHOLDER },
     detailLevel: layout.detailLevel,
     baseSchemaHash: layout.baseSchemaHash,
   };
@@ -464,7 +467,7 @@ function canonicalLayout(layout: DiagramLayoutValue): DiagramLayoutValue {
     ),
     collapsedGroupKeys: [...layout.collapsedGroupKeys].sort(compareStrings),
     hiddenElementKeys: [...layout.hiddenElementKeys].sort(compareStrings),
-    viewport: { ...layout.viewport },
+    viewport: { ...EPHEMERAL_VIEWPORT_PLACEHOLDER },
     detailLevel: layout.detailLevel,
     baseSchemaHash: layout.baseSchemaHash,
   };

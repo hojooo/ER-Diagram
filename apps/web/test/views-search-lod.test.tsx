@@ -281,6 +281,41 @@ describe("per-view diagram session state", () => {
 });
 
 describe("accessible view, search, and detail controls", () => {
+  it("keeps long view and search controls inside separate responsive grid cells", () => {
+    const template = requiredView(demoSchemaGraph, "identity_only");
+    const longView = {
+      ...template,
+      key: 'view:[null,"매우 긴 diagram view 이름"]',
+      schemaName: null,
+      name: "매우 긴 diagram view 이름 that must not overlap search",
+    };
+    const graph = { ...demoSchemaGraph, views: [...demoSchemaGraph.views, longView] };
+
+    render(
+      <DiagramWorkspaceControls
+        graph={graph}
+        visibility={createDiagramVisibility(graph, longView.key)}
+        viewKey={longView.key}
+        detailLevel="FULL"
+        searchQuery=""
+        onSearchQueryChange={vi.fn()}
+        onActivateSearchResult={vi.fn()}
+        onViewChange={vi.fn()}
+        onDetailLevelChange={vi.fn()}
+      />,
+    );
+
+    const viewSelector = screen.getByRole("combobox", { name: "Diagram view" });
+    const search = screen.getByRole("combobox", { name: "Search current view" });
+    const controls = viewSelector.closest("div");
+
+    expect(controls).toHaveClass("min-w-0", "w-full", "sm:grid-cols-2");
+    expect(viewSelector.closest("label")).toHaveClass("min-w-0");
+    expect(viewSelector).toHaveClass("min-w-0", "w-full", "max-w-full");
+    expect(search.parentElement).toHaveClass("min-w-0");
+    expect(search).toHaveClass("min-w-0", "w-full", "max-w-full");
+  });
+
   it("switches source-defined views and detail levels without schema mutations", () => {
     const identityView = requiredView(demoSchemaGraph, "identity_only");
     const visibility = createDiagramVisibility(demoSchemaGraph, identityView.key);

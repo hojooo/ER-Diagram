@@ -80,7 +80,10 @@ import {
   type VisualCommandSessionController,
   type VisualCommandSessionSnapshot,
 } from "../visual-editor/visual-command-session.js";
-import { VisualSchemaInspector } from "../visual-editor/visual-schema-inspector.js";
+import {
+  VisualInspectorRailSummary,
+  VisualSchemaInspector,
+} from "../visual-editor/visual-schema-inspector.js";
 import {
   CanvasWorkspaceShell,
   useCanvasWorkspaceSurfaces,
@@ -162,7 +165,6 @@ export function ProjectSourceWorkspace({
   const renderedLayoutRef = useRef<{
     readonly viewKey: DiagramViewKey;
     readonly positions: Readonly<Record<string, DiagramPosition>>;
-    readonly viewport: DiagramViewport;
   } | null>(null);
   const [selectionStore] = useState(createDiagramSelectionStore);
   const [activeViewKey, setActiveViewKey] = useState<DiagramViewKey>(GLOBAL_VIEW_KEY);
@@ -176,8 +178,10 @@ export function ProjectSourceWorkspace({
     selection: DiagramSelection;
     viewLabel: string;
   } | null>(null);
-  const surfaces = useCanvasWorkspaceSurfaces();
-  const [diagramControlsElement, setDiagramControlsElement] = useState<HTMLDivElement | null>(null);
+  const surfaces = useCanvasWorkspaceSurfaces({
+    initialRightPanelOpen:
+      initialState.currentRevision.validity === "VALID" || initialState.lastValidRevision !== null,
+  });
   const [viewportInsets, setViewportInsets] = useState<DiagramViewportInsets | null>(null);
   const projectId = initialState.project.id;
   const initialStateRef = useRef(initialState);
@@ -822,23 +826,11 @@ export function ProjectSourceWorkspace({
     }
   }, [defaultLayout, resolvedViewKey, visualCommandSession]);
 
-  const handleViewportCommit = useCallback(
-    (viewport: DiagramViewport) => {
-      editActiveLayout((current) => ({
-        ...current,
-        viewport: { ...viewport },
-        baseSchemaHash: activeGraph?.schemaHash ?? current.baseSchemaHash,
-      }));
-    },
-    [activeGraph?.schemaHash, editActiveLayout],
-  );
-
   const handleRenderedLayoutReady = useCallback(
-    (positions: Readonly<Record<string, DiagramPosition>>, viewport: DiagramViewport) => {
+    (positions: Readonly<Record<string, DiagramPosition>>, _viewport: DiagramViewport) => {
       renderedLayoutRef.current = {
         viewKey: resolvedViewKey,
         positions,
-        viewport,
       };
       setInitialDiagramReady(true);
     },
@@ -861,7 +853,6 @@ export function ProjectSourceWorkspace({
         baseline = {
           ...baseline,
           positions: { ...baseline.positions, ...rendered.positions },
-          viewport: { ...rendered.viewport },
           baseSchemaHash: graph.schemaHash,
         };
       }
@@ -899,7 +890,6 @@ export function ProjectSourceWorkspace({
     const next: DiagramLayoutValue = {
       ...view.layout,
       positions: { ...view.layout.positions, ...layoutPreview.positions },
-      viewport: { ...layoutPreview.viewport },
       baseSchemaHash: activeGraph.schemaHash,
     };
     await controller.replaceAndFlush(resolvedViewKey, next);
@@ -951,7 +941,7 @@ export function ProjectSourceWorkspace({
         positions: { ...result.positions },
         collapsedGroupKeys: [],
         hiddenElementKeys: [],
-        viewport: { ...result.viewport },
+        viewport: { x: 0, y: 0, zoom: 1 },
         detailLevel: "FULL",
         baseSchemaHash: activeGraph.schemaHash,
       };
@@ -1078,7 +1068,6 @@ export function ProjectSourceWorkspace({
     <>
       <CanvasWorkspaceShell
         surfaces={surfaces}
-        diagramControlsElement={diagramControlsElement}
         onViewportInsetsChange={setViewportInsets}
         commandBar={
           <div className="flex max-w-[calc(100vw-1.5rem)] items-center gap-2 overflow-x-auto px-3 py-2 text-sm sm:max-w-[calc(100vw-2.5rem)] sm:px-4">
@@ -1122,11 +1111,11 @@ export function ProjectSourceWorkspace({
             <button
               className={commandBarButtonClass}
               type="button"
-              aria-expanded={surfaces.inspectorOpen}
-              aria-controls="workspace-inspector-surface"
-              onClick={(event) => surfaces.toggleInspector(event.currentTarget)}
+              aria-expanded={surfaces.rightPanelOpen}
+              aria-controls="workspace-right-panel-content"
+              onClick={(event) => surfaces.toggleRightPanel(event.currentTarget)}
             >
-              {messages["workspace.inspector"]}
+              {messages["workspace.tools"]}
             </button>
             {historySession && historySnapshot ? (
               <SchemaHistoryControls
@@ -1171,7 +1160,6 @@ export function ProjectSourceWorkspace({
               layoutRequest?.mode === "RESET" ? NO_COLLAPSED_GROUP_KEYS : activeCollapsedGroupKeys
             }
             focusRequest={focusRequest}
-            searchQuery={searchQuery}
             selectionStore={selectionStore}
             DiagramComponent={DiagramComponent}
             requestLayout={requestBoundedLayout}
@@ -1180,23 +1168,34 @@ export function ProjectSourceWorkspace({
             layoutView={activeLayoutView}
             layoutConflict={layoutSnapshot?.conflict ?? null}
             layoutPositions={activeLayout.positions}
-            layoutViewport={activeLayoutView?.persistedLayout ? activeLayout.viewport : null}
+            layoutRequest={layoutRequest}
+            onToggleGroup={handleToggleGroup}
+            onNavigateSource={handleNavigateSource}
+            onFocusSource={() => openSourceSurface()}
+            onPositionsCommit={handlePositionsCommit}
+            onRenderedLayoutReady={handleRenderedLayoutReady}
+            onLayoutRequestReady={handleLayoutRequestReady}
+            onReloadLayout={() => void handleReloadLayout()}
+            visualInteractionDisabled={visualInteractionDisabled}
+          />
+        }
+        diagramTools={
+          <DiagramToolsPanel
+            snapshot={sessionSnapshot}
+            visibility={visibility}
+            viewKey={resolvedViewKey}
+            detailLevel={layoutRequest?.mode === "RESET" ? "FULL" : activeLayout.detailLevel}
+            searchQuery={searchQuery}
+            layoutView={activeLayoutView}
+            layoutConflict={layoutSnapshot?.conflict ?? null}
             layoutRequest={layoutRequest}
             layoutPreview={layoutPreview}
             layoutWorkflowError={layoutWorkflowError}
             layoutRecoveryNotice={layoutRecoveryNotice}
-            onToggleGroup={handleToggleGroup}
             onViewChange={handleViewChange}
             onDetailLevelChange={handleDetailLevelChange}
             onSearchQueryChange={setSearchQuery}
             onActivateSearchResult={handleActivateSearchResult}
-            onNavigateSource={handleNavigateSource}
-            onActivateElement={() => surfaces.openInspector()}
-            onFocusSource={() => openSourceSurface()}
-            onPositionsCommit={handlePositionsCommit}
-            onViewportCommit={handleViewportCommit}
-            onRenderedLayoutReady={handleRenderedLayoutReady}
-            onLayoutRequestReady={handleLayoutRequestReady}
             onPreviewAutoLayout={() => void handlePreviewAutoLayout()}
             onApplyAutoLayout={() => void handleApplyAutoLayout()}
             onCancelAutoLayout={handleCancelAutoLayout}
@@ -1204,10 +1203,7 @@ export function ProjectSourceWorkspace({
             onRetryLayout={() => void layoutSessionRef.current?.retrySave()}
             onRetryLocalLayout={() => void layoutSessionRef.current?.retryLocalLayout()}
             onLoadServerLayout={() => void layoutSessionRef.current?.loadServerLayout()}
-            onReloadLayout={() => void handleReloadLayout()}
             layoutInteractionDisabled={layoutInteractionLocked}
-            visualInteractionDisabled={visualInteractionDisabled}
-            controlsRef={setDiagramControlsElement}
           />
         }
         source={
@@ -1346,6 +1342,9 @@ export function ProjectSourceWorkspace({
             </div>
           )
         }
+        rightRailSummary={
+          <VisualInspectorRailSummary graph={activeGraph} selectionStore={selectionStore} />
+        }
         status={
           <div className="flex flex-wrap items-center justify-center gap-2 px-3 py-2 text-xs sm:justify-start">
             <span
@@ -1440,39 +1439,22 @@ export function ProjectSourceWorkspace({
   );
 }
 
-function DiagramPanel({
+function DiagramToolsPanel({
   snapshot,
   visibility,
   viewKey,
-  viewLabel,
   detailLevel,
-  collapsedGroupKeys,
-  focusRequest,
   searchQuery,
-  selectionStore,
-  DiagramComponent,
-  requestLayout,
-  sourceNavigationEnabled,
   layoutView,
   layoutConflict,
-  layoutPositions,
-  layoutViewport,
   layoutRequest,
   layoutPreview,
   layoutWorkflowError,
   layoutRecoveryNotice,
-  onToggleGroup,
   onViewChange,
   onDetailLevelChange,
   onSearchQueryChange,
   onActivateSearchResult,
-  onNavigateSource,
-  onActivateElement,
-  onFocusSource,
-  onPositionsCommit,
-  onViewportCommit,
-  onRenderedLayoutReady,
-  onLayoutRequestReady,
   onPreviewAutoLayout,
   onApplyAutoLayout,
   onCancelAutoLayout,
@@ -1480,47 +1462,23 @@ function DiagramPanel({
   onRetryLayout,
   onRetryLocalLayout,
   onLoadServerLayout,
-  onReloadLayout,
   layoutInteractionDisabled,
-  visualInteractionDisabled,
-  viewportInsets,
-  controlsRef,
 }: {
   readonly snapshot: SourceSessionSnapshot;
   readonly visibility: DiagramVisibility | null;
   readonly viewKey: DiagramViewKey;
-  readonly viewLabel: string;
   readonly detailLevel: DiagramLod;
-  readonly collapsedGroupKeys: ReadonlySet<string>;
-  readonly focusRequest: DiagramFocusRequest | null;
   readonly searchQuery: string;
-  readonly selectionStore: ReturnType<typeof createDiagramSelectionStore>;
-  readonly DiagramComponent: BaseSchemaDiagramComponent;
-  readonly requestLayout: NonNullable<BaseSchemaDiagramProps["requestLayout"]>;
-  readonly sourceNavigationEnabled: boolean;
   readonly layoutView: LayoutViewSnapshot | null;
   readonly layoutConflict: LayoutConflictState | null;
-  readonly layoutPositions: Readonly<Record<string, DiagramPosition>>;
-  readonly layoutViewport: DiagramViewport | null;
   readonly layoutRequest: DiagramLayoutRequest | null;
   readonly layoutPreview: DiagramLayoutRequestResult | null;
   readonly layoutWorkflowError: string | null;
   readonly layoutRecoveryNotice: string | null;
-  readonly onToggleGroup: (groupKey: string) => void;
   readonly onViewChange: (viewKey: DiagramViewKey) => void;
   readonly onDetailLevelChange: (detailLevel: DiagramLod) => void;
   readonly onSearchQueryChange: (query: string) => void;
   readonly onActivateSearchResult: (result: DiagramSearchResult) => void;
-  readonly onNavigateSource: (selection: DiagramSelection) => void;
-  readonly onActivateElement: (selection: DiagramSelection) => void;
-  readonly onFocusSource: () => void;
-  readonly onPositionsCommit: (positions: Readonly<Record<string, DiagramPosition>>) => void;
-  readonly onViewportCommit: (viewport: DiagramViewport) => void;
-  readonly onRenderedLayoutReady: (
-    positions: Readonly<Record<string, DiagramPosition>>,
-    viewport: DiagramViewport,
-  ) => void;
-  readonly onLayoutRequestReady: (result: DiagramLayoutRequestResult) => void;
   readonly onPreviewAutoLayout: () => void;
   readonly onApplyAutoLayout: () => void;
   readonly onCancelAutoLayout: () => void;
@@ -1528,11 +1486,7 @@ function DiagramPanel({
   readonly onRetryLayout: () => void;
   readonly onRetryLocalLayout: () => void;
   readonly onLoadServerLayout: () => void;
-  readonly onReloadLayout: () => void;
   readonly layoutInteractionDisabled: boolean;
-  readonly visualInteractionDisabled: boolean;
-  readonly viewportInsets: DiagramViewportInsets | null;
-  readonly controlsRef: (element: HTMLDivElement | null) => void;
 }) {
   const { messages } = useUiLocale();
   const graph = snapshot.activeGraph;
@@ -1547,63 +1501,129 @@ function DiagramPanel({
     layoutView?.layout.baseSchemaHash !== graph.schemaHash;
 
   return (
+    <div className="min-w-0">
+      <div className="px-4 py-3">
+        <h2 className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">
+          {messages["diagram.editable"]}
+        </h2>
+        <p className="mt-1 text-xs text-slate-400" aria-live="polite">
+          {graph
+            ? showingLastValid
+              ? messages["diagram.showingLastValid"](
+                  lastValidRevisionNo?.toString() ?? messages["common.unavailable"],
+                )
+              : messages["diagram.showingCurrent"]
+            : messages["diagram.noValidDescription"]}
+        </p>
+      </div>
+      {graph && visibility ? (
+        <>
+          <DiagramWorkspaceControls
+            layout="SIDEBAR"
+            graph={graph}
+            visibility={visibility}
+            viewKey={viewKey}
+            detailLevel={detailLevel}
+            searchQuery={searchQuery}
+            onSearchQueryChange={onSearchQueryChange}
+            onActivateSearchResult={onActivateSearchResult}
+            onViewChange={onViewChange}
+            onDetailLevelChange={onDetailLevelChange}
+            disabled={
+              layoutInteractionDisabled ||
+              layoutHydrating ||
+              layoutLoadFailed ||
+              layoutConflict !== null
+            }
+            searchDisabled={layoutBusy}
+          />
+          <LayoutToolbar
+            viewKey={viewKey}
+            layoutView={layoutView}
+            layoutConflict={layoutConflict}
+            layoutRequest={layoutRequest}
+            layoutPreview={layoutPreview}
+            workflowError={layoutWorkflowError}
+            recoveryNotice={layoutRecoveryNotice}
+            schemaHashMismatch={schemaHashMismatch}
+            onPreview={onPreviewAutoLayout}
+            onApply={onApplyAutoLayout}
+            onCancel={onCancelAutoLayout}
+            onReset={onResetLayout}
+            onRetry={onRetryLayout}
+            onRetryLocal={onRetryLocalLayout}
+            onLoadServer={onLoadServerLayout}
+          />
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function DiagramPanel({
+  snapshot,
+  visibility,
+  viewKey,
+  viewLabel,
+  detailLevel,
+  collapsedGroupKeys,
+  focusRequest,
+  selectionStore,
+  DiagramComponent,
+  requestLayout,
+  sourceNavigationEnabled,
+  layoutView,
+  layoutConflict,
+  layoutPositions,
+  layoutRequest,
+  onToggleGroup,
+  onNavigateSource,
+  onFocusSource,
+  onPositionsCommit,
+  onRenderedLayoutReady,
+  onLayoutRequestReady,
+  onReloadLayout,
+  visualInteractionDisabled,
+  viewportInsets,
+}: {
+  readonly snapshot: SourceSessionSnapshot;
+  readonly visibility: DiagramVisibility | null;
+  readonly viewKey: DiagramViewKey;
+  readonly viewLabel: string;
+  readonly detailLevel: DiagramLod;
+  readonly collapsedGroupKeys: ReadonlySet<string>;
+  readonly focusRequest: DiagramFocusRequest | null;
+  readonly selectionStore: ReturnType<typeof createDiagramSelectionStore>;
+  readonly DiagramComponent: BaseSchemaDiagramComponent;
+  readonly requestLayout: NonNullable<BaseSchemaDiagramProps["requestLayout"]>;
+  readonly sourceNavigationEnabled: boolean;
+  readonly layoutView: LayoutViewSnapshot | null;
+  readonly layoutConflict: LayoutConflictState | null;
+  readonly layoutPositions: Readonly<Record<string, DiagramPosition>>;
+  readonly layoutRequest: DiagramLayoutRequest | null;
+  readonly onToggleGroup: (groupKey: string) => void;
+  readonly onNavigateSource: (selection: DiagramSelection) => void;
+  readonly onFocusSource: () => void;
+  readonly onPositionsCommit: (positions: Readonly<Record<string, DiagramPosition>>) => void;
+  readonly onRenderedLayoutReady: (
+    positions: Readonly<Record<string, DiagramPosition>>,
+    viewport: DiagramViewport,
+  ) => void;
+  readonly onLayoutRequestReady: (result: DiagramLayoutRequestResult) => void;
+  readonly onReloadLayout: () => void;
+  readonly visualInteractionDisabled: boolean;
+  readonly viewportInsets: DiagramViewportInsets | null;
+}) {
+  const { messages } = useUiLocale();
+  const graph = snapshot.activeGraph;
+  const layoutBusy = layoutRequest !== null;
+  const layoutHydrating = layoutView === null || layoutView.status === "LOADING";
+  const layoutLoadFailed = layoutView?.status === "ERROR" && !layoutView.hydrated;
+
+  return (
     <section className="relative h-full min-h-0 overflow-hidden bg-slate-950">
       {graph && visibility ? (
         <>
-          <div
-            ref={controlsRef}
-            className="pointer-events-none absolute left-3 top-24 z-10 max-w-[min(58rem,calc(100vw-1.5rem))] sm:left-5"
-          >
-            <div className="pointer-events-auto overflow-hidden rounded-2xl border border-slate-700/90 bg-slate-950/90 shadow-2xl backdrop-blur-md">
-              <div className="border-b border-slate-700 px-4 py-3">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">
-                  {messages["diagram.editable"]}
-                </p>
-                <p className="mt-1 text-xs text-slate-400" aria-live="polite">
-                  {showingLastValid
-                    ? messages["diagram.showingLastValid"](
-                        lastValidRevisionNo?.toString() ?? messages["common.unavailable"],
-                      )
-                    : messages["diagram.showingCurrent"]}
-                </p>
-              </div>
-              <DiagramWorkspaceControls
-                graph={graph}
-                visibility={visibility}
-                viewKey={viewKey}
-                detailLevel={detailLevel}
-                searchQuery={searchQuery}
-                onSearchQueryChange={onSearchQueryChange}
-                onActivateSearchResult={onActivateSearchResult}
-                onViewChange={onViewChange}
-                onDetailLevelChange={onDetailLevelChange}
-                disabled={
-                  layoutInteractionDisabled ||
-                  layoutHydrating ||
-                  layoutLoadFailed ||
-                  layoutConflict !== null
-                }
-                searchDisabled={layoutBusy}
-              />
-              <LayoutToolbar
-                viewKey={viewKey}
-                layoutView={layoutView}
-                layoutConflict={layoutConflict}
-                layoutRequest={layoutRequest}
-                layoutPreview={layoutPreview}
-                workflowError={layoutWorkflowError}
-                recoveryNotice={layoutRecoveryNotice}
-                schemaHashMismatch={schemaHashMismatch}
-                onPreview={onPreviewAutoLayout}
-                onApply={onApplyAutoLayout}
-                onCancel={onCancelAutoLayout}
-                onReset={onResetLayout}
-                onRetry={onRetryLayout}
-                onRetryLocal={onRetryLocalLayout}
-                onLoadServer={onLoadServerLayout}
-              />
-            </div>
-          </div>
           <Suspense
             fallback={
               <div className="grid h-full place-items-center bg-slate-950 text-slate-300">
@@ -1642,19 +1662,16 @@ function DiagramPanel({
                 sourceNavigationEnabled={sourceNavigationEnabled}
                 onToggleGroup={onToggleGroup}
                 onNavigateSource={onNavigateSource}
-                onActivateElement={onActivateElement}
                 viewportInsets={viewportInsets}
                 fillContainer
                 requestLayout={requestLayout}
                 layoutPositions={layoutPositions}
-                layoutViewport={layoutViewport}
                 layoutPending={layoutHydrating}
                 layoutRequest={layoutRequest}
                 interactionDisabled={
                   layoutBusy || layoutConflict !== null || visualInteractionDisabled
                 }
                 onPositionsCommit={onPositionsCommit}
-                onViewportCommit={onViewportCommit}
                 onRenderedLayoutReady={onRenderedLayoutReady}
                 onLayoutRequestReady={onLayoutRequestReady}
               />

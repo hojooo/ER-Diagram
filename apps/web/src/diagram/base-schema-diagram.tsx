@@ -7,7 +7,6 @@ import {
   type NodeTypes,
   ReactFlow,
   type ReactFlowInstance,
-  type Viewport,
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
@@ -61,12 +60,10 @@ export function BaseSchemaDiagram({
   fillContainer = false,
   requestLayout = requestWorkerLayout,
   layoutPositions = EMPTY_LAYOUT_POSITIONS,
-  layoutViewport = null,
   layoutPending = false,
   layoutRequest = null,
   interactionDisabled = false,
   onPositionsCommit,
-  onViewportCommit,
   onLayoutRequestReady,
   onRenderedLayoutReady,
 }: BaseSchemaDiagramProps) {
@@ -145,18 +142,16 @@ export function BaseSchemaDiagram({
         previousProjection: stableProjectionRef.current,
       });
       const container = diagramContainerRef.current;
-      const viewport =
-        layoutViewport ??
-        (container
-          ? deriveInteractiveViewport(
-              derivedProjection,
-              {
-                width: container.clientWidth,
-                height: container.clientHeight,
-              },
-              { insets: viewportInsetsRef.current },
-            )
-          : null);
+      const viewport = container
+        ? deriveInteractiveViewport(
+            derivedProjection,
+            {
+              width: container.clientWidth,
+              height: container.clientHeight,
+            },
+            { insets: viewportInsetsRef.current },
+          )
+        : null;
       const currentFlowInstance = flowInstanceRef.current;
       let viewportPrepared = false;
       if (currentFlowInstance && viewport) {
@@ -194,7 +189,6 @@ export function BaseSchemaDiagram({
     layoutPositions,
     layoutPending,
     layoutRequest,
-    layoutViewport,
     projection,
     requestLayout,
   ]);
@@ -238,10 +232,6 @@ export function BaseSchemaDiagram({
         });
         return;
       }
-      if (!layoutRequest && layoutViewport) {
-        void Promise.resolve(flowInstance.setViewport(layoutViewport)).then(finishRenderedLayout);
-        return;
-      }
       if (!layoutRequest) {
         const container = diagramContainerRef.current;
         const viewport = container
@@ -280,7 +270,6 @@ export function BaseSchemaDiagram({
     layoutRequest,
     layoutPending,
     layoutStatus,
-    layoutViewport,
     onLayoutRequestReady,
     onRenderedLayoutReady,
     projection.nodes.length,
@@ -525,11 +514,6 @@ export function BaseSchemaDiagram({
             const positions = projectionPositions(displayProjection);
             positions[node.id] = { ...node.position };
             onPositionsCommit?.(positions);
-            if (flowInstance) onViewportCommit?.(toDiagramViewport(flowInstance.getViewport()));
-          }}
-          onMoveEnd={(event, viewport) => {
-            if (!event || interactionDisabled || layoutRequest) return;
-            onViewportCommit?.(toDiagramViewport(viewport));
           }}
           nodesDraggable={!interactionDisabled && layoutStatus === "READY"}
           nodesConnectable={false}
@@ -541,6 +525,9 @@ export function BaseSchemaDiagram({
           fitView={false}
           minZoom={0.15}
           maxZoom={1.75}
+          panOnScroll
+          zoomOnPinch
+          zoomOnScroll={false}
           onlyRenderVisibleElements
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
@@ -565,10 +552,6 @@ function projectionPositions(
   return Object.fromEntries(
     projection.nodes.map((node) => [node.id, { x: node.position.x, y: node.position.y }]),
   );
-}
-
-function toDiagramViewport(viewport: Viewport): { x: number; y: number; zoom: number } {
-  return { x: viewport.x, y: viewport.y, zoom: viewport.zoom };
 }
 
 function representativeNodeIdsForFocus(

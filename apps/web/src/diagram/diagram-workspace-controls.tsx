@@ -12,6 +12,7 @@ import type {
 } from "./types.js";
 
 export function DiagramWorkspaceControls({
+  layout = "OVERLAY",
   graph,
   visibility,
   viewKey,
@@ -24,6 +25,7 @@ export function DiagramWorkspaceControls({
   disabled = false,
   searchDisabled = disabled,
 }: {
+  readonly layout?: "OVERLAY" | "SIDEBAR";
   readonly graph: SchemaGraph;
   readonly visibility: DiagramVisibility;
   readonly viewKey: DiagramViewKey;
@@ -37,6 +39,7 @@ export function DiagramWorkspaceControls({
   readonly searchDisabled?: boolean;
 }) {
   const { messages } = useUiLocale();
+  const sidebar = layout === "SIDEBAR";
   const listboxId = useId();
   const [activeIndex, setActiveIndex] = useState(-1);
   const [resultsOpen, setResultsOpen] = useState(false);
@@ -57,11 +60,21 @@ export function DiagramWorkspaceControls({
   };
 
   return (
-    <div className="grid gap-3 border-b border-slate-700 bg-slate-900/95 px-4 py-3 lg:grid-cols-[minmax(10rem,0.7fr)_minmax(14rem,1.4fr)_minmax(9rem,0.6fr)_auto] lg:items-end">
-      <label className="grid gap-1 text-xs font-semibold text-slate-300">
+    <div
+      data-testid="diagram-workspace-controls"
+      data-layout={sidebar ? "sidebar" : "overlay"}
+      className={
+        sidebar
+          ? "grid w-full min-w-0 grid-cols-2 gap-3 bg-transparent px-4 py-3"
+          : "grid w-full min-w-0 gap-3 border-b border-slate-700 bg-slate-900/95 px-4 py-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,0.7fr)_minmax(0,1.4fr)_minmax(0,0.6fr)_minmax(0,auto)] xl:items-end"
+      }
+    >
+      <label
+        className={`grid min-w-0 gap-1 text-xs font-semibold text-slate-300 ${sidebar ? "col-start-1 row-start-1" : ""}`}
+      >
         {messages["diagram.view"]}
         <select
-          className="min-h-10 rounded-lg border border-slate-600 bg-slate-950 px-3 text-sm text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+          className={`min-h-10 w-full min-w-0 max-w-full rounded-lg border border-slate-600 bg-slate-950 px-3 text-sm text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${sidebar ? "truncate" : ""}`}
           value={viewKey}
           disabled={disabled}
           onChange={(event) => {
@@ -77,11 +90,13 @@ export function DiagramWorkspaceControls({
         </select>
       </label>
 
-      <div className="relative grid gap-1 text-xs font-semibold text-slate-300">
+      <div
+        className={`relative grid min-w-0 gap-1 text-xs font-semibold text-slate-300 ${sidebar ? "col-span-2 row-start-2" : ""}`}
+      >
         <label htmlFor={`${listboxId}-input`}>{messages["diagram.search"]}</label>
         <input
           id={`${listboxId}-input`}
-          className="min-h-10 rounded-lg border border-slate-600 bg-slate-950 px-3 text-sm text-slate-100 placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+          className="min-h-10 w-full min-w-0 max-w-full rounded-lg border border-slate-600 bg-slate-950 px-3 text-sm text-slate-100 placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
           type="search"
           role="combobox"
           autoComplete="off"
@@ -131,7 +146,7 @@ export function DiagramWorkspaceControls({
         {showResults ? (
           <div
             id={listboxId}
-            className="absolute left-0 right-0 top-full z-30 mt-1 max-h-80 overflow-auto rounded-lg border border-slate-600 bg-slate-950 p-1 shadow-2xl"
+            className={`${sidebar ? "relative" : "absolute left-0 right-0 top-full z-30"} mt-1 max-h-80 overflow-auto rounded-lg border border-slate-600 bg-slate-950 p-1 shadow-2xl`}
             role="listbox"
             aria-label={messages["diagram.searchResults"]}
           >
@@ -180,10 +195,12 @@ export function DiagramWorkspaceControls({
         </p>
       </div>
 
-      <label className="grid gap-1 text-xs font-semibold text-slate-300">
+      <label
+        className={`grid min-w-0 gap-1 text-xs font-semibold text-slate-300 ${sidebar ? "col-start-2 row-start-1" : ""}`}
+      >
         {messages["diagram.detailLevel"]}
         <select
-          className="min-h-10 rounded-lg border border-slate-600 bg-slate-950 px-3 text-sm text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+          className="min-h-10 w-full min-w-0 max-w-full rounded-lg border border-slate-600 bg-slate-950 px-3 text-sm text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
           value={detailLevel}
           disabled={disabled}
           onChange={(event) => onDetailLevelChange(event.target.value as DiagramLod)}
@@ -194,7 +211,10 @@ export function DiagramWorkspaceControls({
         </select>
       </label>
 
-      <p className="pb-2 text-xs text-slate-400" aria-live="polite">
+      <p
+        className={`min-w-0 break-words pb-2 text-xs text-slate-400 ${sidebar ? "col-span-2 row-start-3" : "sm:col-span-2 xl:col-span-1"}`}
+        aria-live="polite"
+      >
         {messages["diagram.inventory"](
           visibility.tableKeys.size,
           visibility.groupKeys.size,

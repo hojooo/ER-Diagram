@@ -155,8 +155,14 @@ describe("Korean-first Web localization", () => {
     expect(Object.keys(koreanMessages).sort()).toEqual(Object.keys(englishMessages).sort());
     expect(koreanMessages["diagram.canvas"]).toBe("ER 다이어그램 캔버스");
     expect(koreanMessages["source.editorAria"]).toBe("DBML 소스 편집기");
+    expect(koreanMessages["outline.compilerInformation"]).toBe("DBML 컴파일러 정보");
     expect(englishMessages["diagram.canvas"]).toBe("ER diagram canvas");
     expect(englishMessages["source.editorAria"]).toBe("DBML source editor");
+    expect(englishMessages["outline.compilerInformationLocations"](2)).toBe("2 source locations");
+    expect(englishMessages["workspace.tools"]).toBe("Tools");
+    expect(englishMessages["workspace.toolsPanel"]).toBe("Workspace tools");
+    expect(koreanMessages["workspace.tools"]).toBe("도구");
+    expect(koreanMessages["workspace.toolsPanel"]).toBe("작업 공간 도구");
 
     const korean = render(
       <UiLocaleProvider initialLocale="ko">
