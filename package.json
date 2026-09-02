@@ -36,6 +36,7 @@
     "test:m1-gate": "pnpm --filter @er-diagram/test-fixtures test test/synthetic-fixtures.test.ts && pnpm --filter @er-diagram/server test:integration milestone-1-gate && pnpm test:e2e milestone-1-gate",
     "test:m2-gate": "pnpm --filter @er-diagram/test-fixtures test test/sql-interchange-gate-fixtures.test.ts && pnpm --filter @er-diagram/core test test/sql-interchange-gate.test.ts && pnpm --filter @er-diagram/server test:integration milestone-2-gate && pnpm test:e2e milestone-2-gate",
     "test:m3-gate": "pnpm --filter @er-diagram/test-fixtures test test/visual-command-gate-fixtures.test.ts && pnpm --filter @er-diagram/contracts test test/visual-command.test.ts && pnpm --filter @er-diagram/source-transform test test/visual-command-gate.test.ts && pnpm --filter @er-diagram/server test:integration milestone-3-gate && pnpm test:e2e milestone-3-gate",
+    "test:p0-gate": "pnpm --filter @er-diagram/test-fixtures test test/p0-acceptance-profile.test.ts && pnpm --filter @er-diagram/test-fixtures build && node scripts/test-p0-acceptance.mjs",
     "test:perf": "node scripts/run-perf-tests.mjs",
     "test:release": "node --test scripts/check-release-image.test.mjs scripts/release-sbom-assets.test.mjs && node scripts/test-release.mjs",
     "test:runtime-lifecycle": "pnpm build:resource-workers && node scripts/test-runtime-lifecycle.mjs",

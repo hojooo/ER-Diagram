@@ -6,6 +6,7 @@
 coverage
 playwright-report
 test-results
+scripts/test-p0-acceptance.mjs
 *.log
 *.sqlite
 *.sqlite-*
