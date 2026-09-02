@@ -151,7 +151,8 @@ profile version 1은 source hash
 5. **visual mutation은 DBML에 검증 가능한 최소 변경으로 반영한다.**
    - 전체 normalized model을 DBML로 재생성해 원문을 덮어쓰지 않는다.
 6. **dragging은 schema를 바꾸지 않는다.**
-   - 위치·viewport·collapse·hide는 DBML source를 수정하지 않는다.
+   - node 위치·collapse·hide는 layout sidecar이며 DBML source를 수정하지 않는다.
+   - camera viewport는 browser session에서만 유지하고 durable layout에 저장하거나 복원하지 않는다.
 7. **하나의 project는 하나의 primary dialect를 갖는다.**
    - PostgreSQL project와 MySQL project의 type·export validation을 혼합하지 않는다.
 8. **동일 입력과 동일 parser version은 동일 normalized graph를 만든다.**
@@ -169,14 +170,14 @@ profile version 1은 source hash
 | `Draft Source` | 저장될 수 있으나 일시적으로 parse error가 있을 수 있는 현재 편집 text |
 | `Last-valid Revision` | parse·semantic validation을 마지막으로 통과한 DBML revision |
 | `Normalized Schema Graph` | DBML compiler 결과를 UI와 검증에 맞게 정규화한 파생 model |
-| `Layout Sidecar` | node 위치·viewport·collapse·hide 등을 저장하는 DBML 외부 데이터 |
+| `Layout Sidecar` | node 위치·collapse·hide·detail level 등을 저장하는 DBML 외부 데이터 |
 | `Visual Command` | diagram에서 table·column·ref·index·constraint를 변경하는 typed command |
 | `Session History` | 실제 schema source를 변경한 source·visual·manual restore를 project별 최대 100단계로 보관하는 reload-ephemeral undo/redo stack |
 | `Durable Revision Restore` | source-free history summary에서 revision을 선택해 새 `RESTORE` checkpoint로 현재 source를 복구하는 작업 |
 | `Conversion Report` | SQL import/export 과정의 exact·normalized·partial·unsupported·error 진단 집합 |
 | `Primary Dialect` | project의 SQL type과 DDL import/export validation 기준인 `POSTGRESQL` 또는 `MYSQL` |
 | `DiagramView` | DBML이 정의한 visible entity projection |
-| `View Layout` | 특정 `DiagramView`에 적용되는 위치·collapse·viewport 상태 |
+| `View Layout` | 특정 `DiagramView`에 적용되는 node 위치·collapse·hide·detail level 상태 |
 
 ## 8. 범위와 우선순위
 
@@ -228,17 +229,19 @@ P2 항목은 P0 요구사항으로 해석하지 않는다. 특히 database conne
 ### 9.2 Schema Workspace
 
 ```text
-┌──────────────────────────────────────────────────────────────┐
-│ Diagram Canvas · full-bleed persistent background            │
-├──────────────────────┬───────────────────────────────────────┤
-│ Outline / Source     │ Inspector / History overlays          │
-│ - dismiss / expand   │ - visual edit / diagnostics           │
-│ - DBML / Problems    │ - revision / change summary           │
-│ Canvas stays interactive behind explicit overlay boundaries  │
-│ View / Search / LOD / Group controls stay on canvas          │
-├──────────────────────┴───────────────────────────────────────┤
-│ Save / Parse / Conflict · contextual commands                │
-└──────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│ Floating command bar                                                   │
+│                                                                        │
+│ Outline / Source       Diagram Canvas        Right tool dock           │
+│ dismissible left dock  persistent background ┌──────┬────────────────┐ │
+│                                              │ rail │ Editable ERD   │ │
+│                                              │ 56px │ view/search/LOD│ │
+│                                              │      │ layout         │ │
+│                                              │      ├────────────────┤ │
+│                                              │      │ Inspector      │ │
+│                                              └──────┴────────────────┘ │
+│ Save / Parse / Conflict · contextual status                           │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 Diagram Canvas는 workspace의 전체 viewport를 차지하며 route 내 source·visual·layout 작업 동안 remount되지
@@ -246,10 +249,31 @@ Diagram Canvas는 workspace의 전체 viewport를 차지하며 route 내 source�
 위에 배치되는 dismissible 또는 resizable surface다. Surface를 열고 닫는 동작은 diagram의 saved position,
 viewport, selection과 schema/layout revision을 암묵적으로 변경하지 않는다.
 
-Overlay는 canvas pan·zoom·drag와 명확한 pointer boundary를 가져야 하고, keyboard focus order, visible focus,
-Escape/trigger focus return과 narrow viewport의 reflow를 보장해야 한다. Source editing처럼 넓은 작업 면적이
-필요한 surface는 확장할 수 있지만 diagram을 별도 sibling page로 교체하지 않는다. Project Home과 독립적인
-SQL import/export·bundle 화면까지 diagram background를 적용하는 것은 이번 결정에 포함하지 않는다.
+오른쪽 도구 dock은 workspace 전체 높이를 사용하며 shell 안에서 유일한 complementary landmark다. 유효한
+workspace는 넓은 화면에서 dock을 연 상태로 시작하고, 좁은 화면과 200% zoom처럼 가용 폭이 줄어든 환경에서는
+56px rail만 남긴 채 접힌 상태로 시작한다. 열면 좁은 화면에서는 focus trap, Escape close와 trigger focus return을
+제공하는 full-screen dialog가 된다. 넓은 화면에서는 Source 또는 Outline과 동시에 열 수 있다. 패널을 접어도
+Diagram controls와 Visual Inspector는 mount를 유지하되 `inert`와 `aria-hidden`으로 비활성화해 검색 상태와 visual
+form draft를 보존한다.
+
+Dock 상단에는 `Editable ER diagram`, source-defined `DiagramView`, current-view 검색, LOD와 명시적 layout action을
+모은다. 상단 영역은 전체 높이의 절반까지만 사용하고 자체 scroll하며, Visual Inspector는 남은 높이에서 독립적으로
+scroll한다. 검색 결과는 panel flow 안에서 펼쳐져 Inspector나 canvas와 겹치지 않는다. 접힌 rail은 현재 선택한
+table, column, reference 또는 group의 kind와 이름을 갱신하지만, canvas 선택만으로 panel을 다시 열지는 않는다.
+사용자는 command bar 또는 rail action으로만 panel을 명시적으로 연다.
+
+DBML compiler의 `INFO` diagnostic은 schema 탐색 맥락을 유지하도록 Outline 하단에 code·message와 모든 source
+위치를 묶어 표시한다. `ERROR`와 `WARNING`은 현재 draft의 수정이 필요한 Problems contextual alert에 유지한다.
+Severity 배치는 diagnostic을 숨기거나 source range를 제거하지 않으며, 어느 위치에서든 명시적 source 이동만
+Source surface를 연다.
+
+Overlay는 canvas pan·zoom·drag와 명확한 pointer/wheel boundary를 가져야 하고, keyboard focus order, visible
+focus, Escape/trigger focus return과 narrow viewport의 reflow를 보장해야 한다. Diagram safe area는 열린 right
+panel의 전체 폭 또는 접힌 rail 폭과 command/status/contextual surface만 반영한다. Panel open/close는 현재 camera를
+이동하거나 viewport를 저장하지 않으며, 초기 fit, 검색 focus와 명시적 auto-layout만 최신 safe area를 사용한다.
+Source editing처럼 넓은 작업 면적이 필요한 surface는 확장할 수 있지만 diagram을 별도 sibling page로 교체하지
+않는다. Project Home과 독립적인 SQL import/export·bundle 화면까지 diagram background를 적용하는 것은 이번
+결정에 포함하지 않는다.
 
 ### 9.3 Import Preview
 
@@ -598,7 +622,7 @@ candidate의 SQL과 versioned ConversionReport JSON은 별도 파일로 제공�
 | `DGM-005` | P0 | global view와 view별 layout을 분리한다. | 한 view의 node 이동이 다른 view 위치를 덮어쓰지 않으며 모든 view write는 project-global layout revision으로 직렬화된다. |
 | `DGM-006` | P0 | table·column·group·schema 검색과 focus를 제공한다. | 검색 결과 선택 시 해당 node가 viewport 중앙에 표시된다. |
 | `DGM-007` | P0 | `NAME_ONLY`, `KEYS_ONLY`, `FULL` detail level을 제공한다. | 큰 graph에서 detail을 낮춰도 node identity와 edge가 유지된다. |
-| `DGM-008` | P0 | auto layout preview·apply·cancel·reset을 제공한다. | cancel은 기존 layout을 변경하지 않고 reset은 현재 view의 위치·viewport·collapse·LOD를 함께 초기화한다. |
+| `DGM-008` | P0 | auto layout preview·apply·cancel·reset을 제공한다. | cancel은 기존 layout을 변경하지 않고 reset은 현재 view의 위치·collapse·LOD를 초기화한 뒤 session viewport를 fit한다. |
 | `DGM-009` | P0 | viewport culling과 필요한 level-of-detail을 사용한다. | 화면 밖 column DOM을 전부 렌더링하지 않는다. |
 | `DGM-010` | P0 | source와 diagram 간 양방향 navigation을 제공한다. | node/column 선택에서 source range로 이동하고 source symbol에서 node를 focus한다. |
 
@@ -606,10 +630,14 @@ candidate의 SQL과 versioned ConversionReport JSON은 별도 파일로 제공�
 cursor가 현재 view에서 숨겨진 symbol을 가리키더라도 view를 자동으로 변경하지 않으며, 사용자가
 `Show in Global`을 명시적으로 선택한 경우에만 Global view로 전환해 해당 symbol을 선택·focus한다.
 
-각 view의 위치, viewport, collapse와 detail level은 같은 view key의 layout sidecar에 저장한다. Layout
-write는 project 전체의 `layoutRevisionNo` 하나로 optimistic locking하며 다른 view에서 먼저 발생한 write도
-stale request를 `409`로 차단한다. 동일 payload는 revision을 만들지 않는 no-op이고 layout write는 DBML
-source, schema revision, project `updatedAt`과 Project Home 정렬을 변경하지 않는다.
+각 view의 node 위치, collapse, hidden state와 detail level은 같은 view key의 layout sidecar에 저장한다.
+사용자가 pan·zoom한 camera viewport는 browser session에서만 유지하며 layout API를 호출하거나 reload 후
+복원하지 않는다. Version 1 layout contract의 `viewport`는 호환을 위해 neutral `{ x: 0, y: 0, zoom: 1 }`
+placeholder로 유지한다. Canvas 위의 일반 wheel·trackpad scroll은 camera를 pan하고, pinch gesture와 명시적
+zoom control은 확대·축소에 사용한다. Layout write는 project 전체의 `layoutRevisionNo` 하나로 optimistic
+locking하며 다른 view에서 먼저 발생한 write도 stale request를 `409`로 차단한다. 동일 payload는 revision을
+만들지 않는 no-op이고 layout write는 DBML source, schema revision, project `updatedAt`과 Project Home 정렬을
+변경하지 않는다.
 
 일반 진입과 view·LOD·collapse 변경은 ELK를 호출하지 않고 deterministic Derived layout을 사용한다. Target
 view의 durable position, current stable projection의 absolute position 순으로 재사용하고 parent group이 바뀐
@@ -621,7 +649,8 @@ key로 위치와 hidden state를 복사하되 old key는 recovery를 위해 보�
 overwrite하지 않고 사용자가 최신 global revision으로 local layout을 재시도하거나 확인 후 충돌 view의 server
 layout을 불러온다. ELK worker는 명시적 Auto-layout Preview와 Reset에서만 사용한다. Preview는 durable
 baseline과 격리하며 Cancel은 추가 write 없이 이전 상태를 복구한다. Reset은 current view만 `FULL`, 모든 group
-expanded, hidden empty, fresh ELK 위치와 fit viewport로 저장하고 다른 view를 변경하지 않는다.
+expanded, hidden empty와 fresh ELK 위치로 저장하고, 계산된 fit viewport는 현재 session에만 적용한다. 다른
+view는 변경하지 않는다.
 
 ### 11.6 Visual schema editing
 
@@ -1034,7 +1063,7 @@ checkpoint는 자동 pruning 대상에서 제외한다. 현재 `lastValidRevisio
 | `positions` | element key별 x/y |
 | `collapsedGroupKeys` | 접힌 group 목록 |
 | `hiddenElementKeys` | 사용자가 추가로 숨긴 element 목록 |
-| `viewport` | x/y/zoom |
+| `viewport` | Version 1 호환용 neutral `{ x: 0, y: 0, zoom: 1 }`; 실제 camera는 session-only |
 | `detailLevel` | `NAME_ONLY`, `KEYS_ONLY`, `FULL` |
 | `baseSchemaHash` | 저장 당시 schema provenance |
 | `revisionNo` | 이 view row가 마지막으로 변경된 project-global layout revision |

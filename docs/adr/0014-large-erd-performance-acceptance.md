@@ -25,11 +25,12 @@ view의 durable saved position을 우선하고 current stable projection의 abso
 compound bounds를 다시 계산한다. 위치가 없는 node는 stable-key 순 collision-free grid에 배치한다.
 
 Derived position은 layout sidecar에 자동 저장하지 않으며 schema revision, layout revision과 project
-`updatedAt`을 변경하지 않는다. `Diagram layout ready`는 position과 compound bounds, persisted viewport 또는
-fit viewport 적용, drag·pan·zoom 활성화가 모두 끝난 뒤에만 표시한다. 그 이후 background ELK 결과로 node를
-이동하지 않는다.
+`updatedAt`을 변경하지 않는다. `Diagram layout ready`는 position과 compound bounds, 현재 safe area의 fit
+viewport 적용, drag·pan·zoom 활성화가 모두 끝난 뒤에만 표시한다. Camera viewport는 session-only이며 그
+이후 background ELK 결과로 node를 이동하지 않는다.
 
-First-uncached view는 target layout hydration을 먼저 끝낸 뒤 projection과 viewport를 한 번에 commit한다.
+First-uncached view는 target layout hydration을 먼저 끝낸 뒤 projection과 ephemeral fit viewport를 한 번에
+commit한다.
 Rapid view 요청은 generation guard로 이전 hydration 결과를 폐기한다. Derived projection bounds에서 viewport를
 직접 계산해 React Flow의 전체 node 재측정을 기다리지 않으며, 동일한 node·edge는 이전 projection의 object
 identity와 collection identity까지 재사용한다. 비활성 target layout은 중간 `LOADING` snapshot을 workspace에
