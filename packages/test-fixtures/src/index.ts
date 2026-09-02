@@ -1,6 +1,17 @@
 export const testFixturesPackage = "@er-diagram/test-fixtures";
 
 export type {
+  P0AcceptanceProfile,
+  P0AcceptanceReleaseGate,
+  P0ReleaseGateId,
+} from "./p0-acceptance-profile.js";
+export {
+  P0_ACCEPTANCE_PROFILE_HASH,
+  P0_ACCEPTANCE_PROFILE_VERSION,
+  p0AcceptanceProfile,
+} from "./p0-acceptance-profile.js";
+
+export type {
   M4PerformanceProfile,
   PerformanceFixtureEvidence,
 } from "./performance-profile.js";
