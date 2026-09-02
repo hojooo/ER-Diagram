@@ -47,6 +47,23 @@ RUN RUNTIME_RELEASE_CHANNEL="${RUNTIME_RELEASE_CHANNEL}" \
     RUNTIME_RELEASE_SOURCE_REVISION="${RUNTIME_RELEASE_SOURCE_REVISION}" \
     RUNTIME_RELEASE_IMAGE_REFERENCE="${RUNTIME_RELEASE_IMAGE_REFERENCE}" \
     node scripts/write-release-manifest.mjs /opt/er-diagram/release.json
+RUN if [ "${RUNTIME_RELEASE_CHANNEL}" = "RELEASE" ]; then \
+      SBOM_VERSION="${RUNTIME_RELEASE_VERSION}"; \
+      SBOM_REVISION="${RUNTIME_RELEASE_SOURCE_REVISION}"; \
+      SBOM_IMAGE_REFERENCE="${RUNTIME_RELEASE_IMAGE_REFERENCE}"; \
+    else \
+      SBOM_VERSION="0.0.0"; \
+      SBOM_REVISION="0000000000000000000000000000000000000000"; \
+      SBOM_IMAGE_REFERENCE="ghcr.io/hojooo/er-diagram:0.0.0"; \
+    fi && \
+    node scripts/generate-sbom.mjs \
+      --output /opt/er-diagram/sbom/er-diagram.cdx.json \
+      --version "${SBOM_VERSION}" \
+      --revision "${SBOM_REVISION}" \
+      --image-reference "${SBOM_IMAGE_REFERENCE}" && \
+    install -D -m 0644 \
+      node_modules/.pnpm/elkjs@0.12.0/node_modules/elkjs/LICENSE.md \
+      /opt/er-diagram/licenses/elkjs-EPL-2.0.txt
 RUN --mount=type=cache,id=er-diagram-pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
     pnpm --filter @er-diagram/server deploy --legacy --prod /opt/er-diagram/server
@@ -70,6 +87,8 @@ WORKDIR /app/server
 COPY --from=builder /opt/er-diagram/server /app/server
 COPY --from=builder /workspace/apps/web/dist /app/web
 COPY --from=builder /opt/er-diagram/release.json /app/release.json
+COPY --from=builder /opt/er-diagram/sbom /app/sbom
+COPY --from=builder /opt/er-diagram/licenses /app/licenses
 COPY --from=builder /workspace/LICENSE /app/LICENSE
 COPY --from=builder /workspace/NOTICE /app/NOTICE
 COPY --from=builder /workspace/THIRD_PARTY_NOTICES.md /app/THIRD_PARTY_NOTICES.md

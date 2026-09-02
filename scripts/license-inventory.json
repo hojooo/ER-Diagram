@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "packages": [
     {
       "name": "@axe-core/playwright",
@@ -13,6 +13,12 @@
       "licenseExpression": "MIT OR Apache-2.0",
       "selectedLicense": "Apache-2.0",
       "source": "https://github.com/biomejs/biome"
+    },
+    {
+      "name": "@cyclonedx/cyclonedx-library",
+      "version": "10.2.0",
+      "licenseExpression": "Apache-2.0",
+      "source": "https://github.com/CycloneDX/cyclonedx-javascript-library"
     },
     {
       "name": "@dbml/core",
@@ -238,6 +244,15 @@
       "version": "5.0.15",
       "licenseExpression": "MIT",
       "source": "https://github.com/pmndrs/zustand"
+    }
+  ],
+  "productionLicenseSelections": [
+    {
+      "name": "dompurify",
+      "version": "3.4.8",
+      "licenseExpression": "(MPL-2.0 OR Apache-2.0)",
+      "selectedLicense": "Apache-2.0",
+      "source": "https://github.com/cure53/DOMPurify"
     }
   ]
 }

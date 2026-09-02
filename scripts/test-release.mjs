@@ -5,7 +5,18 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { inspectOciLayout, requiredOciMetadata } from "./release-image-evidence.mjs";
+import {
+  BUILDKIT_SBOM_GENERATOR,
+  extractOciSpdxDocuments,
+  inspectOciLayout,
+  requiredOciMetadata,
+} from "./release-image-evidence.mjs";
+import {
+  finalizeReleaseAssets,
+  prepareApplicationReleaseAssets,
+  validateReleaseAssetDirectory,
+  writeSpdxReleaseAssets,
+} from "./release-sbom-assets.mjs";
 
 const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const sourceRevision = capture("git", ["rev-parse", "HEAD"]);
@@ -14,11 +25,19 @@ const imageReference = `ghcr.io/hojooo/er-diagram:${version}`;
 const temporaryDirectory = mkdtempSync(join(tmpdir(), "er-diagram-release-test-"));
 const archive = join(temporaryDirectory, "image.oci.tar");
 const layout = join(temporaryDirectory, "layout");
+const releaseAssets = join(temporaryDirectory, "release-assets");
 const imagePrefix = `er-diagram-release-test-${process.pid}`;
 const metadata = requiredOciMetadata({ version, revision: sourceRevision });
 const images = [];
 
 try {
+  const applicationAssets = await prepareApplicationReleaseAssets({
+    imageReference,
+    outputDirectory: releaseAssets,
+    repositoryRoot,
+    revision: sourceRevision,
+    version,
+  });
   run("docker", ["version"]);
   run("docker", [
     "buildx",
@@ -26,9 +45,9 @@ try {
     "--platform",
     "linux/amd64,linux/arm64",
     "--output",
-    `type=oci,dest=${archive}`,
+    `type=oci,dest=${archive},oci-artifact=true`,
     "--provenance=false",
-    "--sbom=false",
+    `--sbom=generator=${BUILDKIT_SBOM_GENERATOR}`,
     ...releaseBuildArguments(),
     ...annotationArguments(metadata),
     repositoryRoot,
@@ -36,6 +55,22 @@ try {
   mkdirSync(layout);
   run("tar", ["-xf", archive, "-C", layout]);
   const evidence = inspectOciLayout(layout, { version, revision: sourceRevision });
+  writeSpdxReleaseAssets({
+    documentsByPlatform: extractOciSpdxDocuments(layout, {
+      version,
+      revision: sourceRevision,
+    }),
+    outputDirectory: releaseAssets,
+    version,
+  });
+  finalizeReleaseAssets({ outputDirectory: releaseAssets, version });
+  validateReleaseAssetDirectory({
+    imageReference,
+    outputDirectory: releaseAssets,
+    repositoryRoot,
+    revision: sourceRevision,
+    version,
+  });
 
   for (const architecture of ["amd64", "arm64"]) {
     const image = `${imagePrefix}:${architecture}`;
@@ -74,6 +109,9 @@ try {
       sourceRevision,
       parserVersion: "9.1.1",
       bundleSchemaVersion: 1,
+      cyclonedxSha256: applicationAssets.cyclonedxSha256,
+      elkLicenseBytes: applicationAssets.elkLicenseBytes,
+      elkLicenseSha256: applicationAssets.elkLicenseSha256,
       parsedTableCount: 1,
     });
   }
@@ -120,8 +158,21 @@ function annotationArguments(values) {
 
 function runtimeProbe() {
   return `
+    import { createHash } from "node:crypto";
     import { readFileSync } from "node:fs";
     const identity = JSON.parse(readFileSync("/app/release.json", "utf8"));
+    const cyclonedxBytes = readFileSync("/app/sbom/er-diagram.cdx.json");
+    const cyclonedx = JSON.parse(cyclonedxBytes.toString("utf8"));
+    if (cyclonedx.specVersion !== "1.6") throw new Error("release CycloneDX is invalid");
+    if (!cyclonedx.components.some(({ name }) => name === "better-sqlite3")) {
+      throw new Error("release CycloneDX production closure is incomplete");
+    }
+    if (cyclonedx.components.some(({ name }) => name === "@cyclonedx/cyclonedx-library")) {
+      throw new Error("development SBOM generator leaked into the runtime closure");
+    }
+    const elkLicense = readFileSync("/app/licenses/elkjs-EPL-2.0.txt");
+    const elkLicenseBytes = elkLicense.length;
+    if (elkLicenseBytes < 10_000) throw new Error("EPL license evidence is incomplete");
     const serverPackage = await import("/app/server/dist/index.js");
     const executor = serverPackage.createResourceExecutor({
       limits: {
@@ -146,6 +197,9 @@ function runtimeProbe() {
       sourceRevision: identity.sourceRevision,
       parserVersion: identity.parserVersion,
       bundleSchemaVersion: identity.bundleSchemaVersion,
+      cyclonedxSha256: createHash("sha256").update(cyclonedxBytes).digest("hex"),
+      elkLicenseBytes,
+      elkLicenseSha256: createHash("sha256").update(elkLicense).digest("hex"),
       parsedTableCount: parsed.graph.tables.length,
     }));
   `;

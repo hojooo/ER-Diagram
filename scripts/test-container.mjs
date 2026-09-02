@@ -124,6 +124,8 @@ async function assertImageRuntime() {
       "/app/server/dist/resource-worker.js",
       "/app/web/index.html",
       "/app/release.json",
+      "/app/sbom/er-diagram.cdx.json",
+      "/app/licenses/elkjs-EPL-2.0.txt",
       "/app/LICENSE",
       "/app/NOTICE",
       "/app/THIRD_PARTY_NOTICES.md",

@@ -2,7 +2,11 @@
 import { execFileSync } from "node:child_process";
 import process from "node:process";
 
-import { requiredOciMetadata } from "./release-image-evidence.mjs";
+import {
+  requiredOciMetadata,
+  validateAttestationManifestEnvelope,
+  validateSpdxDocument,
+} from "./release-image-evidence.mjs";
 
 const [reference, version, revision] = process.argv.slice(2);
 if (!reference || !version || !revision) fail("RELEASE_REMOTE_ARGUMENT_INVALID");
@@ -22,7 +26,43 @@ try {
     fail("RELEASE_REMOTE_INDEX_INVALID");
   }
   assertMetadata(index.annotations, metadata, "RELEASE_REMOTE_INDEX_ANNOTATION_INVALID");
-  const platforms = index.manifests
+  const imageDescriptors = index.manifests.filter(
+    (descriptor) => descriptor.platform?.os !== "unknown",
+  );
+  const attestationDescriptors = index.manifests.filter(
+    (descriptor) => descriptor.platform?.os === "unknown",
+  );
+  const imageDigests = new Set(imageDescriptors.map(({ digest: value }) => value));
+  const attestedDigests = new Set();
+  for (const descriptor of attestationDescriptors) {
+    const referencedDigest = descriptor.annotations?.["vnd.docker.reference.digest"];
+    if (
+      descriptor.platform?.architecture !== "unknown" ||
+      descriptor.platform?.variant !== undefined ||
+      descriptor.annotations?.["vnd.docker.reference.type"] !== "attestation-manifest" ||
+      !imageDigests.has(referencedDigest) ||
+      attestedDigests.has(referencedDigest)
+    ) {
+      fail("RELEASE_REMOTE_ATTESTATION_INVALID");
+    }
+    const rawAttestation = capture([
+      "buildx",
+      "imagetools",
+      "inspect",
+      `${reference.split("@")[0]}@${descriptor.digest}`,
+      "--raw",
+    ]);
+    validateAttestationManifestEnvelope(JSON.parse(rawAttestation), referencedDigest);
+    attestedDigests.add(referencedDigest);
+  }
+  if (
+    attestedDigests.size !== imageDigests.size ||
+    [...imageDigests].some((value) => !attestedDigests.has(value))
+  ) {
+    fail("RELEASE_REMOTE_SBOM_SET_INVALID");
+  }
+
+  const platformEvidence = imageDescriptors
     .map((descriptor) => {
       const platform = `${descriptor.platform?.os}/${descriptor.platform?.architecture}`;
       if (
@@ -41,9 +81,25 @@ try {
       ]);
       const manifest = JSON.parse(rawManifest);
       assertMetadata(manifest.annotations, metadata, "RELEASE_REMOTE_MANIFEST_ANNOTATION_INVALID");
-      return platform;
+      const spdx = JSON.parse(
+        capture([
+          "buildx",
+          "imagetools",
+          "inspect",
+          reference,
+          "--format",
+          `{{ json (index .SBOM "${platform}").SPDX }}`,
+        ]),
+      );
+      validateSpdxDocument(spdx);
+      return {
+        manifestDigest: descriptor.digest,
+        platform,
+        spdxVersion: spdx.spdxVersion,
+      };
     })
-    .sort();
+    .sort((left, right) => left.platform.localeCompare(right.platform, "en"));
+  const platforms = platformEvidence.map(({ platform }) => platform);
   if (JSON.stringify(platforms) !== JSON.stringify(["linux/amd64", "linux/arm64"])) {
     fail("RELEASE_REMOTE_PLATFORM_SET_INVALID");
   }
@@ -53,6 +109,7 @@ try {
       version,
       sourceRevision: revision,
       platforms,
+      platformEvidence,
     })}\n`,
   );
 } catch {

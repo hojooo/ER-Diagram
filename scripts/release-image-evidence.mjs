@@ -4,8 +4,25 @@ import { join } from "node:path";
 
 const OCI_INDEX = "application/vnd.oci.image.index.v1+json";
 const OCI_MANIFEST = "application/vnd.oci.image.manifest.v1+json";
+const OCI_EMPTY_CONFIG = "application/vnd.oci.empty.v1+json";
+const OCI_EMPTY_CONFIG_DIGEST =
+  "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a";
+const IN_TOTO_LAYER = "application/vnd.in-toto+json";
+const IN_TOTO_STATEMENTS = new Set([
+  "https://in-toto.io/Statement/v0.1",
+  "https://in-toto.io/Statement/v1",
+]);
+const SPDX_PREDICATE = "https://spdx.dev/Document";
+const ATTESTATION_ARTIFACT_TYPE = "application/vnd.docker.attestation.manifest.v1+json";
+const ATTESTATION_REFERENCE_DIGEST = "vnd.docker.reference.digest";
+const ATTESTATION_REFERENCE_TYPE = "vnd.docker.reference.type";
+const ATTESTATION_REFERENCE_VALUE = "attestation-manifest";
+const PREDICATE_TYPE_ANNOTATION = "in-toto.io/predicate-type";
 const REQUIRED_PLATFORMS = ["linux/amd64", "linux/arm64"];
 const REQUIRED_COMMAND = ["node", "dist/production-entrypoint.js"];
+
+export const BUILDKIT_SBOM_GENERATOR =
+  "docker.io/docker/buildkit-syft-scanner@sha256:ae4f3b554449e7e25548e7d8ccc029d17357348e30c6e3df01b92bc93654d6a9";
 
 export class ReleaseImageEvidenceError extends Error {
   constructor(code, message) {
@@ -39,6 +56,14 @@ export function requiredOciMetadata({ version, revision }) {
 }
 
 export function inspectOciLayout(layoutDirectory, expected) {
+  return inspectOciLayoutDetails(layoutDirectory, expected).evidence;
+}
+
+export function extractOciSpdxDocuments(layoutDirectory, expected) {
+  return inspectOciLayoutDetails(layoutDirectory, expected).spdxByPlatform;
+}
+
+function inspectOciLayoutDetails(layoutDirectory, expected) {
   const metadata = requiredOciMetadata(expected);
   const index = readJsonFile(join(layoutDirectory, "index.json"));
   assertObject(index, "RELEASE_OCI_INDEX_INVALID");
@@ -47,8 +72,18 @@ export function inspectOciLayout(layoutDirectory, expected) {
   }
   const imageIndex = resolveImageIndex(layoutDirectory, index, metadata);
 
-  const manifests = collectManifests(layoutDirectory, imageIndex, new Set());
-  const evidence = manifests.map(({ descriptor, manifest }) => {
+  const manifests = collectLeafManifests(layoutDirectory, imageIndex, new Set());
+  const imageManifests = manifests.filter(({ descriptor }) => !isAttestationDescriptor(descriptor));
+  const attestationManifests = manifests.filter(({ descriptor }) =>
+    isAttestationDescriptor(descriptor),
+  );
+  const spdxByManifestDigest = validateSbomAttestations(
+    layoutDirectory,
+    imageManifests,
+    attestationManifests,
+  );
+  const spdxByPlatform = new Map();
+  const evidence = imageManifests.map(({ descriptor, manifest }) => {
     const platform = descriptor.platform;
     assertObject(platform, "RELEASE_OCI_PLATFORM_INVALID");
     const platformName = `${platform.os}/${platform.architecture}`;
@@ -69,10 +104,15 @@ export function inspectOciLayout(layoutDirectory, expected) {
       throw evidenceError("RELEASE_OCI_COMMAND_INVALID");
     }
     assertMetadata(config.config.Labels, metadata, "RELEASE_OCI_LABEL_INVALID");
+    const sbom = spdxByManifestDigest.get(descriptor.digest);
+    if (!sbom) throw evidenceError("RELEASE_OCI_SBOM_MISSING");
+    spdxByPlatform.set(platformName, sbom.document);
     return Object.freeze({
       platform: platformName,
       manifestDigest: descriptor.digest,
       configDigest: configDescriptor.digest,
+      sbomDigest: sbom.layerDigest,
+      spdxVersion: sbom.document.spdxVersion,
       user: config.config.User,
       command: [...config.config.Cmd],
     });
@@ -91,9 +131,12 @@ export function inspectOciLayout(layoutDirectory, expected) {
   }
 
   return Object.freeze({
-    version: expected.version,
-    sourceRevision: expected.revision,
-    platforms: Object.freeze(evidence),
+    evidence: Object.freeze({
+      version: expected.version,
+      sourceRevision: expected.revision,
+      platforms: Object.freeze(evidence),
+    }),
+    spdxByPlatform,
   });
 }
 
@@ -116,7 +159,7 @@ function resolveImageIndex(layoutDirectory, layoutIndex, metadata) {
   return imageIndex;
 }
 
-function collectManifests(layoutDirectory, index, visited) {
+function collectLeafManifests(layoutDirectory, index, visited) {
   if (!Array.isArray(index.manifests)) throw evidenceError("RELEASE_OCI_INDEX_INVALID");
   return index.manifests.flatMap((descriptor) => {
     assertDescriptor(descriptor, "RELEASE_OCI_DESCRIPTOR_INVALID");
@@ -128,7 +171,7 @@ function collectManifests(layoutDirectory, index, visited) {
       if (document.schemaVersion !== 2 || document.mediaType !== OCI_INDEX) {
         throw evidenceError("RELEASE_OCI_INDEX_INVALID");
       }
-      return collectManifests(layoutDirectory, document, visited);
+      return collectLeafManifests(layoutDirectory, document, visited);
     }
     if (descriptor.mediaType !== OCI_MANIFEST) {
       throw evidenceError("RELEASE_OCI_MEDIA_TYPE_UNSUPPORTED");
@@ -139,6 +182,169 @@ function collectManifests(layoutDirectory, index, visited) {
     }
     return [{ descriptor, manifest: document }];
   });
+}
+
+function isAttestationDescriptor(descriptor) {
+  const annotations = descriptor.annotations;
+  const referenceType = annotations?.[ATTESTATION_REFERENCE_TYPE];
+  const platform = descriptor.platform;
+  const unknownPlatform =
+    platform?.os === "unknown" &&
+    platform?.architecture === "unknown" &&
+    platform?.variant === undefined;
+  if (referenceType === undefined && !unknownPlatform) return false;
+  if (referenceType !== ATTESTATION_REFERENCE_VALUE || !unknownPlatform) {
+    throw evidenceError("RELEASE_OCI_ATTESTATION_DESCRIPTOR_INVALID");
+  }
+  return true;
+}
+
+function validateSbomAttestations(layoutDirectory, imageManifests, attestationManifests) {
+  const imageDigests = new Set(imageManifests.map(({ descriptor }) => descriptor.digest));
+  const spdxByManifestDigest = new Map();
+
+  for (const { descriptor, manifest } of attestationManifests) {
+    const referencedDigest = descriptor.annotations?.[ATTESTATION_REFERENCE_DIGEST];
+    if (!imageDigests.has(referencedDigest) || spdxByManifestDigest.has(referencedDigest)) {
+      throw evidenceError("RELEASE_OCI_ATTESTATION_REFERENCE_INVALID");
+    }
+    const layer = validateAttestationManifestEnvelope(manifest, referencedDigest);
+    const statement = readBlobJson(layoutDirectory, layer);
+    validateSpdxStatement(statement, referencedDigest, { allowEmptySubject: true });
+    spdxByManifestDigest.set(referencedDigest, {
+      document: statement.predicate,
+      layerDigest: layer.digest,
+    });
+  }
+
+  if (
+    spdxByManifestDigest.size !== imageDigests.size ||
+    [...imageDigests].some((digest) => !spdxByManifestDigest.has(digest))
+  ) {
+    throw evidenceError("RELEASE_OCI_SBOM_SET_INVALID");
+  }
+  return spdxByManifestDigest;
+}
+
+export function validateAttestationManifestEnvelope(manifest, expectedManifestDigest) {
+  assertObject(manifest, "RELEASE_OCI_ATTESTATION_MANIFEST_INVALID");
+  if (
+    manifest.schemaVersion !== 2 ||
+    manifest.mediaType !== OCI_MANIFEST ||
+    manifest.artifactType !== ATTESTATION_ARTIFACT_TYPE
+  ) {
+    throw evidenceError("RELEASE_OCI_ATTESTATION_MANIFEST_INVALID");
+  }
+  assertDescriptor(manifest.config, "RELEASE_OCI_ATTESTATION_CONFIG_INVALID");
+  if (
+    manifest.config.mediaType !== OCI_EMPTY_CONFIG ||
+    manifest.config.digest !== OCI_EMPTY_CONFIG_DIGEST ||
+    manifest.config.size !== 2
+  ) {
+    throw evidenceError("RELEASE_OCI_ATTESTATION_CONFIG_INVALID");
+  }
+  assertDescriptor(manifest.subject, "RELEASE_OCI_ATTESTATION_SUBJECT_INVALID");
+  if (
+    manifest.subject.mediaType !== OCI_MANIFEST ||
+    manifest.subject.digest !== expectedManifestDigest ||
+    manifest.subject.size <= 0
+  ) {
+    throw evidenceError("RELEASE_OCI_ATTESTATION_SUBJECT_INVALID");
+  }
+  if (!Array.isArray(manifest.layers)) {
+    throw evidenceError("RELEASE_OCI_ATTESTATION_MANIFEST_INVALID");
+  }
+  const sbomLayers = manifest.layers.filter(
+    (layer) =>
+      layer.mediaType === IN_TOTO_LAYER &&
+      layer.annotations?.[PREDICATE_TYPE_ANNOTATION] === SPDX_PREDICATE,
+  );
+  if (sbomLayers.length !== 1) throw evidenceError("RELEASE_OCI_SBOM_LAYER_INVALID");
+  assertDescriptor(sbomLayers[0], "RELEASE_OCI_SBOM_LAYER_INVALID");
+  return sbomLayers[0];
+}
+
+export function validateSpdxStatement(
+  statement,
+  expectedManifestDigest,
+  { allowEmptySubject = false } = {},
+) {
+  assertObject(statement, "RELEASE_SPDX_STATEMENT_INVALID");
+  if (!IN_TOTO_STATEMENTS.has(statement._type) || statement.predicateType !== SPDX_PREDICATE) {
+    throw evidenceError("RELEASE_SPDX_STATEMENT_INVALID");
+  }
+  if (
+    !Array.isArray(statement.subject) ||
+    (!allowEmptySubject && statement.subject.length !== 1) ||
+    (allowEmptySubject && ![0, 1].includes(statement.subject.length))
+  ) {
+    throw evidenceError("RELEASE_SPDX_SUBJECT_INVALID");
+  }
+  const subjectDigest = statement.subject[0]?.digest?.sha256;
+  if (statement.subject.length === 1 && `sha256:${subjectDigest}` !== expectedManifestDigest) {
+    throw evidenceError("RELEASE_SPDX_SUBJECT_INVALID");
+  }
+  validateSpdxDocument(statement.predicate);
+}
+
+export function validateSpdxDocument(document) {
+  assertObject(document, "RELEASE_SPDX_DOCUMENT_INVALID");
+  if (
+    !["SPDX-2.2", "SPDX-2.3"].includes(document.spdxVersion) ||
+    document.SPDXID !== "SPDXRef-DOCUMENT" ||
+    document.dataLicense !== "CC0-1.0" ||
+    typeof document.documentNamespace !== "string" ||
+    !Array.isArray(document.packages) ||
+    document.packages.length === 0 ||
+    !Array.isArray(document.relationships) ||
+    document.relationships.length === 0
+  ) {
+    throw evidenceError("RELEASE_SPDX_DOCUMENT_INVALID");
+  }
+  const packageIds = document.packages.map((entry) => entry?.SPDXID);
+  if (
+    packageIds.some((value) => typeof value !== "string") ||
+    new Set(packageIds).size !== packageIds.length
+  ) {
+    throw evidenceError("RELEASE_SPDX_PACKAGE_SET_INVALID");
+  }
+  const fileIds = (document.files ?? []).map((entry) => entry?.SPDXID);
+  if (
+    !Array.isArray(document.files ?? []) ||
+    fileIds.some((value) => typeof value !== "string") ||
+    new Set(fileIds).size !== fileIds.length
+  ) {
+    throw evidenceError("RELEASE_SPDX_FILE_SET_INVALID");
+  }
+  const externalDocumentIds = new Set(
+    (document.externalDocumentRefs ?? []).map(({ externalDocumentId }) => externalDocumentId),
+  );
+  if (
+    !Array.isArray(document.externalDocumentRefs ?? []) ||
+    [...externalDocumentIds].some((value) => typeof value !== "string") ||
+    externalDocumentIds.size !== (document.externalDocumentRefs ?? []).length
+  ) {
+    throw evidenceError("RELEASE_SPDX_EXTERNAL_DOCUMENT_SET_INVALID");
+  }
+  const localElementIds = new Set([document.SPDXID, ...packageIds, ...fileIds]);
+  for (const relationship of document.relationships) {
+    if (
+      typeof relationship?.spdxElementId !== "string" ||
+      typeof relationship?.relatedSpdxElement !== "string" ||
+      typeof relationship?.relationshipType !== "string" ||
+      !isKnownSpdxElement(relationship.spdxElementId, localElementIds, externalDocumentIds) ||
+      !isKnownSpdxElement(relationship.relatedSpdxElement, localElementIds, externalDocumentIds)
+    ) {
+      throw evidenceError("RELEASE_SPDX_RELATIONSHIP_INVALID");
+    }
+  }
+  return document;
+}
+
+function isKnownSpdxElement(value, localElementIds, externalDocumentIds) {
+  if (value === "NONE" || value === "NOASSERTION" || localElementIds.has(value)) return true;
+  const external = /^(DocumentRef-[^:]+):SPDXRef-.+$/u.exec(value);
+  return external ? externalDocumentIds.has(external[1]) : false;
 }
 
 function readJsonFile(filename) {

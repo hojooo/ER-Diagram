@@ -12,6 +12,7 @@ effect and must be retained when that package is redistributed.
 | --- | --- | --- | --- | --- |
 | `@axe-core/playwright` | `4.13.0` | `MPL-2.0` | `MPL-2.0` | [source](https://github.com/dequelabs/axe-core-npm/tree/develop/packages/playwright) |
 | `@biomejs/biome` | `2.5.10` | `MIT OR Apache-2.0` | `Apache-2.0` | [source](https://github.com/biomejs/biome) |
+| `@cyclonedx/cyclonedx-library` | `10.2.0` | `Apache-2.0` | `Apache-2.0` | [source](https://github.com/CycloneDX/cyclonedx-javascript-library) |
 | `@dbml/core` | `9.1.1` | `Apache-2.0` | `Apache-2.0` | [source](https://github.com/holistics/dbml/tree/master/packages/dbml-core) |
 | `@dbml/parse` | `9.1.1` | `Apache-2.0` | `Apache-2.0` | [source](https://github.com/holistics/dbml/tree/master/packages/dbml-parse) |
 | `@fastify/helmet` | `13.0.0` | `MIT` | `MIT` | [source](https://github.com/fastify/fastify-helmet) |
@@ -70,12 +71,29 @@ test adapter under MPL-2.0. It is not part of the production dependency closure;
 its package license text and upstream source remain available with the installed
 development dependency.
 
+`@cyclonedx/cyclonedx-library@10.2.0` is an Apache-2.0 development-only build
+tool. It generates the application dependency inventory and is not copied into
+the production dependency closure.
+
+## Production transitive license choices
+
+`dompurify@3.4.8` declares `(MPL-2.0 OR Apache-2.0)`. This distribution selects
+the Apache-2.0 option. Its source remains available from the
+[upstream repository](https://github.com/cure53/DOMPurify). The complete
+production dependency closure and the selected license are recorded in the
+release CycloneDX SBOM.
+
 ## ELK.js source availability
 
 The `elkjs@0.12.0` package declares `EPL-2.0 OR GPL-3.0-or-later`. This project
 uses the EPL-2.0 option. The unmodified package source is available in the
 [upstream repository](https://github.com/kieler/elkjs) and in the exact
 [npm source archive](https://registry.npmjs.org/elkjs/-/elkjs-0.12.0.tgz).
+
+Each versioned GitHub Release also publishes the exact archive as
+`elkjs-0.12.0-source.tgz` and the accompanying EPL-2.0 text as
+`elkjs-0.12.0-EPL-2.0.txt`. The production image keeps the license text under
+`/app/licenses/` and this notice identifies both source locations.
 
 When distributing a modified EPL-covered ELK.js build, make the corresponding
 source and modification notices available as required by EPL-2.0, preserve the

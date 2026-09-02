@@ -23,6 +23,7 @@ const requiredFiles = [
   "docs/adr/0013-core-flow-accessibility.md",
   "docs/adr/0014-large-erd-performance-acceptance.md",
   "docs/adr/0015-multi-architecture-ghcr-release.md",
+  "docs/adr/0016-sbom-and-epl-source-evidence.md",
   "docs/operations/accessibility-checklist.md",
   "docs/operations/backup-restore.md",
   "docs/operations/container.md",
