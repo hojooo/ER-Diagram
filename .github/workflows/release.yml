@@ -8,6 +8,15 @@ on:
         required: true
         default: main
         type: string
+      version:
+        description: Stable release version to embed in the dry-run image
+        required: true
+        default: 0.0.0
+        type: string
+      expectedRevision:
+        description: Full commit SHA expected after checkout
+        required: true
+        type: string
   push:
     tags:
       - "v*"
@@ -47,6 +56,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
+          DISPATCH_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '' }}
         run: |
           set -euo pipefail
           revision="$(git rev-parse HEAD)"
@@ -71,6 +81,8 @@ jobs:
               fi
             done < <(git tag --list 'v*' --sort=-v:refname)
             if [[ "$highest" == "$REF_NAME" ]]; then publish_latest="true"; fi
+          else
+            version="$DISPATCH_VERSION"
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "revision=$revision" >> "$GITHUB_OUTPUT"
@@ -79,6 +91,15 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ env.NODE_VERSION }}
+      - name: Validate exact release candidate approval
+        env:
+          RELEASE_EVENT_NAME: ${{ github.event_name }}
+          RELEASE_VERSION: ${{ steps.identity.outputs.version }}
+          RELEASE_REVISION: ${{ steps.identity.outputs.revision }}
+          RELEASE_EXPECTED_REVISION: ${{ github.event_name == 'workflow_dispatch' && inputs.expectedRevision || '' }}
+          RELEASE_APPROVED_VERSION: ${{ vars.RELEASE_APPROVED_VERSION }}
+          RELEASE_APPROVED_REVISION: ${{ vars.RELEASE_APPROVED_REVISION }}
+        run: node scripts/check-release-approval.mjs
       - name: Enable pnpm through Corepack
         run: |
           corepack enable
@@ -145,7 +166,10 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       - name: Build, inspect, and execute both platform images
-        run: pnpm test:release
+        run: >-
+          pnpm test:release
+          --version "${{ needs.validate.outputs.version }}"
+          --revision "${{ needs.validate.outputs.revision }}"
 
   publish-image:
     name: Publish immutable GHCR image and GitHub Release
