@@ -453,18 +453,19 @@ function databaseProbe(container) {
 function databaseProbeSource() {
   return `
     import { createHash } from "node:crypto";
-    import Database from "better-sqlite3";
+    import { openSqliteStorage } from "@er-diagram/storage-sqlite";
     const sha = (value) => createHash("sha256").update(value).digest("hex");
     const bytes = (value) => Buffer.byteLength(value, "utf8");
-    const db = new Database("/data/er-diagram.sqlite", { readonly: true, fileMustExist: true });
+    const storage = openSqliteStorage({ filename: "/data/er-diagram.sqlite" });
+    const db = storage.database;
     try {
-      const projects = db.prepare("SELECT id, name, primary_dialect AS primaryDialect, draft_source AS draftSource, draft_hash AS draftHash, last_valid_revision_id AS lastValidRevisionId, parser_version AS parserVersion, schema_revision_no AS schemaRevisionNo, layout_revision_no AS layoutRevisionNo, created_at AS createdAt, updated_at AS updatedAt FROM projects ORDER BY id").all().map(({ draftSource, ...row }) => ({ ...row, draftSourceBytes: bytes(draftSource), draftSourceSha256: sha(draftSource) }));
-      const revisions = db.prepare("SELECT id, project_id AS projectId, revision_no AS revisionNo, source, source_hash AS sourceHash, validity, origin, parser_version AS parserVersion, diagnostic_summary_json AS diagnosticSummary, created_at AS createdAt FROM schema_revisions ORDER BY project_id, revision_no").all().map(({ source, ...row }) => ({ ...row, sourceBytes: bytes(source), sourceSha256: sha(source) }));
-      const layouts = db.prepare("SELECT project_id AS projectId, view_key AS viewKey, positions_json AS positions, collapsed_group_keys_json AS collapsedGroupKeys, hidden_element_keys_json AS hiddenElementKeys, viewport_json AS viewport, detail_level AS detailLevel, base_schema_hash AS baseSchemaHash, revision_no AS revisionNo FROM diagram_layouts ORDER BY project_id, view_key").all();
-      const artifacts = db.prepare("SELECT id, project_id AS projectId, dialect, original_sql AS originalSql, original_hash AS originalHash, generated_dbml AS generatedDbml, parser_version AS parserVersion, report_json AS report, status, created_at AS createdAt, applied_at AS appliedAt FROM import_artifacts ORDER BY id").all().map(({ originalSql, generatedDbml, report, ...row }) => ({ ...row, originalSqlBytes: originalSql === null ? null : bytes(originalSql), originalSqlSha256: originalSql === null ? null : sha(originalSql), generatedDbmlSha256: generatedDbml === null ? null : sha(generatedDbml), reportSha256: sha(report) }));
-      const receipts = db.prepare("SELECT project_id AS projectId, command_id AS commandId, command_kind AS commandKind, command_hash AS commandHash, expected_schema_revision_no AS expectedSchemaRevisionNo, applied_schema_revision_no AS appliedSchemaRevisionNo, applied_layout_revision_no AS appliedLayoutRevisionNo, revision_created AS revisionCreated, layout_migrated AS layoutMigrated, created_at AS createdAt FROM visual_command_receipts ORDER BY project_id, command_id").all();
-      const metadata = db.prepare("SELECT key, value FROM app_metadata ORDER BY key").all();
-      const migrations = db.prepare("SELECT hash, created_at AS createdAt FROM __drizzle_migrations ORDER BY created_at, hash").all();
+      const projects = db.all("SELECT id, name, primary_dialect AS primaryDialect, draft_source AS draftSource, draft_hash AS draftHash, last_valid_revision_id AS lastValidRevisionId, parser_version AS parserVersion, schema_revision_no AS schemaRevisionNo, layout_revision_no AS layoutRevisionNo, created_at AS createdAt, updated_at AS updatedAt FROM projects ORDER BY id").map(({ draftSource, ...row }) => ({ ...row, draftSourceBytes: bytes(draftSource), draftSourceSha256: sha(draftSource) }));
+      const revisions = db.all("SELECT id, project_id AS projectId, revision_no AS revisionNo, source, source_hash AS sourceHash, validity, origin, parser_version AS parserVersion, diagnostic_summary_json AS diagnosticSummary, created_at AS createdAt FROM schema_revisions ORDER BY project_id, revision_no").map(({ source, ...row }) => ({ ...row, sourceBytes: bytes(source), sourceSha256: sha(source) }));
+      const layouts = db.all("SELECT project_id AS projectId, view_key AS viewKey, positions_json AS positions, collapsed_group_keys_json AS collapsedGroupKeys, hidden_element_keys_json AS hiddenElementKeys, viewport_json AS viewport, detail_level AS detailLevel, base_schema_hash AS baseSchemaHash, revision_no AS revisionNo FROM diagram_layouts ORDER BY project_id, view_key");
+      const artifacts = db.all("SELECT id, project_id AS projectId, dialect, original_sql AS originalSql, original_hash AS originalHash, generated_dbml AS generatedDbml, parser_version AS parserVersion, report_json AS report, status, created_at AS createdAt, applied_at AS appliedAt FROM import_artifacts ORDER BY id").map(({ originalSql, generatedDbml, report, ...row }) => ({ ...row, originalSqlBytes: originalSql === null ? null : bytes(originalSql), originalSqlSha256: originalSql === null ? null : sha(originalSql), generatedDbmlSha256: generatedDbml === null ? null : sha(generatedDbml), reportSha256: sha(report) }));
+      const receipts = db.all("SELECT project_id AS projectId, command_id AS commandId, command_kind AS commandKind, command_hash AS commandHash, expected_schema_revision_no AS expectedSchemaRevisionNo, applied_schema_revision_no AS appliedSchemaRevisionNo, applied_layout_revision_no AS appliedLayoutRevisionNo, revision_created AS revisionCreated, layout_migrated AS layoutMigrated, created_at AS createdAt FROM visual_command_receipts ORDER BY project_id, command_id");
+      const metadata = db.all("SELECT key, value FROM app_metadata ORDER BY key");
+      const migrations = db.all("SELECT hash, created_at AS createdAt FROM __drizzle_migrations ORDER BY created_at, hash");
       const state = { projects, revisions, layouts, artifacts, receipts, metadata, migrations };
       console.log(JSON.stringify({
         inventory: {
@@ -483,7 +484,7 @@ function databaseProbeSource() {
         stateHash: sha(JSON.stringify(state)),
       }));
     } finally {
-      db.close();
+      storage.close();
     }
   `;
 }
