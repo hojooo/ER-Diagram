@@ -41,7 +41,7 @@ describe("runtime resource limits", () => {
     const api = createHttpProjectApi({ fetch: fetcher });
     const router = createMemoryRouter([{ path: "/", element: <h1>Workspace ready</h1> }]);
 
-    render(<App api={api} queryClient={queryClient()} router={router} />);
+    render(<App api={api} queryClient={queryClient()} router={router} initialLocale="en" />);
 
     expect(
       await screen.findByRole("heading", { name: "Runtime configuration unavailable" }),
@@ -74,7 +74,7 @@ describe("runtime resource limits", () => {
     });
     const api = createHttpProjectApi({ fetch: fetcher });
     const router = createMemoryRouter(createAppRoutes(), { initialEntries: ["/"] });
-    render(<App api={api} queryClient={queryClient()} router={router} />);
+    render(<App api={api} queryClient={queryClient()} router={router} initialLocale="en" />);
     await screen.findByRole("heading", { name: "Projects" });
 
     fireEvent.click(screen.getByRole("button", { name: "New project" }));

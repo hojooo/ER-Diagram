@@ -41,6 +41,16 @@ const CREATED_AT = "2026-08-27T01:02:03.004Z";
 const VALID_SOURCE = "Table users {\r\n  id int [pk]\r\n}\r\n";
 const SECOND_VALID_SOURCE = "Table users {\r\n  id int [pk]\r\n  email varchar\r\n}\r\n";
 const INVALID_SOURCE = "Table users {\r\n  id int [pk]\r\n";
+const INFO_SOURCE = `Table parents {
+  id int [pk]
+}
+
+Table children {
+  parent_id int
+}
+
+Ref: children.parent_id > parents.id
+`;
 const SERVER_SOURCE = "Table server_state { id int [pk] }";
 const VIEW_SOURCE = `TableGroup Identity {
   accounts
@@ -92,6 +102,38 @@ afterEach(() => {
 });
 
 describe("DBML source workspace", () => {
+  it("shows DBML compiler information at the bottom of the outline instead of Problems", async () => {
+    const api = new SourceProjectApi(projectState(INFO_SOURCE, 1, "VALID"));
+    renderWorkspace(api);
+
+    await screen.findByText("Canonical DBML source");
+    await findWorkspaceStatus("Draft valid");
+    expect(screen.queryByRole("heading", { name: "Problems" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Outline" }));
+    const compilerInformation = await screen.findByRole("region", {
+      name: "DBML compiler information",
+    });
+    expect(within(compilerInformation).getByText("2")).toBeVisible();
+    expect(
+      within(compilerInformation).getByText(
+        "Column 'children.parent_id' is nullable but operator '>' requires it to be NOT NULL",
+      ),
+    ).toBeVisible();
+    expect(within(compilerInformation).getByText("2 source locations")).toBeVisible();
+
+    fireEvent.click(within(compilerInformation).getByText("2 source locations"));
+    const [firstSourceLocation] = within(compilerInformation).getAllByRole("button", {
+      name: /Open DBML_SEMANTIC_INVALID_REF_RELATIONSHIP at line/,
+    });
+    if (firstSourceLocation === undefined) {
+      throw new Error("Expected a DBML compiler source location action");
+    }
+    fireEvent.click(firstSourceLocation);
+    await act(() => new Promise((resolve) => window.requestAnimationFrame(resolve)));
+    expect(navigateToDiagnostic).toHaveBeenCalledOnce();
+  });
+
   it("autosaves valid → invalid → valid source without losing the last-valid graph", async () => {
     const api = new SourceProjectApi(projectState(VALID_SOURCE, 1, "VALID"));
     renderWorkspace(api);
@@ -157,7 +199,6 @@ describe("DBML source workspace", () => {
     const undo = screen.getByRole("button", { name: /Undo schema change, 1 step/ });
     expect(undo).toBeEnabled();
     vi.useRealTimers();
-    fireEvent.click(screen.getByRole("button", { name: "Inspector" }));
     fireEvent.click(screen.getByRole("button", { name: "Create table" }));
     const tableName = await screen.findByLabelText("Table name");
     fireEvent.keyDown(tableName, { key: "z", ctrlKey: true });
@@ -386,10 +427,11 @@ describe("DBML source workspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Source" }));
     fireEvent.click(screen.getByRole("button", { name: "Outline" }));
-    fireEvent.click(screen.getByRole("button", { name: "Inspector" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
     fireEvent.click(screen.getByRole("button", { name: "Outline" }));
 
     expect(screen.getByRole("application", { name: "ER diagram canvas" })).toBe(diagram);
+    expect(screen.queryByTestId("diagram-controls")).not.toBeInTheDocument();
     expect(parserClient.parseCalls).toBe(initialParseCalls);
     expect(api.getLayoutInputs).toHaveLength(initialLayoutReads);
     expect(api.saveDraftInputs).toHaveLength(0);
@@ -426,12 +468,12 @@ describe("DBML source workspace", () => {
     fireEvent.select(editor);
     expect(await screen.findByTestId("fake-diagram-selection")).toHaveTextContent("column");
 
+    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(screen.getByRole("button", { name: "Select first diagram table" }));
     expect(revealSourceRange).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Inspector" })).toHaveAttribute(
-      "aria-expanded",
-      "true",
-    );
+    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTitle(/Selected table .*users/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Outline" }));
     const openSource = await screen.findByRole("button", {
       name: /Open source for table at line/,
@@ -462,6 +504,7 @@ describe("DBML source workspace", () => {
     renderWorkspace(api);
 
     expect(await screen.findByText("No valid diagram yet")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "false");
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute(
         "aria-expanded",
@@ -806,7 +849,7 @@ function FakeSchemaDiagram({
   const selection = useStore(selectionStore, (state) => state.selection);
   const table = graph.tables[0];
   return (
-    <div role="application" aria-label="ER diagram canvas">
+    <div role="application" aria-label="ER diagram canvas" data-schema-history-scope="diagram">
       <svg aria-label="Fake relationships">
         <g data-testid="fake-relationship-edge" tabIndex={0} />
       </svg>
@@ -1031,7 +1074,9 @@ function renderWorkspace(api: SourceProjectApi) {
     }),
     { initialEntries: [`/projects/${PROJECT_ID}`] },
   );
-  const rendered = render(<App api={api} queryClient={queryClient} router={router} />);
+  const rendered = render(
+    <App api={api} queryClient={queryClient} router={router} initialLocale="en" />,
+  );
   return { ...rendered, queryClient, router, parserClient };
 }
 

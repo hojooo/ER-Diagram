@@ -117,7 +117,10 @@ describe("layout session", () => {
     const session = createLayoutSession({
       projectId: PROJECT_ID,
       initialLayoutRevisionNo: 0,
-      loadLayout: async (viewKey) => response(0, viewKey, null),
+      loadLayout: async (viewKey) =>
+        viewKey === "view"
+          ? response(0, viewKey, layout({ viewport: { x: 10, y: 20, zoom: 0.5 } }))
+          : response(0, viewKey, null),
       saveLayout,
     });
     await session.hydrate("GLOBAL", layout());
@@ -134,9 +137,9 @@ describe("layout session", () => {
       layout: { positions: { table: { x: 30, y: 40 } } },
     });
     expect(session.getSnapshot().views.get("view")?.layout.viewport).toEqual({
-      x: 10,
-      y: 20,
-      zoom: 0.5,
+      x: 0,
+      y: 0,
+      zoom: 1,
     });
     expect(session.getSnapshot().currentLayoutRevisionNo).toBe(1);
     vi.useRealTimers();

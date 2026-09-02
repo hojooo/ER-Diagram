@@ -17,6 +17,7 @@ import {
   TableDiagramNodeComponent,
 } from "../diagram/diagram-components.js";
 import { requestWorkerLayout } from "../diagram/layout-worker-client.js";
+import { LanguageSelect, useUiLocale } from "../localization/ui-locale.js";
 import {
   createDiagramProjection,
   GLOBAL_VIEW_KEY,
@@ -40,6 +41,7 @@ const edgeTypes = {
 } satisfies EdgeTypes;
 
 export function LayoutSpikePage() {
+  const { messages } = useUiLocale();
   const [viewKey, setViewKey] = useState<DiagramViewKey>(GLOBAL_VIEW_KEY);
   const [lod, setLod] = useState<DiagramLod>("FULL");
   const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<ReadonlySet<string>>(new Set());
@@ -48,7 +50,10 @@ export function LayoutSpikePage() {
     [collapsedGroupKeys, lod, viewKey],
   );
   const [displayProjection, setDisplayProjection] = useState<DiagramProjection>(projection);
-  const [layoutStatus, setLayoutStatus] = useState("Laying out");
+  const [layoutStatus, setLayoutStatus] = useState<
+    | { readonly status: "LAYING_OUT" | "READY" }
+    | { readonly status: "FAILED"; readonly message: string | null }
+  >({ status: "LAYING_OUT" });
   const [flowInstance, setFlowInstance] = useState<
     ReactFlowInstance<SchemaDiagramNode, SchemaDiagramEdge> | undefined
   >();
@@ -57,18 +62,18 @@ export function LayoutSpikePage() {
   useEffect(() => {
     let active = true;
     setDisplayProjection(projection);
-    setLayoutStatus("Laying out");
+    setLayoutStatus({ status: "LAYING_OUT" });
     requestWorkerLayout(projection)
       .then((laidOut) => {
         if (!active) return;
         setDisplayProjection(laidOut);
-        setLayoutStatus("Layout ready");
+        setLayoutStatus({ status: "READY" });
       })
       .catch((error: unknown) => {
         if (!active) return;
-        const message = error instanceof Error ? error.message : "Unknown layout error";
+        const message = error instanceof Error ? error.message : null;
         console.error("Diagram layout failed", error);
-        setLayoutStatus(`Layout failed: ${message}`);
+        setLayoutStatus({ status: "FAILED", message });
       });
     return () => {
       active = false;
@@ -76,12 +81,12 @@ export function LayoutSpikePage() {
   }, [projection]);
 
   useEffect(() => {
-    if (layoutStatus !== "Layout ready" || !flowInstance) return;
+    if (layoutStatus.status !== "READY" || !flowInstance) return;
     const animationFrame = requestAnimationFrame(() => {
       void flowInstance.fitView({ padding: 0.12 });
     });
     return () => cancelAnimationFrame(animationFrame);
-  }, [flowInstance, layoutStatus]);
+  }, [flowInstance, layoutStatus.status]);
 
   const interactions = useMemo(
     () => ({
@@ -103,14 +108,15 @@ export function LayoutSpikePage() {
     <main className="app-shell">
       <header className="app-header">
         <div>
-          <p className="app-eyebrow">Architecture spike · M0-009</p>
+          <p className="app-eyebrow">{messages["spike.eyebrow"]}</p>
           <h1>DBML·SQL ERD Studio</h1>
-          <p>Compound groups, source-defined views, collapsed edges, LOD, and worker layout.</p>
+          <p>{messages["spike.description"]}</p>
         </div>
+        <LanguageSelect />
         <fieldset className="app-controls">
-          <legend className="sr-only">Diagram controls</legend>
+          <legend className="sr-only">{messages["spike.controls"]}</legend>
           <label>
-            View
+            {messages["spike.view"]}
             <select value={viewKey} onChange={(event) => setViewKey(event.target.value)}>
               {viewOptions.map((view) => (
                 <option key={view.key} value={view.key}>
@@ -120,19 +126,30 @@ export function LayoutSpikePage() {
             </select>
           </label>
           <label>
-            Detail
+            {messages["spike.detail"]}
             <select value={lod} onChange={(event) => setLod(event.target.value as DiagramLod)}>
-              <option value="NAME_ONLY">Names</option>
-              <option value="KEYS_ONLY">Keys</option>
-              <option value="FULL">Full</option>
+              <option value="NAME_ONLY">{messages["diagram.names"]}</option>
+              <option value="KEYS_ONLY">{messages["diagram.keys"]}</option>
+              <option value="FULL">{messages["diagram.full"]}</option>
             </select>
           </label>
           <output data-testid="layout-status" aria-live="polite">
-            {layoutStatus}
+            {layoutStatus.status === "LAYING_OUT"
+              ? messages["spike.layingOut"]
+              : layoutStatus.status === "READY"
+                ? messages["spike.layoutReady"]
+                : messages["spike.layoutFailed"](
+                    ("message" in layoutStatus ? layoutStatus.message : null) ??
+                      messages["spike.unknownLayoutError"],
+                  )}
           </output>
         </fieldset>
       </header>
-      <section className="canvas-shell" data-testid="erd-canvas" aria-label="ER diagram canvas">
+      <section
+        className="canvas-shell"
+        data-testid="erd-canvas"
+        aria-label={messages["diagram.canvas"]}
+      >
         <DiagramInteractionContext.Provider value={interactions}>
           <ReactFlow<SchemaDiagramNode, SchemaDiagramEdge>
             nodes={displayProjection.nodes}

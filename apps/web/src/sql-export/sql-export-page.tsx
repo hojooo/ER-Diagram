@@ -9,6 +9,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { forwardRef, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
+import type { UiMessages } from "../localization/messages.js";
+import { useUiLocale } from "../localization/ui-locale.js";
 import { ProjectApiError } from "../projects/project-api.js";
 import { useProjectApi } from "../projects/project-api-context.js";
 import { dialectLabel } from "../projects/project-home-page.js";
@@ -37,6 +39,7 @@ export function ProjectSqlExportPage({
   readonly adapters?: SqlExportPageAdapters;
 }) {
   const api = useProjectApi();
+  const { messages } = useUiLocale();
   const params = useParams();
   const projectId = params.projectId ?? "";
   const projectQuery = useQuery({
@@ -49,10 +52,10 @@ export function ProjectSqlExportPage({
     return (
       <section>
         <h1 data-route-loading="true" className="font-semibold text-slate-100">
-          Loading SQL export
+          {messages["sqlExport.loading"]}
         </h1>
         <p className="mt-2" aria-live="polite">
-          Loading project for SQL export…
+          {messages["sqlExport.loadingMessage"]}
         </p>
       </section>
     );
@@ -60,12 +63,12 @@ export function ProjectSqlExportPage({
   if (projectQuery.isError) {
     return (
       <section role="alert" className="rounded-xl border border-red-400/40 bg-red-950/30 p-6">
-        <h1 className="text-xl font-semibold text-red-100">SQL export could not be opened</h1>
-        <p className="mt-2 text-sm text-red-100/80">
-          The current project state could not be loaded.
-        </p>
+        <h1 className="text-xl font-semibold text-red-100">
+          {messages["sqlExport.openErrorTitle"]}
+        </h1>
+        <p className="mt-2 text-sm text-red-100/80">{messages["sqlExport.openErrorMessage"]}</p>
         <Link className={`${buttonSecondary} mt-4`} to={`/projects/${projectId}`}>
-          Back to workspace
+          {messages["workspace.back"]}
         </Link>
       </section>
     );
@@ -89,6 +92,7 @@ function SqlExportWorkflow({
 }) {
   const api = useProjectApi();
   const queryClient = useQueryClient();
+  const { messages } = useUiLocale();
   const [sourceSelection, setSourceSelection] = useState<SqlExportSourceSelection | null>(
     state.currentRevision.validity === "VALID" ? "CURRENT_DRAFT" : null,
   );
@@ -121,7 +125,7 @@ function SqlExportWorkflow({
       setResult(exported);
     } catch (cause) {
       const publicError =
-        cause instanceof ProjectApiError ? cause : new Error("SQL export failed.");
+        cause instanceof ProjectApiError ? cause : new Error(messages["sqlExport.failed"]);
       setError(publicError);
       if (publicError instanceof ProjectApiError && publicError.status === 409) {
         setResult(undefined);
@@ -140,30 +144,29 @@ function SqlExportWorkflow({
     <section aria-labelledby="sql-export-heading" className="space-y-6">
       <div>
         <Link className={buttonSecondary} to={`/projects/${state.project.id}`}>
-          Back to workspace
+          {messages["workspace.back"]}
         </Link>
         <p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">
-          {dialectLabel(state.project.primaryDialect)} export
+          {messages["sqlExport.dialectEyebrow"](dialectLabel(state.project.primaryDialect))}
         </p>
         <h1 id="sql-export-heading" className="mt-2 text-3xl font-semibold text-white">
-          Export empty-schema create DDL
+          {messages["sqlExport.title"]}
         </h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
-          This output creates an empty schema. It is not a migration and must be reviewed before
-          applying it to an existing database.
+          {messages["sqlExport.description"]}
         </p>
       </div>
 
       <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-        <h2 className="text-lg font-semibold text-white">Source revision</h2>
+        <h2 className="text-lg font-semibold text-white">{messages["sqlExport.sourceRevision"]}</h2>
         {state.currentRevision.validity === "VALID" ? (
           <p className="mt-3 text-sm text-slate-300">
-            Current valid revision {state.currentRevision.revisionNo} will be exported.
+            {messages["sqlExport.currentValid"](state.currentRevision.revisionNo)}
           </p>
         ) : state.lastValidRevision ? (
           <div className="mt-3 space-y-3">
             <p className="text-sm text-amber-100">
-              Current revision {state.currentRevision.revisionNo} is invalid and cannot be exported.
+              {messages["sqlExport.currentInvalid"](state.currentRevision.revisionNo)}
             </p>
             <label className="flex items-start gap-3 text-sm text-slate-200">
               <input
@@ -176,13 +179,11 @@ function SqlExportWorkflow({
                   setAcknowledged(false);
                 }}
               />
-              Export last-valid revision {state.lastValidRevision.revisionNo} explicitly
+              {messages["sqlExport.useLastValid"](state.lastValidRevision.revisionNo)}
             </label>
           </div>
         ) : (
-          <p className="mt-3 text-sm text-amber-100">
-            This project has no valid revision to export. Fix the DBML source first.
-          </p>
+          <p className="mt-3 text-sm text-amber-100">{messages["sqlExport.noValid"]}</p>
         )}
         <button
           className={`${buttonPrimary} mt-5`}
@@ -190,17 +191,19 @@ function SqlExportWorkflow({
           disabled={busy || !sourceSelection}
           onClick={() => void runExport()}
         >
-          {busy ? "Generating export…" : "Generate SQL export"}
+          {busy ? messages["sqlExport.generating"] : messages["sqlExport.generate"]}
         </button>
         <p className="mt-3 text-sm text-slate-400" aria-live="polite">
-          {busy ? "The schema is being exported and reparsed in the same dialect." : null}
-          {result ? `Export report ready: ${result.report.overallStatus}.` : null}
+          {busy ? messages["sqlExport.reparsing"] : null}
+          {result ? messages["sqlExport.reportReady"](result.report.overallStatus) : null}
         </p>
         {error ? (
           <div className="mt-4 rounded-lg border border-red-400/40 bg-red-950/30 p-4" role="alert">
-            <p className="text-sm text-red-100">{exportErrorMessage(error)}</p>
+            <p className="text-sm text-red-100">{exportErrorMessage(error, messages)}</p>
             {error instanceof ProjectApiError && error.correlationId ? (
-              <p className="mt-2 text-xs text-red-100/70">Correlation ID: {error.correlationId}</p>
+              <p className="mt-2 text-xs text-red-100/70">
+                {messages["error.correlationId"](error.correlationId)}
+              </p>
             ) : null}
           </div>
         ) : null}
@@ -211,9 +214,11 @@ function SqlExportWorkflow({
           <ExportSummary result={result} />
           <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-white">Conversion report</h2>
+              <h2 className="text-lg font-semibold text-white">
+                {messages["sqlExport.conversionReport"]}
+              </h2>
               <label className="text-sm text-slate-300">
-                Status{" "}
+                {messages["common.status"]}{" "}
                 <select
                   className="ml-2 min-h-10 rounded-lg border border-slate-700 bg-slate-950 px-3"
                   value={filter}
@@ -230,7 +235,9 @@ function SqlExportWorkflow({
               </label>
             </div>
             {entries.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-400">No report entries match this filter.</p>
+              <p className="mt-4 text-sm text-slate-400">
+                {messages["sqlExport.noFilteredEntries"]}
+              </p>
             ) : (
               <ol className="mt-4 space-y-3">
                 {entries.map((entry) => (
@@ -250,7 +257,7 @@ function SqlExportWorkflow({
           </div>
 
           <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-            <h2 className="text-lg font-semibold text-white">Downloads</h2>
+            <h2 className="text-lg font-semibold text-white">{messages["sqlExport.downloads"]}</h2>
             {result.report.acknowledgementRequired ? (
               <label className="mt-4 flex items-start gap-3 text-sm text-slate-200">
                 <input
@@ -259,8 +266,7 @@ function SqlExportWorkflow({
                   checked={acknowledged}
                   onChange={(event) => setAcknowledged(event.target.checked)}
                 />
-                I reviewed the partial or unsupported conversions and understand that this is
-                empty-schema create DDL, not a migration.
+                {messages["sqlExport.acknowledgement"]}
               </label>
             ) : null}
             <div className="mt-5 flex flex-wrap gap-3">
@@ -275,7 +281,7 @@ function SqlExportWorkflow({
                   })
                 }
               >
-                Download report JSON
+                {messages["sqlExport.downloadReport"]}
               </button>
               {result.candidate ? (
                 <button
@@ -290,11 +296,11 @@ function SqlExportWorkflow({
                     })
                   }
                 >
-                  Download SQL
+                  {messages["sqlExport.downloadSql"]}
                 </button>
               ) : (
                 <p className="self-center text-sm text-red-200">
-                  Fatal conversion errors blocked SQL download.
+                  {messages["sqlExport.fatalBlocked"]}
                 </p>
               )}
             </div>
@@ -306,25 +312,26 @@ function SqlExportWorkflow({
 }
 
 function ExportSummary({ result }: { readonly result: SqlExportResponse }) {
+  const { messages } = useUiLocale();
   return (
     <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-      <h2 className="text-lg font-semibold text-white">Export result</h2>
+      <h2 className="text-lg font-semibold text-white">{messages["sqlExport.result"]}</h2>
       <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-4">
         <div>
-          <dt className="text-slate-400">Revision</dt>
+          <dt className="text-slate-400">{messages["common.revision"]}</dt>
           <dd className="mt-1 text-white">{result.revisionNo}</dd>
         </div>
         <div>
-          <dt className="text-slate-400">Status</dt>
+          <dt className="text-slate-400">{messages["common.status"]}</dt>
           <dd className="mt-1 text-white">{result.report.overallStatus}</dd>
         </div>
         <div>
-          <dt className="text-slate-400">Verification</dt>
+          <dt className="text-slate-400">{messages["sqlExport.verification"]}</dt>
           <dd className="mt-1 text-white">{result.report.semanticVerification.status}</dd>
         </div>
         <div>
-          <dt className="text-slate-400">DDL kind</dt>
-          <dd className="mt-1 text-white">Empty schema create</dd>
+          <dt className="text-slate-400">{messages["sqlExport.ddlKind"]}</dt>
+          <dd className="mt-1 text-white">{messages["sqlExport.emptySchemaCreate"]}</dd>
         </div>
       </dl>
     </section>
@@ -377,12 +384,15 @@ function ReportEntry({
 
 const SourcePanel = forwardRef<HTMLTextAreaElement, { readonly source: string }>(
   function SourcePanel({ source }, ref) {
+    const { messages } = useUiLocale();
     return (
       <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-        <h2 className="text-lg font-semibold text-white">Selected DBML revision</h2>
+        <h2 className="text-lg font-semibold text-white">
+          {messages["sqlExport.selectedRevision"]}
+        </h2>
         <textarea
           ref={ref}
-          aria-label="Selected DBML source"
+          aria-label={messages["sqlExport.selectedSource"]}
           className="mt-4 h-80 w-full resize-y rounded-lg border border-slate-700 bg-slate-950 p-3 font-mono text-xs text-slate-200"
           readOnly
           value={source}
@@ -393,14 +403,15 @@ const SourcePanel = forwardRef<HTMLTextAreaElement, { readonly source: string }>
 );
 
 function SqlPanel({ sql }: { readonly sql: string | null }) {
+  const { messages } = useUiLocale();
   return (
     <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-      <h2 className="text-lg font-semibold text-white">Generated SQL</h2>
+      <h2 className="text-lg font-semibold text-white">{messages["sqlExport.generatedSql"]}</h2>
       {sql === null ? (
-        <p className="mt-4 text-sm text-red-200">No SQL candidate was produced.</p>
+        <p className="mt-4 text-sm text-red-200">{messages["sqlExport.noCandidate"]}</p>
       ) : (
         <textarea
-          aria-label="Generated SQL"
+          aria-label={messages["sqlExport.generatedSql"]}
           className="mt-4 h-80 w-full resize-y rounded-lg border border-slate-700 bg-slate-950 p-3 font-mono text-xs text-slate-200"
           readOnly
           value={sql}
@@ -455,11 +466,11 @@ function downloadFile(file: DownloadFile): void {
   URL.revokeObjectURL(url);
 }
 
-function exportErrorMessage(error: Error): string {
+function exportErrorMessage(error: Error, messages: UiMessages): string {
   if (error instanceof ProjectApiError && error.status === 409) {
-    return "The project changed before export. The latest revision was loaded; run export again.";
+    return messages["sqlExport.changedConflict"];
   }
-  return error.message || "SQL export failed.";
+  return error.message || messages["sqlExport.failed"];
 }
 
 const defaultAdapters: SqlExportPageAdapters = { download: downloadFile };

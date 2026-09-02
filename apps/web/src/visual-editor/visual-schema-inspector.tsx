@@ -3,6 +3,8 @@ import type { SchemaGraph } from "@er-diagram/core";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import type { DiagramSelectionStore } from "../diagram/selection-store.js";
+import type { UiMessages } from "../localization/messages.js";
+import { useUiLocale } from "../localization/ui-locale.js";
 import { VisualCommandForm } from "./visual-command-form.js";
 import type {
   VisualCommandDraft,
@@ -38,6 +40,7 @@ export function VisualSchemaInspector({
   readonly onOpenSource: (range: SourceRange | null) => void;
   readonly onReloadLayouts: () => void;
 }) {
+  const { messages } = useUiLocale();
   const selection = useSyncExternalStore(
     selectionStore.subscribe,
     () => selectionStore.getState().selection,
@@ -62,6 +65,7 @@ export function VisualSchemaInspector({
     ? createInitialVisualDraft(graph, selection, activeAction)
     : null;
   const busy = isBusy(commandSnapshot) || interactionDisabled;
+  const activeActionLabel = activeAction ? visualActionLabel(graph, activeAction, messages) : null;
 
   useEffect(() => {
     if (commandSnapshot.status === "SUCCEEDED") {
@@ -109,19 +113,14 @@ export function VisualSchemaInspector({
   };
 
   return (
-    <aside
-      className="border-t border-slate-700 bg-slate-900 p-4"
-      aria-label="Visual schema inspector"
-    >
+    <section className="bg-slate-900 p-4" aria-label={messages["inspector.title"]}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="font-semibold text-white">Visual schema inspector</h2>
-          <p className="mt-1 text-xs text-slate-400">
-            Select a diagram element, review a typed form, then apply one source-preserving command.
-          </p>
+          <h2 className="font-semibold text-white">{messages["inspector.title"]}</h2>
+          <p className="mt-1 text-xs text-slate-400">{messages["visual.inspectorDescription"]}</p>
         </div>
         <p className="text-xs font-semibold text-cyan-200" aria-live="polite">
-          {selectionLabel(graph, selection)}
+          {selectionLabel(graph, selection, messages)}
         </p>
       </div>
 
@@ -139,7 +138,7 @@ export function VisualSchemaInspector({
       <div
         className="mt-4 flex max-h-44 flex-wrap gap-2 overflow-auto"
         role="toolbar"
-        aria-label="Visual schema actions"
+        aria-label={messages["visual.actions"]}
         aria-orientation="horizontal"
         onKeyDown={(event) => {
           if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -183,7 +182,7 @@ export function VisualSchemaInspector({
             onFocus={() => setActiveToolbarIndex(index)}
             onClick={() => openAction(action)}
           >
-            {action.label}
+            {visualActionLabel(graph, action, messages)}
           </button>
         ))}
       </div>
@@ -194,6 +193,7 @@ export function VisualSchemaInspector({
           graph={graph}
           primaryDialect={primaryDialect}
           action={activeAction}
+          displayLabel={activeActionLabel ?? activeAction.label}
           initialDraft={activeDraft}
           disabled={busy || commandSnapshot.status === "STALE_REVIEW"}
           onCancel={() => {
@@ -205,7 +205,7 @@ export function VisualSchemaInspector({
         />
       ) : activeAction ? (
         <p className="mt-4 text-sm text-red-100" role="alert">
-          The selected schema target is no longer available.
+          {messages["visual.targetUnavailable"]}
         </p>
       ) : null}
 
@@ -227,8 +227,62 @@ export function VisualSchemaInspector({
           commandSession.reviewLatestSchema();
         }}
       />
-    </aside>
+    </section>
   );
+}
+
+export function VisualInspectorRailSummary({
+  graph,
+  selectionStore,
+}: {
+  readonly graph: SchemaGraph | null;
+  readonly selectionStore: DiagramSelectionStore;
+}) {
+  const { messages } = useUiLocale();
+  const selection = useSyncExternalStore(
+    selectionStore.subscribe,
+    () => selectionStore.getState().selection,
+    () => null,
+  );
+  const label = graph ? selectionLabel(graph, selection, messages) : messages["visual.noSelection"];
+  const name = graph && selection ? selectionName(graph, selection) : null;
+
+  return (
+    <div
+      className="flex h-full min-h-0 flex-col items-center gap-2"
+      data-testid="workspace-rail-selection"
+      title={label}
+    >
+      <span className="sr-only" aria-live="polite">
+        {label}
+      </span>
+      <span className="rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[0.55rem] font-bold uppercase tracking-wide text-cyan-300">
+        {selection?.kind ?? "—"}
+      </span>
+      <span className="max-h-64 overflow-hidden text-ellipsis whitespace-nowrap [writing-mode:vertical-rl]">
+        {name ?? label}
+      </span>
+    </div>
+  );
+}
+
+function selectionName(
+  graph: SchemaGraph,
+  selection: NonNullable<ReturnType<DiagramSelectionStore["getState"]>["selection"]>,
+): string | null {
+  if (selection.kind === "table") {
+    const table = graph.tables.find((candidate) => candidate.key === selection.elementKey);
+    return table ? `${table.schemaName}.${table.name}` : null;
+  }
+  if (selection.kind === "column") {
+    const resolved = findColumn(graph, selection.elementKey);
+    return resolved ? `${resolved.table.name}.${resolved.column.name}` : null;
+  }
+  if (selection.kind === "reference") {
+    const reference = graph.references.find((candidate) => candidate.key === selection.elementKey);
+    return reference?.name ?? reference?.key ?? null;
+  }
+  return graph.groups.find((candidate) => candidate.key === selection.elementKey)?.name ?? null;
 }
 
 function CommandStatusPanel({
@@ -248,6 +302,7 @@ function CommandStatusPanel({
   readonly onRetry: () => void;
   readonly onReview: () => void;
 }) {
+  const { messages } = useUiLocale();
   if (snapshot.status === "IDLE") return null;
   if (isBusy(snapshot)) {
     return (
@@ -256,10 +311,10 @@ function CommandStatusPanel({
         aria-live="polite"
       >
         {snapshot.status === "FLUSHING_SOURCE"
-          ? "Saving and validating source before the command…"
+          ? messages["visual.commandFlushingSource"]
           : snapshot.status === "FLUSHING_LAYOUT"
-            ? "Saving loaded diagram layouts before the command…"
-            : "Applying the visual command once…"}
+            ? messages["visual.commandFlushingLayout"]
+            : messages["visual.commandApplying"]}
       </p>
     );
   }
@@ -271,13 +326,11 @@ function CommandStatusPanel({
       >
         <p>
           {snapshot.mutation?.replayed
-            ? "The saved command receipt was replayed without creating another revision."
+            ? messages["visual.commandReplayed"]
             : snapshot.mutation?.revisionCreated
-              ? `Visual command applied as schema revision ${snapshot.mutation.appliedSchemaRevisionNo}.`
-              : "The command was a semantic no-op; no schema revision was created."}
-          {snapshot.layoutRefreshFailed
-            ? " The schema commit succeeded, but layout interaction is disabled until layout reload succeeds."
-            : ""}
+              ? messages["visual.commandApplied"](snapshot.mutation.appliedSchemaRevisionNo)
+              : messages["visual.commandNoop"]}
+          {snapshot.layoutRefreshFailed ? messages["visual.layoutRefreshFailed"] : ""}
         </p>
         {snapshot.layoutRefreshFailed ? (
           <button
@@ -285,7 +338,7 @@ function CommandStatusPanel({
             type="button"
             onClick={onReloadLayouts}
           >
-            Reload layouts
+            {messages["visual.reloadLayouts"]}
           </button>
         ) : null}
       </section>
@@ -298,17 +351,19 @@ function CommandStatusPanel({
     <section className="mt-4 rounded-xl border border-red-400/40 bg-red-950/30 p-4" role="alert">
       <h3 className="font-semibold text-red-100">
         {snapshot.status === "STALE_REVIEW"
-          ? "Review the latest schema"
+          ? messages["visual.reviewLatestTitle"]
           : snapshot.status === "UNKNOWN_OUTCOME"
-            ? "Command outcome is not confirmed"
-            : "Visual command was not applied"}
+            ? messages["visual.unknownOutcomeTitle"]
+            : messages["visual.notAppliedTitle"]}
       </h3>
       <p className="mt-2 text-sm text-red-100/90">{error.message}</p>
       {error.correlationId ? (
-        <p className="mt-2 text-xs text-red-100/70">Correlation ID: {error.correlationId}</p>
+        <p className="mt-2 text-xs text-red-100/70">
+          {messages["error.correlationId"](error.correlationId)}
+        </p>
       ) : null}
       {error.diagnostics.length > 0 ? (
-        <ul className="mt-3 space-y-2" aria-label="Visual command diagnostics">
+        <ul className="mt-3 space-y-2" aria-label={messages["visual.diagnostics"]}>
           {error.diagnostics.map((diagnostic) => (
             <li
               key={diagnosticIdentity(diagnostic)}
@@ -322,7 +377,7 @@ function CommandStatusPanel({
                 disabled={!sourceNavigationEnabled}
                 onClick={() => onOpenSource(diagnostic.range ?? fallbackRange)}
               >
-                Open in source
+                {messages["visual.openInSource"]}
               </button>
             </li>
           ))}
@@ -331,7 +386,7 @@ function CommandStatusPanel({
       {error.partialImpact ? (
         <div className="mt-4 rounded-lg border border-amber-300/30 bg-amber-950/30 p-3 text-amber-100">
           <p className="font-semibold">
-            Partial {error.partialImpact.partialName} owns this element
+            {messages["visual.partialOwns"](error.partialImpact.partialName)}
           </p>
           <button
             className={`${secondaryButtonClass} mt-2`}
@@ -339,7 +394,7 @@ function CommandStatusPanel({
             disabled={!sourceNavigationEnabled}
             onClick={() => onOpenSource(error.partialImpact?.definitionRange ?? null)}
           >
-            Open partial definition
+            {messages["visual.openPartialDefinition"]}
           </button>
           <ul className="mt-3 space-y-2">
             {error.partialImpact.affectedTables.map((table) => (
@@ -354,7 +409,7 @@ function CommandStatusPanel({
                   disabled={!sourceNavigationEnabled}
                   onClick={() => onOpenSource(table.injectionRange)}
                 >
-                  Open injection
+                  {messages["visual.openInjection"]}
                 </button>
               </li>
             ))}
@@ -364,12 +419,12 @@ function CommandStatusPanel({
       <div className="mt-4 flex flex-wrap gap-2">
         {snapshot.status === "UNKNOWN_OUTCOME" ? (
           <button className={primaryButtonClass} type="button" onClick={onRetry}>
-            Retry safely
+            {messages["visual.retrySafely"]}
           </button>
         ) : null}
         {snapshot.status === "STALE_REVIEW" ? (
           <button className={primaryButtonClass} type="button" onClick={onReview}>
-            Review latest schema
+            {messages["visual.reviewLatest"]}
           </button>
         ) : null}
       </div>
@@ -392,17 +447,20 @@ function PartialSelectionNotice({
   readonly sourceNavigationEnabled: boolean;
   readonly onOpenSource: (range: SourceRange | null) => void;
 }) {
+  const { messages } = useUiLocale();
   const partial = graph.partials.find((candidate) => candidate.key === partialKey);
   const definitionRange = graph.sourceMap[partialElementKey] ?? null;
   const affectedTables = collectPartialAffectedTables(graph, partialKey, injectionRange);
   const provenanceComplete = definitionRange !== null && affectedTables.length > 0;
   return (
     <section className="mt-4 rounded-xl border border-amber-300/40 bg-amber-950/30 p-4 text-sm text-amber-100">
-      <p className="font-semibold">Partial {partial?.name ?? "definition"} owns this element</p>
+      <p className="font-semibold">
+        {messages["visual.partialOwns"](partial?.name ?? messages["visual.partialDefinition"])}
+      </p>
       <p className="mt-1">
         {provenanceComplete
-          ? "Visual mutation is disabled. Open the canonical partial definition or an affected table injection."
-          : "Visual mutation is disabled. Provenance is incomplete, so no source location is inferred."}
+          ? messages["visual.partialComplete"]
+          : messages["visual.partialIncomplete"]}
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         {provenanceComplete ? (
@@ -412,17 +470,17 @@ function PartialSelectionNotice({
             disabled={!sourceNavigationEnabled}
             onClick={() => onOpenSource(definitionRange)}
           >
-            Open partial definition
+            {messages["visual.openPartialDefinition"]}
           </button>
         ) : null}
         {!provenanceComplete ? (
           <button className={secondaryButtonClass} type="button" onClick={() => onOpenSource(null)}>
-            Focus source editor
+            {messages["source.focusEditor"]}
           </button>
         ) : null}
       </div>
       {provenanceComplete ? (
-        <ul className="mt-3 space-y-2" aria-label="Affected partial tables">
+        <ul className="mt-3 space-y-2" aria-label={messages["visual.affectedPartialTables"]}>
           {affectedTables.map((affected) => (
             <li
               key={`${affected.tableKey}-${affected.range.startOffset}`}
@@ -435,7 +493,7 @@ function PartialSelectionNotice({
                 disabled={!sourceNavigationEnabled}
                 onClick={() => onOpenSource(affected.range)}
               >
-                Open table injection
+                {messages["visual.openTableInjection"]}
               </button>
             </li>
           ))}
@@ -492,22 +550,85 @@ function collectPartialAffectedTables(
 function selectionLabel(
   graph: SchemaGraph,
   selection: ReturnType<DiagramSelectionStore["getState"]>["selection"],
+  messages: UiMessages,
 ): string {
-  if (!selection) return "No diagram element selected";
+  if (!selection) return messages["visual.noSelection"];
   if (selection.kind === "table") {
     const table = graph.tables.find((candidate) => candidate.key === selection.elementKey);
     return table
-      ? `Selected table ${table.schemaName}.${table.name}`
-      : "Selected table unavailable";
+      ? messages["visual.selectedTable"](`${table.schemaName}.${table.name}`)
+      : messages["visual.selectedTableUnavailable"];
   }
   if (selection.kind === "column") {
     const resolved = findColumn(graph, selection.elementKey);
     return resolved
-      ? `Selected column ${resolved.table.name}.${resolved.column.name}`
-      : "Selected column unavailable";
+      ? messages["visual.selectedColumn"](`${resolved.table.name}.${resolved.column.name}`)
+      : messages["visual.selectedColumnUnavailable"];
   }
-  if (selection.kind === "reference") return "Selected relationship";
-  return "Selected TableGroup";
+  if (selection.kind === "reference") return messages["visual.selectedReference"];
+  return messages["visual.selectedGroup"];
+}
+
+function visualActionLabel(
+  graph: SchemaGraph,
+  action: VisualEditorAction,
+  messages: UiMessages,
+): string {
+  const targetIndex = graph.tables
+    .flatMap((table) => table.indexes)
+    .find((index) => index.key === action.targetElementKey);
+  const targetCheck = graph.tables
+    .flatMap((table) => [...table.checks, ...table.columns.flatMap((column) => column.checks)])
+    .find((check) => check.key === action.targetElementKey);
+  const anonymous = messages["visual.anonymous"];
+  switch (action.kind) {
+    case "CREATE_TABLE":
+      return messages["visual.action.createTable"];
+    case "UPDATE_TABLE":
+      return messages["visual.action.updateTable"];
+    case "RENAME_TABLE":
+      return messages["visual.action.renameTable"];
+    case "DELETE_TABLE":
+      return messages["visual.action.deleteTable"];
+    case "CREATE_COLUMN":
+      return messages["visual.action.createColumn"];
+    case "UPDATE_COLUMN":
+      return messages["visual.action.updateColumn"];
+    case "RENAME_COLUMN":
+      return messages["visual.action.renameColumn"];
+    case "REORDER_COLUMN":
+      return messages["visual.action.reorderColumn"];
+    case "DELETE_COLUMN":
+      return messages["visual.action.deleteColumn"];
+    case "CREATE_REFERENCE":
+      return messages["visual.action.createReference"];
+    case "UPDATE_REFERENCE":
+      return messages["visual.action.updateReference"];
+    case "DELETE_REFERENCE":
+      return messages["visual.action.deleteReference"];
+    case "CREATE_INDEX":
+      return messages["visual.action.createIndex"];
+    case "UPDATE_INDEX":
+      return messages["visual.action.updateIndex"](targetIndex?.name ?? anonymous);
+    case "DELETE_INDEX":
+      return messages["visual.action.deleteIndex"](targetIndex?.name ?? anonymous);
+    case "CREATE_CHECK":
+      return action.ownerColumnKey === null
+        ? messages["visual.action.createTableCheck"]
+        : messages["visual.action.createColumnCheck"];
+    case "UPDATE_CHECK":
+      return action.ownerColumnKey
+        ? messages["visual.action.updateColumnCheck"]
+        : messages["visual.action.updateCheck"](targetCheck?.name ?? anonymous);
+    case "DELETE_CHECK":
+      return action.ownerColumnKey
+        ? messages["visual.action.deleteColumnCheck"]
+        : messages["visual.action.deleteCheck"](targetCheck?.name ?? anonymous);
+    case "UPDATE_GROUP_MEMBERSHIP":
+      return messages["visual.action.updateGroup"];
+    case "UPDATE_DIAGRAM_VIEW":
+      return messages["visual.action.updateView"];
+  }
 }
 
 function isBusy(snapshot: VisualCommandSessionSnapshot): boolean {

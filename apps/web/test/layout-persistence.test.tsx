@@ -74,6 +74,7 @@ describe("workspace layout persistence", () => {
       viewKey,
       storedLayout(viewKey, 2, parsed.schemaHash, {
         positions: { [tableKey]: { x: 91, y: 92 } },
+        viewport: { x: 45, y: 67, zoom: 0.6 },
         detailLevel: "NAME_ONLY",
       }),
     );
@@ -89,6 +90,11 @@ describe("workspace layout persistence", () => {
     expect(screen.getByTestId("layout-detail")).toHaveTextContent("NAME_ONLY");
 
     vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "Pan diagram" }));
+    await act(() => vi.advanceTimersByTimeAsync(500));
+    await settleReact();
+    expect(api.saveLayoutInputs).toHaveLength(0);
+
     fireEvent.click(screen.getByRole("button", { name: "Drag first node" }));
     await act(() => vi.advanceTimersByTimeAsync(499));
     expect(api.saveLayoutInputs).toHaveLength(0);
@@ -98,7 +104,10 @@ describe("workspace layout persistence", () => {
     expect(api.saveLayoutInputs[0]).toMatchObject({
       viewKey,
       expectedLayoutRevisionNo: 2,
-      layout: { positions: { [tableKey]: { x: 120, y: 140 } } },
+      layout: {
+        positions: { [tableKey]: { x: 120, y: 140 } },
+        viewport: { x: 0, y: 0, zoom: 1 },
+      },
     });
     expect(api.saveDraftInputs).toHaveLength(0);
     expect(parserClient.parseCalls).toBe(1);
@@ -120,6 +129,7 @@ describe("workspace layout persistence", () => {
     expect(await screen.findByText("Auto-layout preview ready")).toBeVisible();
     expect(api.saveLayoutInputs).toHaveLength(1);
     expect(api.saveLayoutInputs[0]?.layout.positions[tableKey]).toEqual({ x: 10, y: 20 });
+    expect(api.saveLayoutInputs[0]?.layout.viewport).toEqual({ x: 0, y: 0, zoom: 1 });
     fireEvent.click(screen.getByRole("button", { name: "Cancel preview" }));
     expect(api.saveLayoutInputs).toHaveLength(1);
     await waitFor(() => expect(screen.getByTestId("layout-position")).toHaveTextContent("10,20"));
@@ -129,6 +139,7 @@ describe("workspace layout persistence", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply auto layout" }));
     await waitFor(() => expect(api.saveLayoutInputs).toHaveLength(2));
     expect(api.saveLayoutInputs[1]?.layout.positions[tableKey]).toEqual({ x: 200, y: 220 });
+    expect(api.saveLayoutInputs[1]?.layout.viewport).toEqual({ x: 0, y: 0, zoom: 1 });
 
     fireEvent.click(screen.getByRole("button", { name: "Reset layout" }));
     const firstDialog = await screen.findByRole("dialog", { name: "Reset this view layout?" });
@@ -146,6 +157,7 @@ describe("workspace layout persistence", () => {
         positions: { [tableKey]: { x: 300, y: 320 } },
         collapsedGroupKeys: [],
         hiddenElementKeys: [],
+        viewport: { x: 0, y: 0, zoom: 1 },
         detailLevel: "FULL",
       },
     });
@@ -204,9 +216,7 @@ function FakeLayoutDiagram(props: BaseSchemaDiagramProps) {
       >
         Drag first node
       </button>
-      <button type="button" onClick={() => props.onViewportCommit?.({ x: 5, y: 6, zoom: 1.1 })}>
-        Pan diagram
-      </button>
+      <button type="button">Pan diagram</button>
     </div>
   );
 }

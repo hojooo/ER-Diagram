@@ -7,11 +7,11 @@ import {
   type NodeTypes,
   ReactFlow,
   type ReactFlowInstance,
-  type Viewport,
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
 
+import { useUiLocale } from "../localization/ui-locale.js";
 import type { BaseSchemaDiagramProps } from "./base-schema-diagram-contract.js";
 import {
   DiagramInteractionContext,
@@ -60,15 +60,14 @@ export function BaseSchemaDiagram({
   fillContainer = false,
   requestLayout = requestWorkerLayout,
   layoutPositions = EMPTY_LAYOUT_POSITIONS,
-  layoutViewport = null,
   layoutPending = false,
   layoutRequest = null,
   interactionDisabled = false,
   onPositionsCommit,
-  onViewportCommit,
   onLayoutRequestReady,
   onRenderedLayoutReady,
 }: BaseSchemaDiagramProps) {
+  const { messages } = useUiLocale();
   const projection = useMemo(
     () =>
       createDiagramProjection(graph, {
@@ -80,8 +79,10 @@ export function BaseSchemaDiagram({
   );
   const visibility = useMemo(() => createDiagramVisibility(graph, viewKey), [graph, viewKey]);
   const viewLabel = useMemo(
-    () => listDiagramViews(graph).find((view) => view.key === viewKey)?.label ?? "Global",
-    [graph, viewKey],
+    () =>
+      listDiagramViews(graph).find((view) => view.key === viewKey)?.label ??
+      messages["diagram.global"],
+    [graph, messages, viewKey],
   );
   const [displayProjection, setDisplayProjection] = useState(() =>
     layoutRequest
@@ -141,18 +142,16 @@ export function BaseSchemaDiagram({
         previousProjection: stableProjectionRef.current,
       });
       const container = diagramContainerRef.current;
-      const viewport =
-        layoutViewport ??
-        (container
-          ? deriveInteractiveViewport(
-              derivedProjection,
-              {
-                width: container.clientWidth,
-                height: container.clientHeight,
-              },
-              { insets: viewportInsetsRef.current },
-            )
-          : null);
+      const viewport = container
+        ? deriveInteractiveViewport(
+            derivedProjection,
+            {
+              width: container.clientWidth,
+              height: container.clientHeight,
+            },
+            { insets: viewportInsetsRef.current },
+          )
+        : null;
       const currentFlowInstance = flowInstanceRef.current;
       let viewportPrepared = false;
       if (currentFlowInstance && viewport) {
@@ -190,7 +189,6 @@ export function BaseSchemaDiagram({
     layoutPositions,
     layoutPending,
     layoutRequest,
-    layoutViewport,
     projection,
     requestLayout,
   ]);
@@ -234,10 +232,6 @@ export function BaseSchemaDiagram({
         });
         return;
       }
-      if (!layoutRequest && layoutViewport) {
-        void Promise.resolve(flowInstance.setViewport(layoutViewport)).then(finishRenderedLayout);
-        return;
-      }
       if (!layoutRequest) {
         const container = diagramContainerRef.current;
         const viewport = container
@@ -276,7 +270,6 @@ export function BaseSchemaDiagram({
     layoutRequest,
     layoutPending,
     layoutStatus,
-    layoutViewport,
     onLayoutRequestReady,
     onRenderedLayoutReady,
     projection.nodes.length,
@@ -408,13 +401,13 @@ export function BaseSchemaDiagram({
         <div>
           <p className="font-semibold text-slate-100">
             {viewKey === GLOBAL_VIEW_KEY
-              ? "No tables in this valid draft"
-              : `No tables are visible in ${viewLabel}`}
+              ? messages["diagram.emptyGlobal"]
+              : messages["diagram.emptyView"](viewLabel)}
           </p>
           <p className="mt-2 text-sm text-slate-400">
             {viewKey === GLOBAL_VIEW_KEY
-              ? "Add a DBML table to render the read-only ER diagram."
-              : "Update the DiagramView filters in DBML or switch to another view."}
+              ? messages["diagram.emptyGlobalDescription"]
+              : messages["diagram.emptyViewDescription"]}
           </p>
         </div>
       </div>
@@ -424,6 +417,7 @@ export function BaseSchemaDiagram({
   return (
     <div
       ref={diagramContainerRef}
+      data-schema-history-scope="diagram"
       className={`relative bg-slate-950 ${
         fillContainer ? "h-full min-h-0" : "h-[min(68vh,52rem)] min-h-[32rem]"
       }`}
@@ -436,21 +430,21 @@ export function BaseSchemaDiagram({
         data-lod={displayProjection.lod}
       >
         {layoutPending
-          ? "Loading layout"
+          ? messages["diagram.loadingLayout"]
           : layoutStatus === "LAYING_OUT"
-            ? "Laying out diagram"
+            ? messages["diagram.layingOut"]
             : layoutStatus === "SETTLING"
-              ? "Preparing diagram viewport"
+              ? messages["diagram.preparingViewport"]
               : layoutStatus === "READY"
-                ? "Diagram layout ready"
-                : "Diagram layout failed; fallback positions are shown"}
+                ? messages["diagram.layoutReady"]
+                : messages["diagram.layoutFailedStatus"]}
       </p>
       {layoutPending ? (
         <div
           className="absolute right-3 top-3 z-10 rounded-lg border border-slate-600 bg-slate-950/95 px-3 py-2 text-xs text-slate-200"
           role="status"
         >
-          Loading saved layout…
+          {messages["diagram.loadingSavedLayout"]}
         </div>
       ) : null}
       {layoutStatus === "ERROR" ? (
@@ -458,19 +452,19 @@ export function BaseSchemaDiagram({
           className="absolute right-3 top-3 z-10 flex items-center gap-3 rounded-lg border border-amber-300/50 bg-amber-950/95 px-3 py-2 text-xs text-amber-100"
           role="alert"
         >
-          <span>Automatic layout failed. Fallback positions are shown.</span>
+          <span>{messages["diagram.layoutFailed"]}</span>
           <button
             className="rounded border border-amber-200 px-2 py-1 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200"
             type="button"
             onClick={() => setLayoutGeneration((current) => current + 1)}
           >
-            Retry layout
+            {messages["diagram.retryLayout"]}
           </button>
         </div>
       ) : null}
       <DiagramInteractionContext.Provider value={interactions}>
         <ReactFlow<SchemaDiagramNode, SchemaDiagramEdge>
-          aria-label="ER diagram canvas"
+          aria-label={messages["diagram.canvas"]}
           nodes={selectedProjection.nodes}
           edges={selectedProjection.edges}
           nodeTypes={nodeTypes}
@@ -520,11 +514,6 @@ export function BaseSchemaDiagram({
             const positions = projectionPositions(displayProjection);
             positions[node.id] = { ...node.position };
             onPositionsCommit?.(positions);
-            if (flowInstance) onViewportCommit?.(toDiagramViewport(flowInstance.getViewport()));
-          }}
-          onMoveEnd={(event, viewport) => {
-            if (!event || interactionDisabled || layoutRequest) return;
-            onViewportCommit?.(toDiagramViewport(viewport));
           }}
           nodesDraggable={!interactionDisabled && layoutStatus === "READY"}
           nodesConnectable={false}
@@ -536,6 +525,9 @@ export function BaseSchemaDiagram({
           fitView={false}
           minZoom={0.15}
           maxZoom={1.75}
+          panOnScroll
+          zoomOnPinch
+          zoomOnScroll={false}
           onlyRenderVisibleElements
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
@@ -560,10 +552,6 @@ function projectionPositions(
   return Object.fromEntries(
     projection.nodes.map((node) => [node.id, { x: node.position.x, y: node.position.y }]),
   );
-}
-
-function toDiagramViewport(viewport: Viewport): { x: number; y: number; zoom: number } {
-  return { x: viewport.x, y: viewport.y, zoom: viewport.zoom };
 }
 
 function representativeNodeIdsForFocus(

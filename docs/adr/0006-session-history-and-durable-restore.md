@@ -105,7 +105,8 @@ authoritative draft-save 경계로 검증하는 방식이 두 편집 경로에 �
 
 ### Schema와 layout을 하나의 undo stack으로 관리
 
-위치·viewport·collapse는 schema semantics가 아니며 별도 optimistic revision을 사용한다. 함께 되돌리면
+node 위치·collapse는 schema semantics가 아니며 별도 optimistic revision을 사용한다. Camera viewport는
+session-only라 revision이나 restore 대상이 아니다. Layout을 schema history와 함께 되돌리면
 layout-only gesture가 schema redo를 무효화하고 과거 schema restore가 현재 사용자의 배치를 덮어쓴다.
 
 ## Consequences

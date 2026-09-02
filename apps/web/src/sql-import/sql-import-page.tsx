@@ -17,6 +17,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useBlocker, useNavigate, useParams } from "react-router-dom";
 
+import { useUiLocale } from "../localization/ui-locale.js";
 import { ProjectApiError } from "../projects/project-api.js";
 import { useProjectApi } from "../projects/project-api-context.js";
 import { projectQueryKeys } from "../projects/project-queries.js";
@@ -57,6 +58,7 @@ export function NewSqlImportPage({ adapters }: { readonly adapters?: SqlImportPa
 }
 
 export function ReplaceSqlImportPage({ adapters }: { readonly adapters?: SqlImportPageAdapters }) {
+  const { messages } = useUiLocale();
   const limits = useRuntimeResourceLimits();
   const effectiveAdapters = useMemo(
     () => adapters ?? createDefaultAdapters(limits),
@@ -75,10 +77,10 @@ export function ReplaceSqlImportPage({ adapters }: { readonly adapters?: SqlImpo
     return (
       <section>
         <h1 data-route-loading="true" className="font-semibold text-slate-100">
-          Loading SQL import
+          {messages["sqlImport.loading"]}
         </h1>
         <p className="mt-2" aria-live="polite">
-          Loading project for SQL import…
+          {messages["sqlImport.loadingMessage"]}
         </p>
       </section>
     );
@@ -86,12 +88,12 @@ export function ReplaceSqlImportPage({ adapters }: { readonly adapters?: SqlImpo
   if (projectQuery.isError) {
     return (
       <section role="alert" className="rounded-xl border border-red-400/40 bg-red-950/30 p-6">
-        <h1 className="text-xl font-semibold text-red-100">SQL import could not be opened</h1>
-        <p className="mt-2 text-sm text-red-100/80">
-          The current project state could not be loaded.
-        </p>
+        <h1 className="text-xl font-semibold text-red-100">
+          {messages["sqlImport.openErrorTitle"]}
+        </h1>
+        <p className="mt-2 text-sm text-red-100/80">{messages["sqlImport.openErrorMessage"]}</p>
         <Link className={`${buttonSecondary} mt-4`} to={`/projects/${projectId}`}>
-          Back to workspace
+          {messages["workspace.back"]}
         </Link>
       </section>
     );
@@ -116,6 +118,7 @@ function SqlImportPage({
   readonly adapters: SqlImportPageAdapters;
 }) {
   const api = useProjectApi();
+  const { messages } = useUiLocale();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const runtimeLimits = useRuntimeResourceLimits();
@@ -218,23 +221,19 @@ function SqlImportPage({
     setFileName(undefined);
     if (!file) return;
     if (file.size > runtimeLimits.maxSourceBytes) {
-      setFileError(
-        `The SQL file exceeds the configured ${runtimeLimits.maxSourceBytes} byte limit.`,
-      );
+      setFileError(messages["sqlImport.fileTooLarge"](runtimeLimits.maxSourceBytes));
       return;
     }
     try {
       const text = await file.text();
       if (utf8ByteLength(text) > runtimeLimits.maxSourceBytes) {
-        setFileError(
-          `The SQL file exceeds the configured ${runtimeLimits.maxSourceBytes} byte limit.`,
-        );
+        setFileError(messages["sqlImport.fileTooLarge"](runtimeLimits.maxSourceBytes));
         return;
       }
       setSource(text);
       setFileName(file.name);
     } catch {
-      setFileError("The SQL file could not be read.");
+      setFileError(messages["sqlImport.fileReadError"]);
     }
   }
 
@@ -242,19 +241,19 @@ function SqlImportPage({
     event.preventDefault();
     setError(undefined);
     if (mode === "NEW" && name.trim().length === 0) {
-      setError(new Error("Enter a project name."));
+      setError(new Error(messages["projects.enterName"]));
       return;
     }
     if (source.trim().length === 0) {
-      setError(new Error("Enter SQL DDL or choose a SQL file."));
+      setError(new Error(messages["sqlImport.enterSource"]));
       return;
     }
     if (utf8ByteLength(source) > runtimeLimits.maxSourceBytes) {
       setError(
-        new ProjectApiError(
-          `SQL source exceeds the configured ${runtimeLimits.maxSourceBytes} byte limit.`,
-          { status: null, code: "RESOURCE_SOURCE_TOO_LARGE" },
-        ),
+        new ProjectApiError(messages["sqlImport.sourceTooLarge"](runtimeLimits.maxSourceBytes), {
+          status: null,
+          code: "RESOURCE_SOURCE_TOO_LARGE",
+        }),
       );
       return;
     }
@@ -353,14 +352,13 @@ function SqlImportPage({
     <section aria-labelledby="sql-import-heading" className="space-y-6">
       <div className="border-b border-slate-800 pb-6">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">
-          {mode === "NEW" ? "New project" : "Replace project schema"}
+          {mode === "NEW" ? messages["sqlImport.newProject"] : messages["sqlImport.replaceProject"]}
         </p>
         <h1 id="sql-import-heading" className="mt-2 text-3xl font-semibold text-white">
-          {phase === "EDIT" ? "Import SQL DDL" : "Review SQL import"}
+          {phase === "EDIT" ? messages["sqlImport.title"] : messages["sqlImport.reviewTitle"]}
         </h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
-          SQL is parsed without execution. Unsupported schema clauses and row data are reported
-          before apply.
+          {messages["sqlImport.description"]}
         </p>
       </div>
 
@@ -371,7 +369,7 @@ function SqlImportPage({
         >
           {mode === "NEW" ? (
             <label className="grid gap-2 text-sm font-semibold text-slate-200">
-              Project name
+              {messages["projects.name"]}
               <input
                 className={inputClass}
                 value={name}
@@ -380,12 +378,14 @@ function SqlImportPage({
             </label>
           ) : (
             <p className="text-sm text-slate-300">
-              Replacing <strong className="text-white">{projectState?.project.name}</strong> at
-              revision {projectState?.project.schemaRevisionNo}.
+              {messages["sqlImport.replacing"](
+                projectState?.project.name ?? "",
+                projectState?.project.schemaRevisionNo ?? 0,
+              )}
             </p>
           )}
           <label className="grid gap-2 text-sm font-semibold text-slate-200">
-            SQL dialect
+            {messages["sqlImport.dialect"]}
             <select
               className={inputClass}
               value={dialect}
@@ -397,7 +397,7 @@ function SqlImportPage({
             </select>
           </label>
           <label className="grid gap-2 text-sm font-semibold text-slate-200">
-            SQL source
+            {messages["sqlImport.source"]}
             <textarea
               ref={sqlRef}
               className={`${inputClass} min-h-72 resize-y py-3 font-mono text-sm`}
@@ -407,7 +407,7 @@ function SqlImportPage({
             />
           </label>
           <label className="grid gap-2 text-sm font-semibold text-slate-200">
-            Choose SQL file
+            {messages["sqlImport.chooseFile"]}
             <input
               className={`${inputClass} py-2`}
               type="file"
@@ -418,7 +418,7 @@ function SqlImportPage({
             {fileError ? <span className="text-xs text-red-200">{fileError}</span> : null}
           </label>
           <label className="grid gap-2 text-sm font-semibold text-slate-200">
-            Original SQL retention
+            {messages["sqlImport.retention"]}
             <select
               className={inputClass}
               value={retention}
@@ -426,21 +426,22 @@ function SqlImportPage({
                 setRetention(event.currentTarget.value as OriginalSqlRetentionMode)
               }
             >
-              <option value="DISCARD">Discard after conversion (default)</option>
-              <option value="RETAIN">Retain with the applied import artifact</option>
+              <option value="DISCARD">{messages["sqlImport.discard"]}</option>
+              <option value="RETAIN">{messages["sqlImport.retain"]}</option>
             </select>
             <span className="text-xs font-normal text-slate-400">
-              Retention begins only after a successful apply. Preview and cancel do not store a
-              new-project source.
+              {messages["sqlImport.retentionDescription"]}
             </span>
           </label>
           <PublicError error={error} />
           <div className="flex flex-wrap justify-end gap-3">
             <button className={buttonSecondary} type="button" onClick={cancelImport}>
-              Cancel import
+              {messages["sqlImport.cancel"]}
             </button>
             <button className={buttonPrimary} type="submit" disabled={busy !== null}>
-              {busy === "PREVIEW" ? "Generating preview…" : "Preview import"}
+              {busy === "PREVIEW"
+                ? messages["sqlImport.generatingPreview"]
+                : messages["sqlImport.preview"]}
             </button>
           </div>
         </form>
@@ -448,7 +449,7 @@ function SqlImportPage({
         <div className="space-y-6">
           <div className="grid gap-4 lg:grid-cols-2">
             <label className="grid gap-2 text-sm font-semibold text-slate-200">
-              SQL source
+              {messages["sqlImport.source"]}
               <textarea
                 ref={sqlRef}
                 className={`${inputClass} min-h-80 py-3 font-mono text-xs`}
@@ -458,10 +459,10 @@ function SqlImportPage({
               />
             </label>
             <label className="grid gap-2 text-sm font-semibold text-slate-200">
-              Generated DBML
+              {messages["sqlImport.generatedDbml"]}
               <textarea
                 className={`${inputClass} min-h-80 py-3 font-mono text-xs`}
-                value={preview.candidate?.dbml ?? "No candidate DBML was generated."}
+                value={preview.candidate?.dbml ?? messages["sqlImport.noCandidateDbml"]}
                 readOnly
                 spellCheck={false}
               />
@@ -484,7 +485,7 @@ function SqlImportPage({
                 checked={lossAcknowledged}
                 onChange={(event) => setLossAcknowledged(event.currentTarget.checked)}
               />
-              I understand the reported schema conversion losses
+              {messages["sqlImport.lossAcknowledgement"]}
             </label>
           ) : null}
           {hasData ? (
@@ -494,7 +495,7 @@ function SqlImportPage({
                 checked={dataAcknowledged}
                 onChange={(event) => setDataAcknowledged(event.currentTarget.checked)}
               />
-              I confirm row data statements will be excluded
+              {messages["sqlImport.dataAcknowledgement"]}
             </label>
           ) : null}
           {previewStale || !replaceRevisionCurrent ? (
@@ -502,14 +503,13 @@ function SqlImportPage({
               role="alert"
               className="rounded-xl border border-amber-400/40 bg-amber-950/20 p-4 text-sm text-amber-100"
             >
-              This preview is stale. Return to edit and generate a new preview from the latest
-              project revision.
+              {messages["sqlImport.stale"]}
             </p>
           ) : null}
           <PublicError error={error} />
           <div className="flex flex-wrap justify-end gap-3">
             <button className={buttonSecondary} type="button" onClick={cancelImport}>
-              Cancel import
+              {messages["sqlImport.cancel"]}
             </button>
             <button
               className={buttonSecondary}
@@ -522,7 +522,7 @@ function SqlImportPage({
                 setPreviewStale(false);
               }}
             >
-              Back to edit
+              {messages["sqlImport.backToEdit"]}
             </button>
             <button
               className={buttonPrimary}
@@ -530,7 +530,7 @@ function SqlImportPage({
               disabled={!applyEnabled}
               onClick={() => void handleApply()}
             >
-              {busy === "APPLY" ? "Applying…" : "Apply import"}
+              {busy === "APPLY" ? messages["sqlImport.applying"] : messages["sqlImport.apply"]}
             </button>
           </div>
         </div>
@@ -554,6 +554,7 @@ function ReportPanel({
   readonly onFilter: (status: ReportStatus | "ALL") => void;
   readonly onSelect: (range: SourceRange) => void;
 }) {
+  const { messages } = useUiLocale();
   return (
     <section
       className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
@@ -562,12 +563,14 @@ function ReportPanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="conversion-report-heading" className="text-xl font-semibold text-white">
-            Conversion report
+            {messages["sqlExport.conversionReport"]}
           </h2>
-          <p className="mt-1 text-sm text-slate-400">Overall status: {report.overallStatus}</p>
+          <p className="mt-1 text-sm text-slate-400">
+            {messages["sqlImport.overallStatus"](report.overallStatus)}
+          </p>
         </div>
         <label className="text-sm font-semibold text-slate-200">
-          Status filter
+          {messages["sqlImport.statusFilter"]}
           <select
             className={`${inputClass} ml-3 w-auto`}
             value={filter}
@@ -595,7 +598,7 @@ function ReportPanel({
               <span className="font-semibold text-cyan-200">{item.status}</span>{" "}
               <span className="font-mono text-xs text-slate-300">{item.code}</span>
               <span className="ml-2 text-slate-400">
-                line {item.range.startLine}, column {item.range.startColumn}
+                {messages["sqlImport.range"](item.range.startLine, item.range.startColumn)}
               </span>
               <span className="mt-1 block text-slate-200">{item.message}</span>
             </button>
@@ -614,8 +617,13 @@ function SemanticInventory({
     | { readonly status: "READY"; readonly changes: readonly SchemaElementChange[] }
     | { readonly status: "UNAVAILABLE" };
 }) {
-  if (state.status === "LOADING") return <p aria-live="polite">Computing semantic inventory…</p>;
-  if (state.status === "UNAVAILABLE") return <p>Semantic inventory unavailable</p>;
+  const { messages } = useUiLocale();
+  if (state.status === "LOADING") {
+    return <p aria-live="polite">{messages["sqlImport.inventoryLoading"]}</p>;
+  }
+  if (state.status === "UNAVAILABLE") {
+    return <p>{messages["sqlImport.inventoryUnavailable"]}</p>;
+  }
   const counts = state.changes.reduce<Record<string, number>>((result, change) => {
     const key = `${change.operation} ${change.elementKind}`;
     result[key] = (result[key] ?? 0) + 1;
@@ -628,12 +636,12 @@ function SemanticInventory({
       aria-labelledby="semantic-inventory-heading"
     >
       <h2 id="semantic-inventory-heading" className="text-xl font-semibold text-white">
-        Semantic inventory
+        {messages["sqlImport.inventoryTitle"]}
       </h2>
       <p className="mt-2 text-sm text-slate-300">
         {Object.entries(counts)
           .map(([key, count]) => `${key}: ${count}`)
-          .join(" · ") || "No semantic changes"}
+          .join(" · ") || messages["sqlImport.noSemanticChanges"]}
       </p>
       <ol className="mt-3 grid gap-1 font-mono text-xs text-slate-400">
         {visible.map((change) => (
@@ -644,7 +652,7 @@ function SemanticInventory({
       </ol>
       {state.changes.length > visible.length ? (
         <p className="mt-2 text-xs text-amber-200">
-          Showing 200 of {state.changes.length} changes.
+          {messages["sqlImport.showingChanges"](visible.length, state.changes.length)}
         </p>
       ) : null}
     </section>
@@ -656,6 +664,7 @@ function ImportDraftNavigationDialog({
 }: {
   readonly blocker: ReturnType<typeof useBlocker>;
 }) {
+  const { messages } = useUiLocale();
   const stayRef = useRef<HTMLButtonElement>(null);
   return (
     <Dialog.Root
@@ -674,11 +683,10 @@ function ImportDraftNavigationDialog({
           }}
         >
           <Dialog.Title className="text-xl font-semibold text-white">
-            SQL import draft is local
+            {messages["sqlImport.localDraftTitle"]}
           </Dialog.Title>
           <Dialog.Description className="mt-3 text-sm leading-6 text-slate-300">
-            Use Cancel import to explicitly discard this SQL source. Other navigation is blocked so
-            the local draft is not lost accidentally.
+            {messages["sqlImport.localDraftDescription"]}
           </Dialog.Description>
           <div className="mt-6 flex justify-end">
             <button
@@ -689,7 +697,7 @@ function ImportDraftNavigationDialog({
                 if (blocker.state === "blocked") blocker.reset();
               }}
             >
-              Stay
+              {messages["action.stay"]}
             </button>
           </div>
         </Dialog.Content>
@@ -699,9 +707,10 @@ function ImportDraftNavigationDialog({
 }
 
 function PublicError({ error }: { readonly error: unknown }) {
+  const { messages } = useUiLocale();
   if (!error) return null;
   const apiError = error instanceof ProjectApiError ? error : null;
-  const message = error instanceof Error ? error.message : "The SQL import could not be completed.";
+  const message = error instanceof Error ? error.message : messages["sqlImport.unknownError"];
   return (
     <div
       role="alert"
@@ -710,7 +719,7 @@ function PublicError({ error }: { readonly error: unknown }) {
     >
       <p>{message}</p>
       {apiError?.correlationId ? (
-        <p className="mt-1 text-xs">Correlation ID: {apiError.correlationId}</p>
+        <p className="mt-1 text-xs">{messages["error.correlationId"](apiError.correlationId)}</p>
       ) : null}
     </div>
   );

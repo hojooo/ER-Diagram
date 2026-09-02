@@ -56,8 +56,10 @@ normalized payload는 stale 검사를 통과한 뒤 revision을 증가시키지 
 collapse/hidden key 배열은 code-unit 순서로 canonicalize한다.
 
 Layout transaction은 canonical source, schema history, `schema_revision_no`와 project `updated_at`을 변경하지
-않는다. 따라서 node 이동이나 viewport 저장이 Project Home 최근 수정 정렬을 바꾸지 않는다. Malformed JSON,
-non-finite coordinate, duplicate key 또는 row revision이 project global revision보다 큰 persisted state는
+않는다. 따라서 node 위치나 collapse·LOD 저장이 Project Home 최근 수정 정렬을 바꾸지 않는다. Web은 실제
+camera viewport를 browser session-only로 관리하고 SQLite layout에는 neutral compatibility placeholder만
+저장한다. Malformed JSON, non-finite coordinate, duplicate key 또는 row revision이 project global
+revision보다 큰 persisted state는
 fail-closed storage invariant로 처리하며 row upsert나 project revision CAS 중 하나라도 실패하면 전체
 transaction을 rollback한다.
 

@@ -78,7 +78,14 @@ vi.mock("@xyflow/react", async () => {
       );
       const firstNode = nodes[0];
       return (
-        <div role="application" aria-label={String(props["aria-label"])}>
+        <div
+          role="application"
+          aria-label={String(props["aria-label"])}
+          data-has-move-end={String(onMoveEnd !== undefined)}
+          data-pan-on-scroll={String(props.panOnScroll)}
+          data-zoom-on-pinch={String(props.zoomOnPinch)}
+          data-zoom-on-scroll={String(props.zoomOnScroll)}
+        >
           {nodes.map((node) => (
             <button
               type="button"
@@ -623,13 +630,12 @@ describe("base schema diagram canvas", () => {
     expect(requestLayout).not.toHaveBeenCalled();
   });
 
-  it("overlays saved positions, restores viewport, and emits only user layout changes", async () => {
+  it("overlays saved positions and emits only node position changes", async () => {
     const graph = await parseGraph("Table positioned { id int [pk] }");
     const table = graph.tables[0];
     if (!table) throw new Error("Missing positioned table.");
     const requestLayout = vi.fn(async (projection: DiagramProjection) => projection);
     const onPositionsCommit = vi.fn();
-    const onViewportCommit = vi.fn();
     const onRenderedLayoutReady = vi.fn();
 
     render(
@@ -644,17 +650,30 @@ describe("base schema diagram canvas", () => {
         onNavigateSource={vi.fn()}
         requestLayout={requestLayout}
         layoutPositions={{ [table.key]: { x: 400, y: 500 } }}
-        layoutViewport={{ x: 5, y: 6, zoom: 0.8 }}
         onPositionsCommit={onPositionsCommit}
-        onViewportCommit={onViewportCommit}
         onRenderedLayoutReady={onRenderedLayoutReady}
       />,
     );
 
     const tableButton = await screen.findByRole("button", { name: "Canvas table positioned" });
     await waitFor(() => expect(tableButton).toHaveAttribute("data-position", "400,500"));
+    expect(screen.getByRole("application", { name: "ER diagram canvas" })).toHaveAttribute(
+      "data-has-move-end",
+      "false",
+    );
+    expect(screen.getByRole("application", { name: "ER diagram canvas" })).toHaveAttribute(
+      "data-pan-on-scroll",
+      "true",
+    );
+    expect(screen.getByRole("application", { name: "ER diagram canvas" })).toHaveAttribute(
+      "data-zoom-on-scroll",
+      "false",
+    );
+    expect(screen.getByRole("application", { name: "ER diagram canvas" })).toHaveAttribute(
+      "data-zoom-on-pinch",
+      "true",
+    );
     expect(requestLayout).not.toHaveBeenCalled();
-    expect(flowSpies.setViewport).toHaveBeenCalledWith({ x: 5, y: 6, zoom: 0.8 });
     await waitFor(() =>
       expect(onRenderedLayoutReady).toHaveBeenCalledWith(
         expect.objectContaining({ [table.key]: { x: 400, y: 500 } }),
@@ -666,12 +685,9 @@ describe("base schema diagram canvas", () => {
     expect(onPositionsCommit).toHaveBeenCalledWith(
       expect.objectContaining({ [table.key]: { x: 700, y: 800 } }),
     );
-    expect(onViewportCommit).toHaveBeenCalledWith({ x: 10, y: 20, zoom: 0.75 });
-    onViewportCommit.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "Simulate programmatic pan" }));
-    expect(onViewportCommit).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Simulate user pan" }));
-    expect(onViewportCommit).toHaveBeenCalledWith({ x: 30, y: 40, zoom: 1.2 });
+    expect(onPositionsCommit).toHaveBeenCalledOnce();
   });
 
   it("uses safe-area insets for initial fit without moving the viewport when overlays toggle", async () => {

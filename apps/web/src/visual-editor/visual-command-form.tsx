@@ -9,6 +9,8 @@ import { getSqlBuiltinTypes, type SchemaGraph, type TableNode } from "@er-diagra
 import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
+import type { UiMessages } from "../localization/messages.js";
+import { useUiLocale } from "../localization/ui-locale.js";
 import type { VisualEditorAction } from "./visual-editor-model.js";
 import { findColumn, normalizeVisualDraft } from "./visual-editor-model.js";
 import type { VisualCommandDraft } from "./visual-command-session.js";
@@ -19,6 +21,7 @@ export function VisualCommandForm({
   graph,
   primaryDialect,
   action,
+  displayLabel,
   initialDraft,
   disabled,
   onCancel,
@@ -27,11 +30,13 @@ export function VisualCommandForm({
   readonly graph: SchemaGraph;
   readonly primaryDialect: PrimaryDialect;
   readonly action: VisualEditorAction;
+  readonly displayLabel?: string;
   readonly initialDraft: VisualCommandDraft;
   readonly disabled: boolean;
   readonly onCancel: () => void;
   readonly onSubmit: (draft: VisualCommandDraft) => void;
 }) {
+  const { messages } = useUiLocale();
   const [draft, setDraft] = useState(initialDraft);
   const [error, setError] = useState<string | null>(null);
   const headingId = useId();
@@ -43,7 +48,8 @@ export function VisualCommandForm({
     [graph, primaryDialect],
   );
   const destructive = isDeleteCommand(draft.kind);
-  const structuralBlockers = destructive ? deleteStructuralBlockers(graph, draft) : [];
+  const structuralBlockers = destructive ? deleteStructuralBlockers(graph, draft, messages) : [];
+  const formLabel = displayLabel ?? action.label;
 
   useEffect(() => {
     const form = formRef.current;
@@ -72,7 +78,13 @@ export function VisualCommandForm({
   const submit = () => {
     const normalized = normalizeVisualDraft(graph, draft);
     if (!normalized.draft) {
-      setError(normalized.error);
+      setError(
+        normalized.error === "Change at least one field before applying the command."
+          ? messages["visual.changeAtLeastOne"]
+          : normalized.error === "The selected schema element no longer exists."
+            ? messages["visual.elementMissing"]
+            : normalized.error,
+      );
       return;
     }
     const parsed = visualCommandSchema.safeParse({
@@ -81,7 +93,7 @@ export function VisualCommandForm({
       expectedSchemaRevisionNo: 1,
     });
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? "Review the visual command fields.");
+      setError(parsed.error.issues[0]?.message ?? messages["visual.reviewFields"]);
       return;
     }
     setError(null);
@@ -91,11 +103,9 @@ export function VisualCommandForm({
   return (
     <section className="mt-4 rounded-xl border border-cyan-400/30 bg-slate-950/70 p-4">
       <h3 id={headingId} className="font-semibold text-white">
-        {action.label}
+        {formLabel}
       </h3>
-      <p className="mt-1 text-xs text-slate-400">
-        Source and layout writes are flushed before this command is sent.
-      </p>
+      <p className="mt-1 text-xs text-slate-400">{messages["visual.formDescription"]}</p>
       <form
         ref={formRef}
         className="mt-4 space-y-4"
@@ -132,7 +142,7 @@ export function VisualCommandForm({
             className="rounded-lg border border-amber-400/40 bg-amber-950/40 p-3 text-sm text-amber-100"
             role="alert"
           >
-            <p className="font-semibold">Resolve these dependencies before deleting:</p>
+            <p className="font-semibold">{messages["visual.resolveDependencies"]}</p>
             <ul className="mt-2 list-disc space-y-1 pl-5">
               {structuralBlockers.map((blocker) => (
                 <li key={blocker}>{blocker}</li>
@@ -142,18 +152,18 @@ export function VisualCommandForm({
         ) : null}
         <div className="flex flex-wrap justify-end gap-2">
           <button className={secondaryButtonClass} type="button" onClick={onCancel}>
-            Cancel
+            {messages["action.cancel"]}
           </button>
           {destructive ? (
             <DeleteConfirmation
-              label={action.label}
-              description={deleteDescription(graph, draft)}
+              label={formLabel}
+              description={deleteDescription(graph, draft, messages)}
               disabled={disabled || structuralBlockers.length > 0}
               onConfirm={submit}
             />
           ) : (
             <button className={primaryButtonClass} type="submit" disabled={disabled}>
-              Apply command
+              {messages["visual.applyCommand"]}
             </button>
           )}
         </div>
@@ -173,36 +183,37 @@ function DraftFields({
   readonly typeSuggestions: readonly string[];
   readonly onChange: (draft: VisualCommandDraft) => void;
 }) {
+  const { messages } = useUiLocale();
   switch (draft.kind) {
     case "CREATE_TABLE":
       return (
         <>
           <TextField
-            label="Schema name"
+            label={messages["visual.field.schemaName"]}
             value={draft.table.schemaName}
             onChange={(schemaName) => onChange({ ...draft, table: { ...draft.table, schemaName } })}
           />
           <TextField
-            label="Table name"
+            label={messages["visual.field.tableName"]}
             value={draft.table.name}
             onChange={(name) => onChange({ ...draft, table: { ...draft.table, name } })}
           />
           <NullableTextField
-            label="Table note"
+            label={messages["visual.field.tableNote"]}
             multiline
             value={draft.table.note}
             onChange={(note) => onChange({ ...draft, table: { ...draft.table, note } })}
           />
           <NullableTextField
-            label="Table color"
+            label={messages["visual.field.tableColor"]}
             placeholder="#1f2937"
             value={draft.table.color}
             onChange={(color) => onChange({ ...draft, table: { ...draft.table, color } })}
           />
           <fieldset className={fieldsetClass}>
-            <legend className={legendClass}>Initial column</legend>
+            <legend className={legendClass}>{messages["visual.field.initialColumn"]}</legend>
             <TextField
-              label="Column name"
+              label={messages["visual.field.columnName"]}
               value={draft.table.columns[0]?.name ?? ""}
               onChange={(name) =>
                 onChange({
@@ -228,13 +239,13 @@ function DraftFields({
       return (
         <>
           <NullableTextField
-            label="Table note"
+            label={messages["visual.field.tableNote"]}
             multiline
             value={draft.changes.note ?? null}
             onChange={(note) => onChange({ ...draft, changes: { ...draft.changes, note } })}
           />
           <NullableTextField
-            label="Table color"
+            label={messages["visual.field.tableColor"]}
             placeholder="#1f2937"
             value={draft.changes.color ?? null}
             onChange={(color) => onChange({ ...draft, changes: { ...draft.changes, color } })}
@@ -244,7 +255,7 @@ function DraftFields({
     case "RENAME_TABLE":
       return (
         <TextField
-          label="New table name"
+          label={messages["visual.field.newTableName"]}
           value={draft.newName}
           onChange={(newName) => onChange({ ...draft, newName })}
         />
@@ -254,16 +265,12 @@ function DraftFields({
     case "DELETE_REFERENCE":
     case "DELETE_INDEX":
     case "DELETE_CHECK":
-      return (
-        <p className="text-sm text-amber-100">
-          This command removes canonical DBML schema content.
-        </p>
-      );
+      return <p className="text-sm text-amber-100">{messages["visual.removesCanonical"]}</p>;
     case "CREATE_COLUMN":
       return (
         <>
           <TextField
-            label="Column name"
+            label={messages["visual.field.columnName"]}
             value={draft.column.name}
             onChange={(name) => onChange({ ...draft, column: { ...draft.column, name } })}
           />
@@ -297,7 +304,7 @@ function DraftFields({
     case "RENAME_COLUMN":
       return (
         <TextField
-          label="New column name"
+          label={messages["visual.field.newColumnName"]}
           value={draft.newName}
           onChange={(newName) => onChange({ ...draft, newName })}
         />
@@ -306,7 +313,7 @@ function DraftFields({
       const table = graph.tables.find((candidate) => candidate.key === draft.targetTableKey);
       return (
         <label className={labelClass}>
-          Move before
+          {messages["visual.field.moveBefore"]}
           <select
             className={inputClass}
             value={draft.beforeColumnKey ?? ""}
@@ -314,7 +321,7 @@ function DraftFields({
               onChange({ ...draft, beforeColumnKey: event.target.value || null })
             }
           >
-            <option value="">End of columns</option>
+            <option value="">{messages["visual.field.endOfColumns"]}</option>
             {table?.columns
               .filter((column) => column.key !== draft.targetColumnKey && !column.injectedFrom)
               .map((column) => (
@@ -330,7 +337,7 @@ function DraftFields({
       return (
         <>
           <TextField
-            label="Reference schema"
+            label={messages["visual.field.referenceSchema"]}
             value={draft.reference.schemaName}
             onChange={(schemaName) =>
               onChange({ ...draft, reference: { ...draft.reference, schemaName } })
@@ -411,7 +418,7 @@ function DraftFields({
       ]);
       return (
         <fieldset className={fieldsetClass}>
-          <legend className={legendClass}>Group member tables</legend>
+          <legend className={legendClass}>{messages["visual.field.groupMembers"]}</legend>
           <CheckboxList
             values={graph.tables.map((table) => ({ key: table.key, label: qualifiedTable(table) }))}
             selected={selected}
@@ -430,7 +437,7 @@ function DraftFields({
       return (
         <>
           <FilterEditor
-            label="Table visibility"
+            label={messages["visual.field.tableVisibility"]}
             values={graph.tables.map((table) => ({ key: table.key, label: qualifiedTable(table) }))}
             value={draft.changes.visibleTableKeys ?? null}
             onChange={(visibleTableKeys) =>
@@ -438,7 +445,7 @@ function DraftFields({
             }
           />
           <FilterEditor
-            label="Sticky note visibility"
+            label={messages["visual.field.noteVisibility"]}
             values={graph.notes.map((note) => ({ key: note.key, label: note.name }))}
             value={draft.changes.visibleNoteKeys ?? null}
             onChange={(visibleNoteKeys) =>
@@ -446,7 +453,7 @@ function DraftFields({
             }
           />
           <FilterEditor
-            label="TableGroup visibility"
+            label={messages["visual.field.groupVisibility"]}
             values={graph.groups.map((group) => ({
               key: group.key,
               label: `${group.schemaName}.${group.name}`,
@@ -457,7 +464,7 @@ function DraftFields({
             }
           />
           <FilterEditor
-            label="Schema visibility"
+            label={messages["visual.field.schemaVisibility"]}
             values={[...new Set(graph.tables.map((table) => table.schemaName))]
               .sort(compareCodeUnits)
               .map((name) => ({ key: name, label: name }))}
@@ -480,13 +487,14 @@ function ColumnValueFields({
   readonly typeSuggestions: readonly string[];
   readonly onChange: (value: ReturnType<typeof emptyColumn>) => void;
 }) {
+  const { messages } = useUiLocale();
   const actual = value;
   return (
     <>
       <label className={labelClass}>
-        DBML column type
+        {messages["visual.field.columnType"]}
         <input
-          aria-label="DBML column type"
+          aria-label={messages["visual.field.columnType"]}
           className={inputClass}
           list="visual-column-types"
           required
@@ -499,27 +507,27 @@ function ColumnValueFields({
           ))}
         </datalist>
         <span className="text-xs font-normal text-slate-400">
-          Dialect and enum suggestions are optional; raw DBML types remain allowed.
+          {messages["visual.field.typeSuggestion"]}
         </span>
       </label>
       <div className="grid gap-2 sm:grid-cols-2">
         <BooleanField
-          label="Primary key"
+          label={messages["visual.field.primaryKey"]}
           checked={actual.primaryKey}
           onChange={(primaryKey) => onChange({ ...actual, primaryKey })}
         />
         <BooleanField
-          label="Unique"
+          label={messages["visual.field.unique"]}
           checked={actual.unique}
           onChange={(unique) => onChange({ ...actual, unique })}
         />
         <BooleanField
-          label="Not null"
+          label={messages["visual.field.notNull"]}
           checked={actual.notNull}
           onChange={(notNull) => onChange({ ...actual, notNull })}
         />
         <BooleanField
-          label="Auto increment"
+          label={messages["visual.field.increment"]}
           checked={actual.increment}
           onChange={(increment) => onChange({ ...actual, increment })}
         />
@@ -529,7 +537,7 @@ function ColumnValueFields({
         onChange={(nextDefault) => onChange({ ...actual, default: nextDefault })}
       />
       <NullableTextField
-        label="Column note"
+        label={messages["visual.field.columnNote"]}
         multiline
         value={actual.note}
         onChange={(note) => onChange({ ...actual, note })}
@@ -545,28 +553,29 @@ function DefaultField({
   readonly value: VisualColumnDefault | null;
   readonly onChange: (value: VisualColumnDefault | null) => void;
 }) {
+  const { messages } = useUiLocale();
   const kind = value?.type ?? "none";
   return (
     <fieldset className={fieldsetClass}>
-      <legend className={legendClass}>Column default</legend>
+      <legend className={legendClass}>{messages["visual.field.columnDefault"]}</legend>
       <label className={labelClass}>
-        Default kind
+        {messages["visual.field.defaultKind"]}
         <select
           className={inputClass}
           value={kind}
           onChange={(event) => onChange(defaultForKind(event.target.value))}
         >
-          <option value="none">None</option>
-          <option value="number">Number</option>
-          <option value="string">String</option>
-          <option value="boolean">Boolean</option>
-          <option value="expression">Expression</option>
-          <option value="null">Null</option>
+          <option value="none">{messages["visual.value.none"]}</option>
+          <option value="number">{messages["visual.value.number"]}</option>
+          <option value="string">{messages["visual.value.string"]}</option>
+          <option value="boolean">{messages["visual.value.boolean"]}</option>
+          <option value="expression">{messages["visual.value.expression"]}</option>
+          <option value="null">{messages["visual.value.null"]}</option>
         </select>
       </label>
       {value?.type === "number" ? (
         <label className={labelClass}>
-          Default number
+          {messages["visual.field.defaultNumber"]}
           <input
             className={inputClass}
             type="number"
@@ -576,14 +585,18 @@ function DefaultField({
         </label>
       ) : value?.type === "string" || value?.type === "expression" ? (
         <TextField
-          label={value.type === "string" ? "Default string" : "Default expression"}
+          label={
+            value.type === "string"
+              ? messages["visual.field.defaultString"]
+              : messages["visual.field.defaultExpression"]
+          }
           required={value.type === "expression"}
           value={value.value}
           onChange={(next) => onChange({ type: value.type, value: next })}
         />
       ) : value?.type === "boolean" ? (
         <label className={labelClass}>
-          Default boolean
+          {messages["visual.field.defaultBoolean"]}
           <select
             className={inputClass}
             value={String(value.value)}
@@ -591,8 +604,8 @@ function DefaultField({
               onChange({ type: "boolean", value: event.target.value === "true" })
             }
           >
-            <option value="true">True</option>
-            <option value="false">False</option>
+            <option value="true">{messages["visual.value.true"]}</option>
+            <option value="false">{messages["visual.value.false"]}</option>
           </select>
         </label>
       ) : null}
@@ -618,10 +631,11 @@ function ReferenceFields({
   readonly value: ReferenceFieldValue;
   readonly onChange: (value: ReferenceFieldValue) => void;
 }) {
+  const { messages } = useUiLocale();
   return (
     <>
       <NullableTextField
-        label="Reference name"
+        label={messages["visual.field.referenceName"]}
         value={value.name}
         onChange={(name) => onChange({ ...value, name })}
       />
@@ -630,7 +644,7 @@ function ReferenceFields({
         return (
           <EndpointEditor
             key={endpointSlot}
-            label={`Endpoint ${endpointIndex + 1}`}
+            label={messages["visual.field.endpoint"](endpointIndex + 1)}
             graph={graph}
             value={value.endpoints[endpointIndex]}
             onChange={(nextEndpoint) => {
@@ -646,24 +660,24 @@ function ReferenceFields({
       })}
       <div className="grid gap-3 sm:grid-cols-2">
         <ActionField
-          label="On delete"
+          label={messages["visual.field.onDelete"]}
           value={value.onDelete}
           onChange={(onDelete) => onChange({ ...value, onDelete })}
         />
         <ActionField
-          label="On update"
+          label={messages["visual.field.onUpdate"]}
           value={value.onUpdate}
           onChange={(onUpdate) => onChange({ ...value, onUpdate })}
         />
       </div>
       <NullableTextField
-        label="Reference color"
+        label={messages["visual.field.referenceColor"]}
         placeholder="#1f2937"
         value={value.color}
         onChange={(color) => onChange({ ...value, color })}
       />
       <BooleanField
-        label="Inactive relationship"
+        label={messages["visual.field.inactive"]}
         checked={value.inactive}
         onChange={(inactive) => onChange({ ...value, inactive })}
       />
@@ -682,6 +696,7 @@ function EndpointEditor({
   readonly value: VisualReferenceEndpoint;
   readonly onChange: (value: VisualReferenceEndpoint) => void;
 }) {
+  const { messages } = useUiLocale();
   const table =
     graph.tables.find((candidate) => candidate.key === value.tableKey) ?? graph.tables[0];
   const columns = table?.columns.filter((column) => !column.injectedFrom) ?? [];
@@ -689,7 +704,7 @@ function EndpointEditor({
     <fieldset className={fieldsetClass}>
       <legend className={legendClass}>{label}</legend>
       <label className={labelClass}>
-        Table
+        {messages["visual.field.table"]}
         <select
           className={inputClass}
           value={value.tableKey}
@@ -711,11 +726,11 @@ function EndpointEditor({
           ))}
         </select>
       </label>
-      <ol className="space-y-2" aria-label={`${label} ordered columns`}>
+      <ol className="space-y-2" aria-label={messages["visual.field.orderedColumns"](label)}>
         {createSemanticRows(value.columnKeys, (columnKey) => columnKey).map((row) => (
           <li key={row.key} className="flex flex-wrap items-end gap-2">
             <label className={`${labelClass} min-w-48 flex-1`}>
-              Column {row.index + 1}
+              {messages["visual.field.columnNumber"](row.index + 1)}
               <select
                 className={inputClass}
                 value={row.value}
@@ -756,11 +771,11 @@ function EndpointEditor({
           columns[0] && onChange({ ...value, columnKeys: [...value.columnKeys, columns[0].key] })
         }
       >
-        Add endpoint column
+        {messages["visual.field.addEndpointColumn"]}
       </button>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className={labelClass}>
-          Minimum cardinality
+          {messages["visual.field.minimumCardinality"]}
           <select
             className={inputClass}
             value={value.multiplicity.min}
@@ -771,12 +786,12 @@ function EndpointEditor({
               })
             }
           >
-            <option value={0}>Optional (0)</option>
-            <option value={1}>Required (1)</option>
+            <option value={0}>{messages["visual.value.optional"]}</option>
+            <option value={1}>{messages["visual.value.required"]}</option>
           </select>
         </label>
         <label className={labelClass}>
-          Maximum cardinality
+          {messages["visual.field.maximumCardinality"]}
           <select
             className={inputClass}
             value={value.multiplicity.max ?? "many"}
@@ -790,8 +805,8 @@ function EndpointEditor({
               })
             }
           >
-            <option value={1}>One</option>
-            <option value="many">Many</option>
+            <option value={1}>{messages["visual.value.one"]}</option>
+            <option value="many">{messages["visual.value.many"]}</option>
           </select>
         </label>
       </div>
@@ -817,20 +832,21 @@ function IndexFields({
   readonly value: IndexFieldValue;
   readonly onChange: (value: IndexFieldValue) => void;
 }) {
+  const { messages } = useUiLocale();
   return (
     <>
       <NullableTextField
-        label="Index name"
+        label={messages["visual.field.indexName"]}
         value={value.name}
         onChange={(name) => onChange({ ...value, name })}
       />
       <fieldset className={fieldsetClass}>
-        <legend className={legendClass}>Ordered index terms</legend>
+        <legend className={legendClass}>{messages["visual.field.indexTerms"]}</legend>
         <ol className="space-y-2">
           {createSemanticRows(value.terms, serializeIndexTerm).map((row) => (
             <li key={row.key} className="rounded-lg border border-slate-700 p-3">
               <label className={labelClass}>
-                Term kind
+                {messages["visual.field.termKind"]}
                 <select
                   className={inputClass}
                   value={row.value.kind}
@@ -847,13 +863,13 @@ function IndexFields({
                     })
                   }
                 >
-                  <option value="COLUMN">Column</option>
-                  <option value="EXPRESSION">Expression</option>
+                  <option value="COLUMN">{messages["visual.field.column"]}</option>
+                  <option value="EXPRESSION">{messages["visual.value.expression"]}</option>
                 </select>
               </label>
               {row.value.kind === "COLUMN" ? (
                 <label className={labelClass}>
-                  Column
+                  {messages["visual.field.column"]}
                   <select
                     className={inputClass}
                     value={row.value.columnKey}
@@ -878,7 +894,7 @@ function IndexFields({
                 </label>
               ) : (
                 <TextField
-                  label="Expression"
+                  label={messages["visual.value.expression"]}
                   value={row.value.expression}
                   onChange={(expression) =>
                     onChange({
@@ -919,7 +935,7 @@ function IndexFields({
               })
             }
           >
-            Add column term
+            {messages["visual.field.addColumnTerm"]}
           </button>
           <button
             className={secondaryButtonClass}
@@ -931,29 +947,29 @@ function IndexFields({
               })
             }
           >
-            Add expression term
+            {messages["visual.field.addExpressionTerm"]}
           </button>
         </div>
       </fieldset>
       <NullableTextField
-        label="Index type"
+        label={messages["visual.field.indexType"]}
         value={value.type}
         onChange={(type) => onChange({ ...value, type })}
       />
       <div className="grid gap-2 sm:grid-cols-2">
         <BooleanField
-          label="Unique index"
+          label={messages["visual.field.uniqueIndex"]}
           checked={value.unique}
           onChange={(unique) => onChange({ ...value, unique })}
         />
         <BooleanField
-          label="Primary index"
+          label={messages["visual.field.primaryIndex"]}
           checked={value.primaryKey}
           onChange={(primaryKey) => onChange({ ...value, primaryKey })}
         />
       </div>
       <NullableTextField
-        label="Index note"
+        label={messages["visual.field.indexNote"]}
         multiline
         value={value.note}
         onChange={(note) => onChange({ ...value, note })}
@@ -976,20 +992,25 @@ function CheckFields({
   readonly value: CheckFieldValue;
   readonly onChange: (value: CheckFieldValue) => void;
 }) {
+  const { messages } = useUiLocale();
   return (
     <>
       <label className={labelClass}>
-        Check name
+        {messages["visual.field.checkName"]}
         <input
           className={inputClass}
           disabled={columnOwned}
-          placeholder={columnOwned ? "Column checks are unnamed" : "Optional"}
+          placeholder={
+            columnOwned
+              ? messages["visual.field.columnChecksUnnamed"]
+              : messages["visual.field.optional"]
+          }
           value={value.name ?? ""}
           onChange={(event) => onChange({ ...value, name: event.target.value || null })}
         />
       </label>
       <TextField
-        label="Check expression"
+        label={messages["visual.field.checkExpression"]}
         value={value.expression}
         onChange={(expression) => onChange({ ...value, expression })}
       />
@@ -1008,6 +1029,7 @@ function FilterEditor({
   readonly value: string[] | null;
   readonly onChange: (value: string[] | null) => void;
 }) {
+  const { messages } = useUiLocale();
   const mode = value === null ? "NONE" : value.length === 0 ? "ALL" : "SELECTED";
   return (
     <fieldset className={fieldsetClass}>
@@ -1029,7 +1051,11 @@ function FilterEditor({
                 )
               }
             />
-            {candidate === "ALL" ? "All" : candidate === "NONE" ? "None" : "Selected"}
+            {candidate === "ALL"
+              ? messages["visual.value.all"]
+              : candidate === "NONE"
+                ? messages["visual.value.none"]
+                : messages["visual.value.selected"]}
           </label>
         ))}
       </div>
@@ -1085,13 +1111,14 @@ function OrderButtons({
   readonly onMove: (direction: -1 | 1) => void;
   readonly onRemove: () => void;
 }) {
+  const { messages } = useUiLocale();
   return (
     <div className="flex gap-1">
       <button
         className={smallButtonClass}
         type="button"
         disabled={index === 0}
-        aria-label={`Move item ${index + 1} up`}
+        aria-label={messages["visual.moveUp"](index + 1)}
         onClick={() => onMove(-1)}
       >
         ↑
@@ -1100,7 +1127,7 @@ function OrderButtons({
         className={smallButtonClass}
         type="button"
         disabled={index === length - 1}
-        aria-label={`Move item ${index + 1} down`}
+        aria-label={messages["visual.moveDown"](index + 1)}
         onClick={() => onMove(1)}
       >
         ↓
@@ -1109,10 +1136,10 @@ function OrderButtons({
         className={smallButtonClass}
         type="button"
         disabled={length === 1}
-        aria-label={`Remove item ${index + 1}`}
+        aria-label={messages["visual.removeItem"](index + 1)}
         onClick={onRemove}
       >
-        Remove
+        {messages["visual.remove"]}
       </button>
     </div>
   );
@@ -1135,6 +1162,7 @@ function ActionField({
   readonly value: ReferenceActionValue;
   readonly onChange: (value: ReferenceActionValue) => void;
 }) {
+  const { messages } = useUiLocale();
   return (
     <label className={labelClass}>
       {label}
@@ -1143,12 +1171,12 @@ function ActionField({
         value={value ?? ""}
         onChange={(event) => onChange((event.target.value || null) as typeof value)}
       >
-        <option value="">None</option>
-        <option value="cascade">Cascade</option>
-        <option value="restrict">Restrict</option>
-        <option value="set null">Set null</option>
-        <option value="set default">Set default</option>
-        <option value="no action">No action</option>
+        <option value="">{messages["visual.value.none"]}</option>
+        <option value="cascade">{messages["visual.action.cascade"]}</option>
+        <option value="restrict">{messages["visual.action.restrict"]}</option>
+        <option value="set null">{messages["visual.action.setNull"]}</option>
+        <option value="set default">{messages["visual.action.setDefault"]}</option>
+        <option value="no action">{messages["visual.action.noAction"]}</option>
       </select>
     </label>
   );
@@ -1240,6 +1268,7 @@ function DeleteConfirmation({
   readonly disabled: boolean;
   readonly onConfirm: () => void;
 }) {
+  const { messages } = useUiLocale();
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
   return (
     <Dialog.Root>
@@ -1258,7 +1287,7 @@ function DeleteConfirmation({
           }}
         >
           <Dialog.Title className="text-xl font-semibold text-white">
-            Confirm {label.toLowerCase()}
+            {messages["visual.confirmAction"](label)}
           </Dialog.Title>
           <Dialog.Description className="mt-3 text-sm text-slate-300">
             {description}
@@ -1266,12 +1295,12 @@ function DeleteConfirmation({
           <div className="mt-6 flex justify-end gap-2">
             <Dialog.Close asChild>
               <button ref={cancelButtonRef} className={secondaryButtonClass} type="button">
-                Cancel
+                {messages["action.cancel"]}
               </button>
             </Dialog.Close>
             <Dialog.Close asChild>
               <button className={dangerButtonClass} type="button" onClick={onConfirm}>
-                Confirm delete
+                {messages["visual.confirmDelete"]}
               </button>
             </Dialog.Close>
           </div>
@@ -1298,7 +1327,11 @@ function serializeIndexTerm(term: VisualIndexTerm): string {
   return term.kind === "COLUMN" ? `column:${term.columnKey}` : `expression:${term.expression}`;
 }
 
-function deleteDescription(graph: SchemaGraph, draft: VisualCommandDraft): string {
+function deleteDescription(
+  graph: SchemaGraph,
+  draft: VisualCommandDraft,
+  messages: UiMessages,
+): string {
   if (draft.kind === "DELETE_TABLE") {
     const table = graph.tables.find((candidate) => candidate.key === draft.targetTableKey);
     const references = graph.references.filter((reference) =>
@@ -1307,19 +1340,33 @@ function deleteDescription(graph: SchemaGraph, draft: VisualCommandDraft): strin
     const checks =
       (table?.checks.length ?? 0) +
       (table?.columns.reduce((count, column) => count + column.checks.length, 0) ?? 0);
-    return `Delete ${table ? qualifiedTable(table) : "this table"}, ${table?.columns.length ?? 0} owned columns, ${table?.indexes.length ?? 0} indexes, and ${checks} checks. ${references} relationship dependencies are currently visible.`;
+    return messages["visual.deleteTableDescription"](
+      table ? qualifiedTable(table) : messages["visual.thisTable"],
+      table?.columns.length ?? 0,
+      table?.indexes.length ?? 0,
+      checks,
+      references,
+    );
   }
   if (draft.kind === "DELETE_COLUMN") {
     const resolved = findColumn(graph, draft.targetColumnKey);
     const references = graph.references.filter((reference) =>
       reference.endpoints.some((endpoint) => endpoint.columnKeys.includes(draft.targetColumnKey)),
     ).length;
-    return `Delete ${resolved?.column.name ?? "this column"} and ${resolved?.column.checks.length ?? 0} owned checks. ${references} relationship dependencies are currently visible.`;
+    return messages["visual.deleteColumnDescription"](
+      resolved?.column.name ?? messages["visual.thisColumn"],
+      resolved?.column.checks.length ?? 0,
+      references,
+    );
   }
-  return "Delete this schema element from canonical DBML. The server remains authoritative for dependency checks.";
+  return messages["visual.deleteGenericDescription"];
 }
 
-function deleteStructuralBlockers(graph: SchemaGraph, draft: VisualCommandDraft): string[] {
+function deleteStructuralBlockers(
+  graph: SchemaGraph,
+  draft: VisualCommandDraft,
+  messages: UiMessages,
+): string[] {
   if (draft.kind === "DELETE_TABLE") {
     const referenceCount = graph.references.filter((reference) =>
       reference.endpoints.some((endpoint) => endpoint.tableKey === draft.targetTableKey),
@@ -1331,9 +1378,9 @@ function deleteStructuralBlockers(graph: SchemaGraph, draft: VisualCommandDraft)
       view.visibleTableKeys?.includes(draft.targetTableKey),
     ).length;
     return [
-      ...(referenceCount > 0 ? [`${referenceCount} relationship dependencies`] : []),
-      ...(groupCount > 0 ? [`${groupCount} TableGroup memberships`] : []),
-      ...(viewCount > 0 ? [`${viewCount} explicit DiagramView filters`] : []),
+      ...(referenceCount > 0 ? [messages["visual.referenceDependencies"](referenceCount)] : []),
+      ...(groupCount > 0 ? [messages["visual.groupDependencies"](groupCount)] : []),
+      ...(viewCount > 0 ? [messages["visual.viewDependencies"](viewCount)] : []),
     ];
   }
   if (draft.kind === "DELETE_COLUMN") {
@@ -1348,8 +1395,8 @@ function deleteStructuralBlockers(graph: SchemaGraph, draft: VisualCommandDraft)
         ),
       ).length ?? 0;
     return [
-      ...(referenceCount > 0 ? [`${referenceCount} relationship dependencies`] : []),
-      ...(indexCount > 0 ? [`${indexCount} index dependencies`] : []),
+      ...(referenceCount > 0 ? [messages["visual.referenceDependencies"](referenceCount)] : []),
+      ...(indexCount > 0 ? [messages["visual.indexDependencies"](indexCount)] : []),
     ];
   }
   return [];

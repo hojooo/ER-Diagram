@@ -10,7 +10,7 @@ DBML은 table과 reference뿐 아니라 comment, note, `TablePartial`, `TableGro
 
 ## Decision
 
-표준 DBML text만 schema semantics의 canonical source로 사용한다. Normalized `SchemaGraph`, SQL output, search index와 diagram edge는 파생물이며 layout·viewport·collapse state는 별도 sidecar다.
+표준 DBML text만 schema semantics의 canonical source로 사용한다. Normalized `SchemaGraph`, SQL output, search index와 diagram edge는 파생물이며 node position·collapse·hidden·detail state는 별도 sidecar다. Camera viewport는 browser session에서만 유지한다.
 
 Parser adapter는 다음 계약을 지킨다.
 
@@ -72,10 +72,12 @@ graph와 현재 view filter에서 매번 재생성하는 파생 데이터다. Vi
 호출하거나 canonical source와 schema revision을 변경하지 않는다. 현재 view에서 숨겨진 source symbol은
 자동으로 다른 view에 노출하지 않고 사용자가 명시적으로 Global view로 전환한 경우에만 선택·focus한다.
 
-View별 position, viewport, detail level, collapsed group key와 hidden element key는 같은 view key의 durable
-layout sidecar가 소유한다. 일반 hydration, view·LOD·collapse 전환은 ELK를 호출하지 않는 deterministic
-Derived layout을 사용한다. Target view의 저장 위치를 우선하고 current stable projection의 absolute 위치를
-stable key별로 재사용한다. Parent group이 바뀐 table은 target group 상대 좌표로 변환하고 visible child로
+View별 position, detail level, collapsed group key와 hidden element key는 같은 view key의 durable layout
+sidecar가 소유한다. Pan·zoom camera viewport는 autosave하거나 reload에서 복원하지 않으며 Version 1 wire의
+`viewport`에는 neutral compatibility placeholder만 전달한다. 일반 hydration, view·LOD·collapse 전환은
+ELK를 호출하지 않는 deterministic Derived layout을 사용한다. Target view의 저장 위치를 우선하고 current
+stable projection의 absolute 위치를 stable key별로 재사용한다. Parent group이 바뀐 table은 target group
+상대 좌표로 변환하고 visible child로
 compound bounds를 다시 계산한다. 위치가 없는 node는 stable-key 순 collision-free grid에 배치한다. Derived
 position은 자동 저장하지 않으며 사라진 key의 위치는 recovery를 위해 저장 row에서 즉시 제거하지 않는다.
 View key가 source에서 삭제되면 browser session 상태는 폐기하되 stale SQLite row 정리는 별도 lifecycle
@@ -87,11 +89,11 @@ candidate와 key 충돌은 자동 적용하지 않는다. M3 visual rename에서
 정책과 구분한다.
 
 ELK worker는 명시적인 Auto-layout Preview와 Reset에서만 실행한다. Auto-layout preview는 current durable
-layout을 먼저 baseline으로 flush한 뒤 별도 generation에서 실행한다.
+node position을 먼저 baseline으로 flush한 뒤 별도 generation에서 실행한다.
 Preview 중 graph, view, collapse, LOD와 drag 변경을 잠그고 graph가 바뀌면 결과를 폐기한다. Apply만 preview
-position과 viewport를 저장하며 Cancel은 추가 write 없이 exact baseline을 다시 표시한다. Reset은 current
-view의 position, viewport, collapse, hidden state와 LOD 전체를 fresh ELK 결과로 교체하고 worker 또는 save가
-실패하면 기존 durable row를 보존한다.
+position을 저장하며 계산된 viewport는 현재 session에만 적용한다. Cancel은 추가 write 없이 exact baseline을
+다시 표시한다. Reset은 current view의 position, collapse, hidden state와 LOD 전체를 fresh ELK 결과로
+교체하고 session camera를 fit한다. Worker 또는 save가 실패하면 기존 durable row를 보존한다.
 
 Visual schema mutation의 public contract는 `commandId`, positive `expectedSchemaRevisionNo`와 explicit
 `kind`를 가진 strict discriminated union이다. Command target은 parser object나 source offset이 아니라

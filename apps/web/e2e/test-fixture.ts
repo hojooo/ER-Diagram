@@ -6,6 +6,13 @@ export type { Locator, Page, Route } from "@playwright/test";
 
 export const test = base.extend({
   page: async ({ page }, use) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem("er-diagram.ui-locale.v1", "en");
+      } catch {
+        // Tests that exercise storage failures provide their own browser context.
+      }
+    });
     await page.route("**/api/v1/runtime-config", async (route) => {
       await route.fulfill({
         status: 200,

@@ -26,14 +26,12 @@ export interface BaseSchemaDiagramProps {
   readonly fillContainer?: boolean;
   readonly requestLayout?: (projection: DiagramProjection) => Promise<DiagramProjection>;
   readonly layoutPositions?: Readonly<Record<SchemaElementKey, DiagramPosition>>;
-  readonly layoutViewport?: DiagramViewport | null;
   readonly layoutPending?: boolean;
   readonly layoutRequest?: DiagramLayoutRequest | null;
   readonly interactionDisabled?: boolean;
   readonly onPositionsCommit?: (
     positions: Readonly<Record<SchemaElementKey, DiagramPosition>>,
   ) => void;
-  readonly onViewportCommit?: (viewport: DiagramViewport) => void;
   readonly onLayoutRequestReady?: (result: DiagramLayoutRequestResult) => void;
   readonly onRenderedLayoutReady?: (
     positions: Readonly<Record<SchemaElementKey, DiagramPosition>>,

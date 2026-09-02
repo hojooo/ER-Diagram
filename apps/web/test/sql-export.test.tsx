@@ -162,7 +162,7 @@ function renderExport(state: ProjectState, exported: SqlExportResponse) {
   const router = createMemoryRouter(createAppRoutes({ sqlExportAdapters: adapters }), {
     initialEntries: [`/projects/${PROJECT_ID}/sql-export`],
   });
-  render(<App api={api} queryClient={queryClient} router={router} />);
+  render(<App api={api} queryClient={queryClient} router={router} initialLocale="en" />);
   return { api, downloads };
 }
 

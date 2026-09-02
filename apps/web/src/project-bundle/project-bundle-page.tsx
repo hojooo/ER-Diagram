@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { useUiLocale } from "../localization/ui-locale.js";
 import { ProjectApiError, type ProjectBundleDownload } from "../projects/project-api.js";
 import { useProjectApi } from "../projects/project-api-context.js";
 import { projectQueryKeys } from "../projects/project-queries.js";
@@ -23,6 +24,7 @@ export function ProjectBundleImportPage() {
   const limits = useRuntimeResourceLimits();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { formatNumber, messages } = useUiLocale();
   const [file, setFile] = useState<File>();
   const [fileError, setFileError] = useState<string>();
   const [error, setError] = useState<ProjectApiError | Error>();
@@ -39,7 +41,7 @@ export function ProjectBundleImportPage() {
     }
     if (selected.size > limits.bundle.maxArchiveBytes) {
       setFileError(
-        `This archive is ${selected.size} bytes and exceeds the ${limits.bundle.maxArchiveBytes} byte limit.`,
+        messages["bundle.archiveTooLarge"](selected.size, limits.bundle.maxArchiveBytes),
       );
       return;
     }
@@ -58,7 +60,9 @@ export function ProjectBundleImportPage() {
       await queryClient.invalidateQueries({ queryKey: projectQueryKeys.list });
       await navigate(`/projects/${response.state.project.id}`);
     } catch (cause) {
-      setError(cause instanceof ProjectApiError ? cause : new Error("Bundle import failed."));
+      setError(
+        cause instanceof ProjectApiError ? cause : new Error(messages["bundle.importFailed"]),
+      );
     } finally {
       setBusy(false);
     }
@@ -75,23 +79,22 @@ export function ProjectBundleImportPage() {
     <section aria-labelledby="bundle-import-heading" className="space-y-6">
       <div>
         <Link className={secondaryButton} to="/">
-          Back to projects
+          {messages["route.backToProjects"]}
         </Link>
         <p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">
-          Portable recovery
+          {messages["bundle.portableRecovery"]}
         </p>
         <h1 id="bundle-import-heading" className="mt-2 text-3xl font-semibold text-white">
-          Import project bundle
+          {messages["bundle.importTitle"]}
         </h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
-          A validated bundle always creates a new project. Existing projects are never replaced, and
-          importing the same bundle again creates another independent copy with the same name.
+          {messages["bundle.importDescription"]}
         </p>
       </div>
 
       <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
         <label className="block text-sm font-semibold text-slate-200" htmlFor="project-bundle-file">
-          Portable bundle ZIP
+          {messages["bundle.zipLabel"]}
         </label>
         <input
           id="project-bundle-file"
@@ -103,8 +106,7 @@ export function ProjectBundleImportPage() {
         />
         {file ? (
           <p className="mt-3 text-sm text-slate-300">
-            Selected {file.name} ({file.size} bytes). The file remains only in this page until you
-            start the import.
+            {messages["bundle.selectedFile"](file.name, formatNumber(file.size))}
           </p>
         ) : null}
         {fileError ? (
@@ -118,18 +120,18 @@ export function ProjectBundleImportPage() {
           disabled={!file || Boolean(fileError) || busy}
           onClick={() => void importBundle()}
         >
-          {busy ? "Validating and importing…" : "Import as new project"}
+          {busy ? messages["bundle.importing"] : messages["bundle.importAsNew"]}
         </button>
         <p className="mt-3 text-sm text-slate-400" aria-live="polite">
-          {busy ? "The archive, manifest, hashes and retained DBML are being verified." : null}
+          {busy ? messages["bundle.verifying"] : null}
         </p>
         {error ? (
           <div className="mt-4 rounded-lg border border-red-400/40 bg-red-950/30 p-4" role="alert">
-            <p className="text-sm text-red-100">
-              The bundle was not confirmed as imported. The selected file has been preserved.
-            </p>
+            <p className="text-sm text-red-100">{messages["bundle.importUnknown"]}</p>
             {error instanceof ProjectApiError && error.correlationId ? (
-              <p className="mt-2 text-xs text-red-100/70">Correlation ID: {error.correlationId}</p>
+              <p className="mt-2 text-xs text-red-100/70">
+                {messages["error.correlationId"](error.correlationId)}
+              </p>
             ) : null}
             <button
               className={`${secondaryButton} mt-4`}
@@ -137,7 +139,7 @@ export function ProjectBundleImportPage() {
               disabled={checking}
               onClick={() => void checkProjects()}
             >
-              {checking ? "Refreshing projects…" : "Check project list"}
+              {checking ? messages["bundle.refreshingProjects"] : messages["bundle.checkProjects"]}
             </button>
           </div>
         ) : null}
@@ -152,6 +154,7 @@ export function ProjectBundleExportPage({
   readonly adapters?: ProjectBundlePageAdapters;
 }) {
   const api = useProjectApi();
+  const { messages } = useUiLocale();
   const params = useParams();
   const projectId = params.projectId ?? "";
   const projectQuery = useQuery({
@@ -164,10 +167,10 @@ export function ProjectBundleExportPage({
     return (
       <section>
         <h1 data-route-loading="true" className="font-semibold text-slate-100">
-          Loading bundle export
+          {messages["bundle.loadingExport"]}
         </h1>
         <p className="mt-2" aria-live="polite">
-          Loading project for bundle export…
+          {messages["bundle.loadingExportMessage"]}
         </p>
       </section>
     );
@@ -175,12 +178,10 @@ export function ProjectBundleExportPage({
   if (projectQuery.isError) {
     return (
       <section role="alert" className="rounded-xl border border-red-400/40 bg-red-950/30 p-6">
-        <h1 className="text-xl font-semibold text-red-100">Bundle export could not be opened</h1>
-        <p className="mt-2 text-sm text-red-100/80">
-          The current project state could not be loaded.
-        </p>
+        <h1 className="text-xl font-semibold text-red-100">{messages["bundle.openErrorTitle"]}</h1>
+        <p className="mt-2 text-sm text-red-100/80">{messages["bundle.openErrorMessage"]}</p>
         <Link className={`${secondaryButton} mt-4`} to={`/projects/${projectId}`}>
-          Back to workspace
+          {messages["workspace.back"]}
         </Link>
       </section>
     );
@@ -197,6 +198,7 @@ function ProjectBundleExportWorkflow({
 }) {
   const api = useProjectApi();
   const queryClient = useQueryClient();
+  const { formatNumber, messages } = useUiLocale();
   const [reportMode, setReportMode] = useState<ProjectBundleReportMode>("REDACTED");
   const [sensitiveConfirmed, setSensitiveConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -218,7 +220,7 @@ function ProjectBundleExportWorkflow({
       });
       const calculated = await adapters.sha256(download.content);
       if (calculated !== download.sha256) {
-        throw new ProjectApiError("The downloaded bundle hash did not match the server evidence.", {
+        throw new ProjectApiError(messages["bundle.hashMismatch"], {
           status: null,
           code: "CLIENT_BUNDLE_HASH_MISMATCH",
         });
@@ -227,10 +229,10 @@ function ProjectBundleExportWorkflow({
         ...download,
         filename: portableBundleFilename(state.project.name),
       });
-      setStatus(`Portable bundle downloaded: ${download.contentLength} bytes.`);
+      setStatus(messages["bundle.downloaded"](formatNumber(download.contentLength)));
     } catch (cause) {
       const publicError =
-        cause instanceof ProjectApiError ? cause : new Error("Bundle export failed.");
+        cause instanceof ProjectApiError ? cause : new Error(messages["bundle.exportFailed"]);
       setError(publicError);
       if (publicError instanceof ProjectApiError && publicError.status === 409) {
         await queryClient.refetchQueries({ queryKey: projectQueryKeys.detail(state.project.id) });
@@ -244,27 +246,35 @@ function ProjectBundleExportWorkflow({
     <section aria-labelledby="bundle-export-heading" className="space-y-6">
       <div>
         <Link className={secondaryButton} to={`/projects/${state.project.id}`}>
-          Back to workspace
+          {messages["workspace.back"]}
         </Link>
         <p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">
-          Portable recovery
+          {messages["bundle.portableRecovery"]}
         </p>
         <h1 id="bundle-export-heading" className="mt-2 text-3xl font-semibold text-white">
-          Export project bundle
+          {messages["bundle.exportTitle"]}
         </h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
-          The bundle includes the current DBML, retained revision history and every saved view
-          layout. Current revision {state.currentRevision.revisionNo} is{" "}
-          {state.currentRevision.validity.toLowerCase()}
           {state.lastValidRevision
-            ? `; last-valid revision ${state.lastValidRevision.revisionNo} is retained.`
-            : "; there is no last-valid revision."}
+            ? messages["bundle.exportDescriptionWithLastValid"](
+                state.currentRevision.revisionNo,
+                state.currentRevision.validity === "VALID"
+                  ? messages["projects.validityValid"]
+                  : messages["projects.validityInvalid"],
+                state.lastValidRevision.revisionNo,
+              )
+            : messages["bundle.exportDescriptionWithoutLastValid"](
+                state.currentRevision.revisionNo,
+                state.currentRevision.validity === "VALID"
+                  ? messages["projects.validityValid"]
+                  : messages["projects.validityInvalid"],
+              )}
         </p>
       </div>
 
       <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
         <label className="block text-sm font-semibold text-slate-200" htmlFor="bundle-report-mode">
-          SQL import reports
+          {messages["bundle.sqlReports"]}
         </label>
         <select
           id="bundle-report-mode"
@@ -277,14 +287,11 @@ function ProjectBundleExportWorkflow({
             if (value !== "INCLUDE_RETAINED_SQL") setSensitiveConfirmed(false);
           }}
         >
-          <option value="REDACTED">Redacted reports</option>
-          <option value="INCLUDE_RETAINED_SQL">Include retained SQL</option>
-          <option value="OMIT">Omit reports</option>
+          <option value="REDACTED">{messages["bundle.redactedReports"]}</option>
+          <option value="INCLUDE_RETAINED_SQL">{messages["bundle.includeSql"]}</option>
+          <option value="OMIT">{messages["bundle.omitReports"]}</option>
         </select>
-        <p className="mt-3 text-sm text-slate-400">
-          Redacted reports preserve conversion evidence but remove retained original SQL. The DBML
-          schema source is always included because it is the portable project itself.
-        </p>
+        <p className="mt-3 text-sm text-slate-400">{messages["bundle.redactionDescription"]}</p>
 
         {reportMode === "INCLUDE_RETAINED_SQL" ? (
           <label className="mt-4 flex items-start gap-3 text-sm text-amber-100">
@@ -294,8 +301,7 @@ function ProjectBundleExportWorkflow({
               checked={sensitiveConfirmed}
               onChange={(event) => setSensitiveConfirmed(event.target.checked)}
             />
-            I understand that retained original SQL may contain sensitive literals and will be
-            copied byte-for-byte into this ZIP alongside the DBML source.
+            {messages["bundle.sensitiveConfirmation"]}
           </label>
         ) : null}
 
@@ -305,16 +311,18 @@ function ProjectBundleExportWorkflow({
           disabled={busy || !canExport}
           onClick={() => void exportBundle()}
         >
-          {busy ? "Building portable bundle…" : "Download portable bundle"}
+          {busy ? messages["bundle.building"] : messages["bundle.download"]}
         </button>
         <p className="mt-3 text-sm text-slate-400" aria-live="polite">
-          {busy ? "Project history, layouts, reports and hashes are being snapshotted." : status}
+          {busy ? messages["bundle.snapshotting"] : status}
         </p>
         {error ? (
           <div className="mt-4 rounded-lg border border-red-400/40 bg-red-950/30 p-4" role="alert">
-            <p className="text-sm text-red-100">The bundle was not downloaded.</p>
+            <p className="text-sm text-red-100">{messages["bundle.downloadFailed"]}</p>
             {error instanceof ProjectApiError && error.correlationId ? (
-              <p className="mt-2 text-xs text-red-100/70">Correlation ID: {error.correlationId}</p>
+              <p className="mt-2 text-xs text-red-100/70">
+                {messages["error.correlationId"](error.correlationId)}
+              </p>
             ) : null}
           </div>
         ) : null}

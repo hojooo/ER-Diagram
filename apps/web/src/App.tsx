@@ -18,6 +18,12 @@ import {
   useRouteError,
 } from "react-router-dom";
 import type { ProjectBundlePageAdapters } from "./project-bundle/project-bundle-page.js";
+import {
+  LanguageSelect,
+  UiLocaleProvider,
+  type UiLocale,
+  useUiLocale,
+} from "./localization/ui-locale.js";
 import type { ProjectApi } from "./projects/project-api.js";
 import { ProjectApiProvider } from "./projects/project-api-context.js";
 import { ProjectHomePage } from "./projects/project-home-page.js";
@@ -29,16 +35,24 @@ import type { SqlImportPageAdapters } from "./sql-import/sql-import-page.js";
 
 type DataRouter = ComponentProps<typeof RouterProvider>["router"];
 
-const PRODUCT_TITLE = "DBML·SQL ERD Studio";
 const MAIN_CONTENT_ID = "main-content";
 
 export interface AppProps {
   readonly api: ProjectApi;
   readonly queryClient: QueryClient;
   readonly router: DataRouter;
+  readonly initialLocale?: UiLocale;
 }
 
-export function App({ api, queryClient, router }: AppProps) {
+export function App({ api, queryClient, router, initialLocale }: AppProps) {
+  return (
+    <UiLocaleProvider {...(initialLocale ? { initialLocale } : {})}>
+      <ConfiguredApp api={api} queryClient={queryClient} router={router} />
+    </UiLocaleProvider>
+  );
+}
+
+function ConfiguredApp({ api, queryClient, router }: Omit<AppProps, "initialLocale">) {
   const [attempt, setAttempt] = useState(0);
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfigResponse | null>(null);
   const [startupError, setStartupError] = useState(false);
@@ -80,16 +94,18 @@ export function App({ api, queryClient, router }: AppProps) {
 }
 
 function StartupConfigLoading() {
-  useDocumentTitle("Loading");
+  const { messages } = useUiLocale();
+  useDocumentTitle(messages["startup.loadingTitle"]);
   return (
     <main
       id={MAIN_CONTENT_ID}
       className="grid min-h-screen place-items-center bg-slate-950 p-6 text-slate-300"
     >
+      <LanguageSelect className="absolute right-6 top-6" />
       <section className="text-center">
-        <h1 className="text-xl font-semibold text-slate-100">Starting workspace</h1>
+        <h1 className="text-xl font-semibold text-slate-100">{messages["startup.loadingTitle"]}</h1>
         <p className="mt-2" aria-live="polite">
-          Loading runtime configuration…
+          {messages["startup.loadingMessage"]}
         </p>
       </section>
     </main>
@@ -97,23 +113,25 @@ function StartupConfigLoading() {
 }
 
 function StartupConfigError({ onRetry }: { readonly onRetry: () => void }) {
-  useDocumentTitle("Runtime configuration unavailable");
+  const { messages } = useUiLocale();
+  useDocumentTitle(messages["startup.errorTitle"]);
   return (
     <main
       id={MAIN_CONTENT_ID}
       className="grid min-h-screen place-items-center bg-slate-950 p-6 text-slate-100"
     >
+      <LanguageSelect className="absolute right-6 top-6" />
       <section className="max-w-xl rounded-2xl border border-red-900 bg-slate-900 p-8 text-center">
-        <h1 className="text-2xl font-semibold">Runtime configuration unavailable</h1>
+        <h1 className="text-2xl font-semibold">{messages["startup.errorTitle"]}</h1>
         <p className="mt-3 text-slate-300" role="alert">
-          The workspace cannot safely start until its resource limits are loaded.
+          {messages["startup.errorMessage"]}
         </p>
         <button
           className="mt-6 min-h-11 rounded-lg bg-cyan-300 px-5 font-semibold text-slate-950"
           onClick={onRetry}
           type="button"
         >
-          Retry
+          {messages["action.retry"]}
         </button>
       </section>
     </main>
@@ -234,6 +252,7 @@ export function createAppRoutes(
 function AppShell() {
   const location = useLocation();
   const matches = useMatches();
+  const { messages } = useUiLocale();
   const canvasWorkspace = matches.some(
     (match) =>
       typeof match.handle === "object" &&
@@ -256,7 +275,9 @@ function AppShell() {
       const heading = main?.querySelector<HTMLElement>("h1") ?? null;
       const headingText = heading?.textContent?.trim();
       const routeStillLoading = heading?.dataset.routeLoading === "true";
-      document.title = headingText ? `${headingText} · ${PRODUCT_TITLE}` : PRODUCT_TITLE;
+      document.title = headingText
+        ? messages["app.documentTitle"](headingText)
+        : messages["app.productTitle"];
       if (heading && !routeStillLoading) observer?.disconnect();
 
       if (!routeChanged || focusHandled || !heading || !main || routeStillLoading) return;
@@ -284,7 +305,7 @@ function AppShell() {
       if (frame !== null) window.cancelAnimationFrame(frame);
       observer?.disconnect();
     };
-  }, [location.key]);
+  }, [location.key, messages]);
 
   const focusMainContent = (event: ReactMouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
@@ -303,7 +324,7 @@ function AppShell() {
         href={`#${MAIN_CONTENT_ID}`}
         onClick={focusMainContent}
       >
-        Skip to main content
+        {messages["app.skipToMain"]}
       </a>
       {canvasWorkspace ? null : (
         <header className="border-b border-slate-800 bg-slate-950/95">
@@ -313,13 +334,16 @@ function AppShell() {
                 className="text-lg font-semibold tracking-tight text-white no-underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
                 to="/"
               >
-                DBML·SQL ERD Studio
+                {messages["app.productTitle"]}
               </Link>
-              <p className="mt-1 text-xs text-slate-400">Self-hosted schema workspace</p>
+              <p className="mt-1 text-xs text-slate-400">{messages["app.tagline"]}</p>
             </div>
-            <span className="rounded-full border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-300">
-              Single user
-            </span>
+            <div className="flex items-center gap-3">
+              <LanguageSelect />
+              <span className="rounded-full border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-300">
+                {messages["app.singleUser"]}
+              </span>
+            </div>
           </div>
         </header>
       )}
@@ -341,22 +365,28 @@ function AppShell() {
 function RouteErrorPage() {
   const error = useRouteError();
   const isNotFound = isRouteErrorResponse(error) && error.status === 404;
+  const { messages } = useUiLocale();
   return (
     <ErrorState
-      title={isNotFound ? "Page not found" : "Page error"}
-      message={
-        isNotFound ? "The requested page could not be found." : "This page could not be displayed."
-      }
+      title={isNotFound ? messages["route.notFoundTitle"] : messages["route.errorTitle"]}
+      message={isNotFound ? messages["route.notFoundMessage"] : messages["route.errorMessage"]}
     />
   );
 }
 
 function NotFoundPage() {
-  return <ErrorState title="Page not found" message="The requested page does not exist." />;
+  const { messages } = useUiLocale();
+  return (
+    <ErrorState
+      title={messages["route.notFoundTitle"]}
+      message={messages["route.missingMessage"]}
+    />
+  );
 }
 
 function RouteLoadingPage() {
-  useDocumentTitle("Loading workspace");
+  const { messages } = useUiLocale();
+  useDocumentTitle(messages["route.loadingDocumentTitle"]);
   return (
     <main
       id={MAIN_CONTENT_ID}
@@ -364,10 +394,10 @@ function RouteLoadingPage() {
     >
       <section className="text-center">
         <h1 data-route-loading="true" className="text-xl font-semibold text-slate-100">
-          Loading page
+          {messages["route.loadingTitle"]}
         </h1>
         <p className="mt-2" aria-live="polite">
-          Loading workspace…
+          {messages["route.loadingMessage"]}
         </p>
       </section>
     </main>
@@ -375,22 +405,26 @@ function RouteLoadingPage() {
 }
 
 function useDocumentTitle(pageTitle: string) {
+  const { messages } = useUiLocale();
   useEffect(() => {
-    document.title = `${pageTitle} · ${PRODUCT_TITLE}`;
-  }, [pageTitle]);
+    document.title = messages["app.documentTitle"](pageTitle);
+  }, [messages, pageTitle]);
 }
 
 function ErrorState({ title, message }: { readonly title: string; readonly message: string }) {
+  const { messages } = useUiLocale();
   return (
     <section className="mx-auto max-w-xl rounded-2xl border border-slate-800 bg-slate-900 p-8 text-center">
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">Navigation</p>
+      <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">
+        {messages["route.navigation"]}
+      </p>
       <h1 className="mt-3 text-2xl font-semibold text-white">{title}</h1>
       <p className="mt-3 text-slate-300">{message}</p>
       <Link
         className="mt-6 inline-flex min-h-11 items-center justify-center rounded-lg bg-cyan-300 px-5 font-semibold text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
         to="/"
       >
-        Back to projects
+        {messages["route.backToProjects"]}
       </Link>
     </section>
   );
