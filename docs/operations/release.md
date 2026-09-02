@@ -24,13 +24,24 @@ gh workflow run release.yml -f ref=main
 gh run watch
 ```
 
-Dry run은 repository gate, production E2E·performance와 `linux/amd64`, `linux/arm64` OCI build·runtime smoke를 실행한다.
+Dry run은 repository gate, complete P0 production acceptance, production E2E·performance와 `linux/amd64`,
+`linux/arm64` OCI build·runtime smoke를 실행한다.
 Application CycloneDX, platform SPDX attestation, ELK source archive와 license asset도 staging하고 검증하지만 GHCR login,
 push와 GitHub Release 생성은 하지 않는다. Local Docker/QEMU 환경에서는 같은 evidence를 다음으로 검증할 수 있다.
 
 ```sh
 pnpm test:release
 ```
+
+Tag 전에는 production image의 Browser→Fastify→SQLite 전체 흐름과 portable bundle의 별도-volume 복구를 직접
+재검증한다.
+
+```sh
+pnpm test:p0-gate
+```
+
+성공 출력의 `profileVersion`, `profileHash`, `releaseState`와 ordered assertion ID를 PR·release 검토 evidence에
+보존한다. 원본 DBML, generated SQL, bundle byte나 container log는 evidence 본문에 복사하지 않는다.
 
 ## Stable release 게시
 

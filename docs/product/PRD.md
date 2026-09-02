@@ -1378,6 +1378,26 @@ GitHub Release는 같은 CycloneDX, platform별 SPDX JSON, lockfile SHA-512와 �
 동일할 때만 replay하며 다른 byte를 overwrite하지 않는다. `elkjs`는 EPL-2.0, `dompurify`는 Apache-2.0 선택을
 license inventory와 CycloneDX에서 명시한다.
 
+### 18.5 Complete P0 production acceptance
+
+M4 구현 완료는 개별 package test의 합으로만 주장하지 않는다. Versioned public synthetic fidelity fixture를 packaged
+production container의 실제 Browser→Fastify→resource worker→SQLite 경계로 통과시켜야 한다. Profile은 fixture
+source hash·UTF-8 byte 수, `143/86/4/15/7/573` inventory, journey assertion과 Release Gate A~F 명령을 고정한다.
+
+Acceptance는 external connectivity가 없는 application network에서 다음을 하나의 선형 journey로 검증한다.
+
+- Project Home file create, 15개 group·7개 DiagramView·search·LOD와 durable layout
+- invalid draft·last-valid recovery, source edit와 target-only visual patch
+- revision 단위 undo/redo, redo invalidation, invalid revision restore와 reload 뒤 durable History
+- same-dialect SQL export report, DML-free SQL download와 authoritative re-import
+- portable bundle export 후 별도 fresh SQLite volume에 new-project re-key import
+- 두 번째 volume의 container restart 뒤 source, retained revision, last-valid pointer와 per-view layout read-back
+- runtime release identity, CSP, operational-log redaction과 outbound request 부재
+
+`pnpm test:p0-gate`는 test-owned container, internal/ingress network와 두 named volume만 사용하고 source-free JSON
+evidence를 출력한다. 이 gate의 성공 상태는 `READY_FOR_P0_RELEASE`다. Stable tag 생성, GHCR publish와 운영자
+OrbStack whole-volume restore drill은 별도 `P0-RELEASE` gate가 완료되기 전까지 실행하지 않는다.
+
 ## 19. 관측성과 오류 모델
 
 ### 19.1 사용자 오류 분류
@@ -1530,6 +1550,10 @@ P0 release는 다음 조건을 모두 충족해야 한다.
 - `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES`, deterministic CycloneDX 제공
 - `linux/amd64`, `linux/arm64` image manifest별 SPDX attestation 검증
 - Apache-2.0·MIT·EPL-2.0 dependency의 고지와 exact ELK source archive 제공 조건 검토
+
+Gate A~F의 package-level evidence와 production boundary를 함께 닫는 focused command는
+`pnpm test:p0-gate`다. 이 명령은 Gate A~F의 기존 명령을 대체하지 않고 서로 다른 package evidence가 동일한
+packaged runtime에서 연결되는지를 검증한다.
 
 ## 23. 단계별 개발 순서
 

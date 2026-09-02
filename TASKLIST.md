@@ -325,8 +325,11 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - 두 platform의 OCI-artifact SPDX subject를 검증하고 exact ELK source/license와 `SHA256SUMS`를 게시 준비한다.
   - 기존 Release asset은 byte-identical replay만 허용하며 conflict에서는 overwrite하지 않는다.
   - 검증: `pnpm licenses:check && pnpm sbom:check`
-- [ ] `M4-011` complete P0 end-to-end acceptance suite
-  - 검증: `pnpm test:e2e`
+- [x] `M4-011` complete P0 end-to-end acceptance suite
+  - versioned 143-table profile로 production Browser→Fastify→SQLite의 source·visual·history·SQL 흐름을 검증한다.
+  - portable bundle을 fresh second volume에 import하고 container restart 뒤 source·revision·layout을 read-back한다.
+  - Gate A~F command wiring과 outbound·log redaction evidence를 fail-closed로 고정한다.
+  - 검증: `pnpm test:p0-gate`
 - [ ] `P0-RELEASE` `pnpm ci:verify`, Release Gate A~F, OrbStack restore drill,
       source/image mapping 통과 후에만 P0 tag 생성
 
