@@ -2,7 +2,7 @@
 
 DBML·SQL ERD Studio는 큰 DBML schema를 탐색하고 편집하며 PostgreSQL·MySQL DDL을 실행 없이 가져오고 내보내는 Apache-2.0 self-hosted ERD workspace다.
 
-Milestone 3 visual editing integrity gate를 완료하고 Milestone 4 security·recovery·release를 구현하는 단계다. 제품 범위와 구현 순서는 각각 [PRD](docs/product/PRD.md)와 [TASKLIST](TASKLIST.md)를 기준으로 한다. 현재 PostgreSQL·MySQL 보장 수준은 목표와 pinned parser fixture의 관찰 결과를 분리한 [SQL capability matrix ADR](docs/adr/0005-sql-capability-matrix.md)을 따른다.
+Milestone 4의 P0 구현과 complete production acceptance를 완료하고 최종 `P0-RELEASE` 운영 검증을 준비하는 단계다. 제품 범위와 구현 순서는 각각 [PRD](docs/product/PRD.md)와 [TASKLIST](TASKLIST.md)를 기준으로 한다. 현재 PostgreSQL·MySQL 보장 수준은 목표와 pinned parser fixture의 관찰 결과를 분리한 [SQL capability matrix ADR](docs/adr/0005-sql-capability-matrix.md)을 따른다.
 
 ## P0 범위
 
@@ -62,6 +62,17 @@ source/license evidence도 함께 검사한다.
 ```sh
 pnpm test:release
 ```
+
+Versioned 143-table fixture를 실제 production container에서 생성·편집·복구·SQL export·portable bundle로 이동하고,
+별도 SQLite volume과 container restart 뒤까지 검증하는 complete P0 acceptance는 다음 명령으로 실행한다.
+
+```sh
+pnpm test:p0-gate
+```
+
+이 명령은 Docker/OrbStack-compatible Docker API와 headless Chromium이 필요하며 test-owned container, network와
+두 named volume만 생성하고 정리한다. 통과는 `READY_FOR_P0_RELEASE` evidence이며 실제 tag 생성이나 운영 volume
+restore drill을 대신하지 않는다.
 
 Stable release image는 `ghcr.io/hojooo/er-diagram:<version>`으로 게시한다. 운영 배포는 GitHub Release가 기록한
 immutable digest를 우선한다.
@@ -138,6 +149,7 @@ docs/
 - [ADR 0014: Large ERD performance acceptance](docs/adr/0014-large-erd-performance-acceptance.md)
 - [ADR 0015: Immutable multi-architecture GHCR release](docs/adr/0015-multi-architecture-ghcr-release.md)
 - [ADR 0016: CycloneDX·SPDX SBOM과 EPL source evidence](docs/adr/0016-sbom-and-epl-source-evidence.md)
+- [ADR 0017: Complete P0 production acceptance](docs/adr/0017-complete-p0-acceptance.md)
 
 운영 backup, restore dry-run/apply와 pre-migration 절차는
 [SQLite volume backup·restore runbook](docs/operations/backup-restore.md)을 따른다.
