@@ -279,8 +279,10 @@ export function ProjectSourceWorkspace({
   }, [sourceEditorRecoveryRequired]);
 
   useEffect(() => {
-    if (surfaces.leftSurface === "SOURCE") setSourceEditorLoadReady(true);
-  }, [surfaces.leftSurface]);
+    if (surfaces.leftPanelOpen && surfaces.activeLeftTab === "SOURCE") {
+      setSourceEditorLoadReady(true);
+    }
+  }, [surfaces.activeLeftTab, surfaces.leftPanelOpen]);
 
   useEffect(() => {
     if (
@@ -298,7 +300,9 @@ export function ProjectSourceWorkspace({
   }, [activeGraph, sessionSnapshot, surfaces.openLeft]);
 
   useEffect(() => {
-    if (!sourceEditorReady || surfaces.leftSurface !== "SOURCE") return;
+    if (!sourceEditorReady || !surfaces.leftPanelOpen || surfaces.activeLeftTab !== "SOURCE") {
+      return;
+    }
     if (!pendingSourceNavigationRef.current) return;
     const animationFrame = window.requestAnimationFrame(() => {
       const pending = pendingSourceNavigationRef.current;
@@ -308,7 +312,7 @@ export function ProjectSourceWorkspace({
       pendingSourceNavigationRef.current = null;
     });
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [sourceEditorReady, surfaces.leftSurface]);
+  }, [sourceEditorReady, surfaces.activeLeftTab, surfaces.leftPanelOpen]);
 
   useEffect(() => {
     if (!initialDiagramReady || sourceEditorLoadReady) return;

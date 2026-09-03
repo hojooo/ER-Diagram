@@ -15,9 +15,9 @@ import {
 import type { DiagramViewportInsets } from "../diagram/base-schema-diagram-contract.js";
 import { useUiLocale } from "../localization/ui-locale.js";
 
-export type WorkspaceLeftSurface = "SOURCE" | "OUTLINE" | null;
+export type WorkspaceLeftSurface = "SOURCE" | "OUTLINE";
 
-const COLLAPSED_LEFT_RAIL_WIDTH_PX = 56;
+const COLLAPSED_LEFT_PANEL_WIDTH_PX = 12;
 const DEFAULT_LEFT_PANEL_WIDTH_PX = 512;
 const COLLAPSED_RIGHT_PANEL_WIDTH_PX = 12;
 const DEFAULT_RIGHT_PANEL_WIDTH_PX = 512;
@@ -26,14 +26,13 @@ const MAX_RIGHT_PANEL_WIDTH_PX = 768;
 const RIGHT_PANEL_KEYBOARD_STEP_PX = 16;
 
 export interface CanvasWorkspaceSurfaces {
-  readonly leftSurface: WorkspaceLeftSurface;
+  readonly activeLeftTab: WorkspaceLeftSurface;
+  readonly leftPanelOpen: boolean;
   readonly rightPanelOpen: boolean;
   readonly isNarrow: boolean;
-  readonly openLeft: (
-    surface: Exclude<WorkspaceLeftSurface, null>,
-    trigger?: HTMLElement | null,
-  ) => void;
-  readonly toggleLeft: (surface: Exclude<WorkspaceLeftSurface, null>, trigger: HTMLElement) => void;
+  readonly openLeft: (surface: WorkspaceLeftSurface, trigger?: HTMLElement | null) => void;
+  readonly selectLeftTab: (surface: WorkspaceLeftSurface) => void;
+  readonly toggleLeftPanel: (trigger: HTMLElement) => void;
   readonly closeLeft: (returnFocus?: boolean, fallback?: HTMLElement | null) => void;
   readonly openRightPanel: (trigger?: HTMLElement | null) => void;
   readonly toggleRightPanel: (trigger: HTMLElement) => void;
@@ -41,52 +40,60 @@ export interface CanvasWorkspaceSurfaces {
 }
 
 export function useCanvasWorkspaceSurfaces({
-  initialLeftSurface = null,
+  initialLeftSurface = "SOURCE",
+  initialLeftPanelOpen = false,
   initialRightPanelOpen = true,
   isNarrow,
 }: {
   readonly initialLeftSurface?: WorkspaceLeftSurface;
+  readonly initialLeftPanelOpen?: boolean;
   readonly initialRightPanelOpen?: boolean;
   readonly isNarrow?: boolean;
 } = {}): CanvasWorkspaceSurfaces {
   const narrow = useNarrowWorkspace(isNarrow);
-  const [leftSurface, setLeftSurface] = useState<WorkspaceLeftSurface>(initialLeftSurface);
+  const [activeLeftTab, setActiveLeftTab] = useState<WorkspaceLeftSurface>(initialLeftSurface);
+  const [leftPanelOpen, setLeftPanelOpen] = useState(initialLeftPanelOpen);
   const [rightPanelOpen, setRightPanelOpen] = useState(initialRightPanelOpen && !narrow);
   const leftTriggerRef = useRef<HTMLElement | null>(null);
   const rightPanelTriggerRef = useRef<HTMLElement | null>(null);
   const lastOpenedRef = useRef<"LEFT" | "RIGHT">(
-    initialRightPanelOpen && !narrow ? "RIGHT" : "LEFT",
+    initialLeftPanelOpen ? "LEFT" : initialRightPanelOpen && !narrow ? "RIGHT" : "LEFT",
   );
 
   const openLeft = useCallback(
-    (surface: Exclude<WorkspaceLeftSurface, null>, trigger?: HTMLElement | null) => {
+    (surface: WorkspaceLeftSurface, trigger?: HTMLElement | null) => {
       leftTriggerRef.current = trigger ?? null;
       lastOpenedRef.current = "LEFT";
-      setLeftSurface(surface);
+      setActiveLeftTab(surface);
+      setLeftPanelOpen(true);
       if (narrow) setRightPanelOpen(false);
     },
     [narrow],
   );
   const closeLeft = useCallback((returnFocus = true, fallback?: HTMLElement | null) => {
-    setLeftSurface(null);
+    setLeftPanelOpen(false);
     if (returnFocus) focusConnectedElement(leftTriggerRef.current, fallback);
   }, []);
-  const toggleLeft = useCallback(
-    (surface: Exclude<WorkspaceLeftSurface, null>, trigger: HTMLElement) => {
-      if (leftSurface === surface) {
+  const selectLeftTab = useCallback((surface: WorkspaceLeftSurface) => {
+    setActiveLeftTab(surface);
+  }, []);
+  const toggleLeftPanel = useCallback(
+    (trigger: HTMLElement) => {
+      if (leftPanelOpen) {
+        leftTriggerRef.current = trigger;
         closeLeft();
         return;
       }
-      openLeft(surface, trigger);
+      openLeft(activeLeftTab, trigger);
     },
-    [closeLeft, leftSurface, openLeft],
+    [activeLeftTab, closeLeft, leftPanelOpen, openLeft],
   );
   const openRightPanel = useCallback(
     (trigger?: HTMLElement | null) => {
       rightPanelTriggerRef.current = trigger ?? null;
       lastOpenedRef.current = "RIGHT";
       setRightPanelOpen(true);
-      if (narrow) setLeftSurface(null);
+      if (narrow) setLeftPanelOpen(false);
     },
     [narrow],
   );
@@ -107,17 +114,19 @@ export function useCanvasWorkspaceSurfaces({
   );
 
   useEffect(() => {
-    if (!narrow || leftSurface === null || !rightPanelOpen) return;
+    if (!narrow || !leftPanelOpen || !rightPanelOpen) return;
     if (lastOpenedRef.current === "LEFT") setRightPanelOpen(false);
-    else setLeftSurface(null);
-  }, [leftSurface, narrow, rightPanelOpen]);
+    else setLeftPanelOpen(false);
+  }, [leftPanelOpen, narrow, rightPanelOpen]);
 
   return {
-    leftSurface,
+    activeLeftTab,
+    leftPanelOpen,
     rightPanelOpen,
     isNarrow: narrow,
     openLeft,
-    toggleLeft,
+    selectLeftTab,
+    toggleLeftPanel,
     closeLeft,
     openRightPanel,
     toggleRightPanel,
@@ -178,8 +187,9 @@ export function CanvasWorkspaceShell({
   const rootRef = useRef<HTMLDivElement>(null);
   const commandBarRef = useRef<HTMLDivElement>(null);
   const leftDockRef = useRef<HTMLElement>(null);
-  const sourceRailButtonRef = useRef<HTMLButtonElement>(null);
-  const outlineRailButtonRef = useRef<HTMLButtonElement>(null);
+  const leftPanelToggleRef = useRef<HTMLButtonElement>(null);
+  const sourceTabRef = useRef<HTMLButtonElement>(null);
+  const outlineTabRef = useRef<HTMLButtonElement>(null);
   const rightDockRef = useRef<HTMLElement>(null);
   const rightPanelToggleRef = useRef<HTMLButtonElement>(null);
   const rightPanelResizeRef = useRef<{
@@ -227,6 +237,14 @@ export function CanvasWorkspaceShell({
   }, [resizingRightPanel]);
 
   useEffect(() => {
+    if (!surfaces.isNarrow || !surfaces.leftPanelOpen) return;
+    const animationFrame = window.requestAnimationFrame(() => {
+      leftPanelToggleRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [surfaces.isNarrow, surfaces.leftPanelOpen]);
+
+  useEffect(() => {
     if (!surfaces.isNarrow || !surfaces.rightPanelOpen) return;
     const animationFrame = window.requestAnimationFrame(() => {
       firstFocusable(rightDockRef.current)?.focus();
@@ -234,17 +252,20 @@ export function CanvasWorkspaceShell({
     return () => window.cancelAnimationFrame(animationFrame);
   }, [surfaces.isNarrow, surfaces.rightPanelOpen]);
 
-  const sourceOpen = surfaces.leftSurface === "SOURCE";
-  const outlineOpen = surfaces.leftSurface === "OUTLINE";
-  const leftOpen = sourceOpen || outlineOpen;
-  const leftPanelWidth = leftOpen ? DEFAULT_LEFT_PANEL_WIDTH_PX : COLLAPSED_LEFT_RAIL_WIDTH_PX;
-  const leftDockWidth = leftOpen
+  const sourceActive = surfaces.activeLeftTab === "SOURCE";
+  const outlineActive = surfaces.activeLeftTab === "OUTLINE";
+  const leftPanelWidth = surfaces.leftPanelOpen
+    ? DEFAULT_LEFT_PANEL_WIDTH_PX
+    : COLLAPSED_LEFT_PANEL_WIDTH_PX;
+  const leftDockWidth = surfaces.leftPanelOpen
     ? surfaces.isNarrow
       ? "100%"
       : `${DEFAULT_LEFT_PANEL_WIDTH_PX}px`
-    : `${COLLAPSED_LEFT_RAIL_WIDTH_PX}px`;
+    : `${COLLAPSED_LEFT_PANEL_WIDTH_PX}px`;
   const reservedLeftWidth =
-    (surfaces.isNarrow ? COLLAPSED_LEFT_RAIL_WIDTH_PX : leftPanelWidth) + 12;
+    (!surfaces.isNarrow && surfaces.leftPanelOpen
+      ? leftPanelWidth
+      : COLLAPSED_LEFT_PANEL_WIDTH_PX) + 12;
   const reservedRightWidth =
     !surfaces.isNarrow && surfaces.rightPanelOpen
       ? rightPanelWidth + 12
@@ -261,7 +282,7 @@ export function CanvasWorkspaceShell({
     rightDockRef,
     statusRef,
     alertsRef,
-    leftPanelOpen: leftOpen,
+    leftPanelOpen: surfaces.leftPanelOpen,
     leftPanelWidth,
     rightPanelOpen: surfaces.rightPanelOpen,
     rightPanelWidth,
@@ -283,7 +304,10 @@ export function CanvasWorkspaceShell({
         }`}
         style={{ left: reservedLeftWidth, right: reservedRightWidth }}
       >
-        <div className="pointer-events-auto max-w-full rounded-2xl border border-slate-700/90 bg-slate-950/90 shadow-2xl backdrop-blur-md">
+        <div
+          className="pointer-events-auto min-w-0 max-w-full break-words rounded-2xl border border-slate-700/90 bg-slate-950/90 shadow-2xl backdrop-blur-md [overflow-wrap:anywhere]"
+          data-testid="workspace-command-surface"
+        >
           {commandBar}
         </div>
       </div>
@@ -291,69 +315,102 @@ export function CanvasWorkspaceShell({
       <LeftToolDock
         dockRef={setLeftDockRef}
         label={messages["workspace.leftToolsPanel"]}
-        dialog={surfaces.isNarrow && leftOpen}
-        panelState={leftOpen ? "open" : "collapsed"}
+        dialog={surfaces.isNarrow && surfaces.leftPanelOpen}
+        panelState={surfaces.leftPanelOpen ? "open" : "collapsed"}
         onKeyDown={(event) =>
-          handleLeftPanelKeyDown(
-            event,
-            surfaces,
-            leftDockRef.current,
-            sourceOpen ? sourceRailButtonRef.current : outlineRailButtonRef.current,
-          )
+          handleLeftPanelKeyDown(event, surfaces, leftDockRef.current, leftPanelToggleRef.current)
         }
-        className={`absolute inset-y-0 left-0 overflow-hidden border-r border-slate-700/90 bg-slate-950/90 shadow-2xl backdrop-blur-md transition-[width] duration-200 ${
-          surfaces.isNarrow && leftOpen ? "z-50" : "z-40"
+        className={`absolute inset-y-0 left-0 overflow-visible border-r border-slate-700/90 bg-slate-950/90 shadow-2xl backdrop-blur-md transition-[width] duration-200 ${
+          surfaces.isNarrow && surfaces.leftPanelOpen ? "z-50" : "z-40"
         }`}
         style={{ width: leftDockWidth }}
       >
-        <nav
-          aria-label={messages["workspace.leftToolsPanel"]}
-          className="absolute inset-y-0 left-0 z-10 flex w-14 flex-col items-center gap-2 border-r border-slate-700 bg-slate-950 px-1 py-3"
-          data-testid="workspace-left-tool-rail"
+        <button
+          ref={leftPanelToggleRef}
+          type="button"
+          className={`absolute z-20 grid place-items-center rounded-full border border-slate-500 bg-slate-950 text-cyan-200 shadow-xl hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
+            surfaces.isNarrow && surfaces.leftPanelOpen
+              ? "right-3 top-3 size-8"
+              : "right-0 top-1/2 size-6 translate-x-1/2 -translate-y-1/2"
+          }`}
+          aria-label={
+            surfaces.leftPanelOpen
+              ? messages["workspace.collapseLeftTools"]
+              : messages["workspace.openLeftTools"]
+          }
+          aria-expanded={surfaces.leftPanelOpen}
+          aria-controls="workspace-left-panel-content"
+          onClick={(event) => surfaces.toggleLeftPanel(event.currentTarget)}
         >
-          <LeftRailButton
-            buttonRef={sourceRailButtonRef}
-            label={messages["workspace.source"]}
-            controls="workspace-source-surface"
-            expanded={sourceOpen}
-            icon="SOURCE"
-            onClick={(trigger) => surfaces.toggleLeft("SOURCE", trigger)}
-          />
-          <LeftRailButton
-            buttonRef={outlineRailButtonRef}
-            label={messages["workspace.outline"]}
-            controls="workspace-outline-surface"
-            expanded={outlineOpen}
-            icon="OUTLINE"
-            onClick={(trigger) => surfaces.toggleLeft("OUTLINE", trigger)}
-          />
-        </nav>
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            className="size-4 fill-none stroke-current"
+            strokeWidth="2"
+          >
+            <path d={surfaces.leftPanelOpen ? "m15 6-6 6 6 6" : "m9 6 6 6-6 6"} />
+          </svg>
+        </button>
         <div
           id="workspace-left-panel-content"
-          aria-hidden={!leftOpen}
-          inert={!leftOpen}
-          className={`absolute inset-y-0 left-14 right-0 min-w-0 overflow-hidden ${
-            leftOpen ? "visible" : "invisible"
+          aria-hidden={!surfaces.leftPanelOpen}
+          inert={!surfaces.leftPanelOpen}
+          className={`h-full w-full min-w-0 overflow-hidden ${
+            surfaces.leftPanelOpen ? "visible" : "invisible"
           }`}
         >
-          <section
-            id="workspace-source-surface"
-            aria-label={messages["source.surface"]}
-            aria-hidden={!sourceOpen}
-            inert={!sourceOpen}
-            className={`absolute inset-0 overflow-auto p-4 ${sourceOpen ? "visible" : "invisible"}`}
-          >
-            {source}
-          </section>
-          <section
-            id="workspace-outline-surface"
-            aria-label={messages["outline.label"]}
-            aria-hidden={!outlineOpen}
-            inert={!outlineOpen}
-            className={`absolute inset-0 overflow-auto p-4 ${outlineOpen ? "visible" : "invisible"}`}
-          >
-            {outline}
-          </section>
+          <div className="flex h-full min-h-0 min-w-0 flex-col">
+            <div
+              className="grid shrink-0 grid-cols-2 border-b border-slate-700 bg-slate-950 px-4 pt-3"
+              role="tablist"
+              aria-label={messages["workspace.leftToolsPanel"]}
+            >
+              <LeftPanelTab
+                buttonRef={sourceTabRef}
+                label={messages["workspace.source"]}
+                controls="workspace-source-surface"
+                selected={sourceActive}
+                onSelect={() => surfaces.selectLeftTab("SOURCE")}
+                onKeyDown={(event) =>
+                  handleLeftTabKeyDown(event, "SOURCE", surfaces, sourceTabRef, outlineTabRef)
+                }
+              />
+              <LeftPanelTab
+                buttonRef={outlineTabRef}
+                label={messages["workspace.outline"]}
+                controls="workspace-outline-surface"
+                selected={outlineActive}
+                onSelect={() => surfaces.selectLeftTab("OUTLINE")}
+                onKeyDown={(event) =>
+                  handleLeftTabKeyDown(event, "OUTLINE", surfaces, sourceTabRef, outlineTabRef)
+                }
+              />
+            </div>
+            <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+              <section
+                id="workspace-source-surface"
+                role="tabpanel"
+                aria-labelledby="workspace-source-tab"
+                aria-label={messages["source.surface"]}
+                aria-hidden={!surfaces.leftPanelOpen || !sourceActive}
+                inert={!surfaces.leftPanelOpen || !sourceActive}
+                className={`absolute inset-0 min-w-0 overflow-auto p-4 ${sourceActive ? "visible" : "invisible"}`}
+              >
+                {source}
+              </section>
+              <section
+                id="workspace-outline-surface"
+                role="tabpanel"
+                aria-labelledby="workspace-outline-tab"
+                aria-label={messages["outline.label"]}
+                aria-hidden={!surfaces.leftPanelOpen || !outlineActive}
+                inert={!surfaces.leftPanelOpen || !outlineActive}
+                className={`absolute inset-0 min-w-0 overflow-auto p-4 [overflow-wrap:anywhere] ${outlineActive ? "visible" : "invisible"}`}
+              >
+                {outline}
+              </section>
+            </div>
+          </div>
         </div>
       </LeftToolDock>
 
@@ -446,16 +503,16 @@ export function CanvasWorkspaceShell({
             surfaces.rightPanelOpen ? "visible" : "invisible"
           }`}
         >
-          <div className="flex h-full min-h-0 flex-col">
+          <div className="flex h-full min-h-0 min-w-0 flex-col break-words [overflow-wrap:anywhere]">
             <section
-              className="flex max-h-[50%] min-h-0 shrink-0 flex-col overflow-y-auto border-b border-slate-700"
+              className="flex min-w-0 max-h-[50%] min-h-0 shrink-0 flex-col overflow-y-auto border-b border-slate-700"
               aria-label={messages["diagram.editable"]}
               data-testid="workspace-diagram-tools"
             >
               {diagramTools}
             </section>
             <div
-              className="min-h-0 flex-1 overflow-y-auto"
+              className="min-h-0 min-w-0 flex-1 overflow-y-auto"
               data-testid="workspace-inspector-scroll"
             >
               {inspector}
@@ -472,7 +529,12 @@ export function CanvasWorkspaceShell({
           }`}
           style={{ left: reservedLeftWidth, right: reservedRightWidth }}
         >
-          <div className="pointer-events-auto max-w-2xl">{alerts}</div>
+          <div
+            className="pointer-events-auto min-w-0 max-w-2xl break-words [overflow-wrap:anywhere]"
+            data-testid="workspace-alert-surface"
+          >
+            {alerts}
+          </div>
         </div>
       ) : null}
       <div
@@ -482,7 +544,10 @@ export function CanvasWorkspaceShell({
         }`}
         style={{ left: reservedLeftWidth, right: reservedRightWidth }}
       >
-        <div className="pointer-events-auto max-w-full rounded-xl border border-slate-700/90 bg-slate-950/90 shadow-xl backdrop-blur-md">
+        <div
+          className="pointer-events-auto min-w-0 max-w-full break-words rounded-xl border border-slate-700/90 bg-slate-950/90 shadow-xl backdrop-blur-md [overflow-wrap:anywhere]"
+          data-testid="workspace-status-surface"
+        >
           {status}
         </div>
       </div>
@@ -490,53 +555,41 @@ export function CanvasWorkspaceShell({
   );
 }
 
-function LeftRailButton({
+function LeftPanelTab({
   buttonRef,
   label,
   controls,
-  expanded,
-  icon,
-  onClick,
+  selected,
+  onSelect,
+  onKeyDown,
 }: {
   readonly buttonRef: RefObject<HTMLButtonElement | null>;
   readonly label: string;
   readonly controls: string;
-  readonly expanded: boolean;
-  readonly icon: "SOURCE" | "OUTLINE";
-  readonly onClick: (trigger: HTMLButtonElement) => void;
+  readonly selected: boolean;
+  readonly onSelect: () => void;
+  readonly onKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
 }) {
   return (
     <button
       ref={buttonRef}
+      id={
+        controls === "workspace-source-surface" ? "workspace-source-tab" : "workspace-outline-tab"
+      }
       type="button"
-      aria-expanded={expanded}
+      role="tab"
+      aria-selected={selected}
       aria-controls={controls}
-      className={`flex min-h-14 w-12 flex-col items-center justify-center gap-1 rounded-lg border px-1 py-2 text-[0.65rem] font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
-        expanded
-          ? "border-cyan-400/70 bg-cyan-400/15 text-cyan-100"
-          : "border-transparent text-slate-300 hover:border-slate-600 hover:bg-slate-800 hover:text-white"
+      tabIndex={selected ? 0 : -1}
+      className={`min-w-0 whitespace-normal border-b-2 px-3 py-3 text-sm font-semibold [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
+        selected
+          ? "border-cyan-300 text-cyan-100"
+          : "border-transparent text-slate-300 hover:border-slate-500 hover:text-white"
       }`}
-      onClick={(event) => onClick(event.currentTarget)}
+      onClick={onSelect}
+      onKeyDown={onKeyDown}
     >
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        className="size-4 fill-none stroke-current"
-        strokeWidth="1.8"
-      >
-        {icon === "SOURCE" ? (
-          <>
-            <path d="M7 3.5h7l3 3V20.5H7z" />
-            <path d="M14 3.5v3h3M9.5 11h5M9.5 14.5h5" />
-          </>
-        ) : (
-          <>
-            <path d="M5 5h4v4H5zM5 15h4v4H5zM15 5h4v4h-4zM15 15h4v4h-4z" />
-            <path d="M9 7h6M7 9v6M17 9v6M9 17h6" />
-          </>
-        )}
-      </svg>
-      <span className="max-w-full truncate">{label}</span>
+      {label}
     </button>
   );
 }
@@ -747,7 +800,7 @@ function handleLeftPanelKeyDown(
   panel: HTMLElement | null,
   fallbackFocus: HTMLElement | null,
 ): void {
-  if (event.defaultPrevented || surfaces.leftSurface === null) return;
+  if (event.defaultPrevented || !surfaces.leftPanelOpen) return;
   if (event.key === "Escape") {
     event.preventDefault();
     surfaces.closeLeft(true, fallbackFocus);
@@ -755,6 +808,25 @@ function handleLeftPanelKeyDown(
   }
   if (event.key !== "Tab" || !surfaces.isNarrow || !panel) return;
   trapModalFocus(event, panel);
+}
+
+function handleLeftTabKeyDown(
+  event: ReactKeyboardEvent<HTMLButtonElement>,
+  current: WorkspaceLeftSurface,
+  surfaces: CanvasWorkspaceSurfaces,
+  sourceTabRef: RefObject<HTMLButtonElement | null>,
+  outlineTabRef: RefObject<HTMLButtonElement | null>,
+): void {
+  let next: WorkspaceLeftSurface | null = null;
+  if (event.key === "Home") next = "SOURCE";
+  else if (event.key === "End") next = "OUTLINE";
+  else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+    next = current === "SOURCE" ? "OUTLINE" : "SOURCE";
+  }
+  if (!next) return;
+  event.preventDefault();
+  surfaces.selectLeftTab(next);
+  (next === "SOURCE" ? sourceTabRef.current : outlineTabRef.current)?.focus();
 }
 
 function clampRightPanelWidth(width: number): number {
@@ -802,7 +874,8 @@ function focusConnectedElement(
   preferred: HTMLElement | null,
   fallback: HTMLElement | null | undefined,
 ): void {
-  (preferred?.isConnected ? preferred : fallback)?.focus();
+  const preferredIsFocusable = preferred?.isConnected && !preferred.closest("[inert]");
+  (preferredIsFocusable ? preferred : fallback)?.focus();
 }
 
 function listFocusable(container: HTMLElement | null): HTMLElement[] {
