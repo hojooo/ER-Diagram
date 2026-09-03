@@ -307,10 +307,11 @@ describe("accessible view, search, and detail controls", () => {
 
     const viewSelector = screen.getByRole("combobox", { name: "Diagram view" });
     const search = screen.getByRole("combobox", { name: "Search current view" });
-    const controls = viewSelector.closest("div");
+    const controls = screen.getByTestId("diagram-workspace-controls");
 
     expect(controls).toHaveClass("min-w-0", "w-full", "sm:grid-cols-2");
-    expect(viewSelector.closest("label")).toHaveClass("min-w-0");
+    expect(viewSelector.parentElement).toHaveClass("min-w-0");
+    expect(screen.getByText("Diagram view")).toHaveAttribute("for", viewSelector.id);
     expect(viewSelector).toHaveClass("min-w-0", "w-full", "max-w-full");
     expect(search.parentElement).toHaveClass("min-w-0");
     expect(search).toHaveClass("min-w-0", "w-full", "max-w-full");
