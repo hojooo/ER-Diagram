@@ -233,10 +233,10 @@ P2 항목은 P0 요구사항으로 해석하지 않는다. 특히 database conne
 │ Floating command bar: project / history / import / export / language   │
 │                                                                        │
 │ Left tool dock         Diagram Canvas        Right tool dock           │
-│ ┌──────┬────────────┐  persistent background ┌───────────────────────┐ │
-│ │Source│ Source or  │             resize ──▶ │ Editable ERD          │ │
-│ │Outline  Outline   │                toggle  │ view/search/LOD/layout│ │
-│ └──────┴────────────┘                        ├───────────────────────┤ │
+│ ┌─────────────────┐  persistent background ┌───────────────────────┐ │
+│ │ Source | Outline│             resize ──▶ │ Editable ERD          │ │
+│ │ active surface  │                toggle  │ view/search/LOD/layout│ │
+│ └─────────────────┘                        ├───────────────────────┤ │
 │                                              │ Inspector             │ │
 │                                              └───────────────────────┘ │
 │ Save / Parse / Conflict · contextual status                           │
@@ -248,12 +248,13 @@ Diagram Canvas는 workspace의 전체 viewport를 차지하며 route 내 source�
 위에 배치되는 dismissible 또는 resizable surface다. Surface를 열고 닫는 동작은 diagram의 saved position,
 viewport, selection과 schema/layout revision을 암묵적으로 변경하지 않는다.
 
-왼쪽에는 항상 보이는 56px rail과 `Source | Outline` 두 action을 둔다. 같은 action을 다시 누르면 content panel을
-접고, 다른 action을 누르면 mount된 surface를 교체한다. Source와 Outline은 command bar에서 열지 않으며 command
-bar는 project·history·import/export·language처럼 workspace 전역 action만 제공한다. 열린 왼쪽 panel은 넓은
-화면에서 512px을 사용하고, 좁은 화면에서는 오른쪽 도구 panel과 상호 배타적인 full-screen dialog가 된다.
-접힌 rail과 열린 panel 모두 canvas pointer/wheel event를 차단하며, Source buffer와 Outline 상태는 접은 뒤에도
-mount를 유지한다.
+왼쪽 dock은 접힌 상태에서 12px edge와 경계 중앙의 작은 open/collapse toggle만 남긴다. 펼친 panel 상단에는
+`Source | Outline` tab을 두고 첫 활성 tab은 Source로 고정한다. Tab 선택과 panel open 상태를 분리하므로 같은 tab을
+다시 선택해도 panel은 접히지 않으며, 접었다 다시 열면 마지막 tab을 복원한다. Tab은 `ArrowLeft`, `ArrowRight`,
+`Home`, `End` keyboard 이동을 지원한다. Source와 Outline은 command bar에서 열지 않으며 command bar는
+project·history·import/export·language처럼 workspace 전역 action만 제공한다. 열린 왼쪽 panel은 넓은 화면에서
+512px을 사용하고, 좁은 화면에서는 오른쪽 도구 panel과 상호 배타적인 full-screen dialog가 된다. 접힌 edge와
+열린 panel 모두 canvas pointer/wheel event를 차단하며, Source buffer와 Outline 상태는 접은 뒤에도 mount를 유지한다.
 
 왼쪽과 오른쪽 도구 dock은 각각 고유한 이름의 complementary landmark이며 workspace 전체 높이를 사용한다. 유효한
 workspace는 넓은 화면에서 오른쪽 dock을 연 상태로 시작하고, 좁은 화면과 200% zoom처럼 가용 폭이 줄어든 환경에서는
@@ -281,9 +282,13 @@ Source surface를 연다.
 
 Overlay는 canvas pan·zoom·drag와 명확한 pointer/wheel boundary를 가져야 하고, keyboard focus order, visible
 focus, Escape/trigger focus return과 narrow viewport의 reflow를 보장해야 한다. Diagram safe area는 조절된 right
-panel의 현재 전체 폭 또는 접힌 toggle reserve, 왼쪽 panel 또는 접힌 rail과 command/status/contextual surface를
+panel의 현재 전체 폭 또는 접힌 toggle reserve, 왼쪽 panel 또는 24px 접힌 edge reserve와 command/status/contextual surface를
 반영한다. Panel open/close와 resize는 현재 camera를 이동하거나 viewport를 저장하지 않으며, 초기 fit, 검색 focus와
 명시적 auto-layout만 최신 safe area를 사용한다.
+Workspace command bar, 좌우 panel, status와 contextual alert의 일반 문구는 가용 폭 안에서 줄바꿈한다. 공백 없는
+stable key, hash와 diagnostic code는 문자 단위로 줄바꿈하되 Monaco의 DBML 원문, diagnostic 원문과 download byte는
+변형하지 않는다. Native DiagramView select는 panel 폭 안에 유지하고 현재 선택된 전체 이름을 바로 아래의 줄바꿈 가능한
+설명으로 함께 표시한다. 여러 줄이 된 command bar 높이는 safe-area 측정에 그대로 반영한다.
 Source editing처럼 넓은 작업 면적이 필요한 surface는 확장할 수 있지만 diagram을 별도 sibling page로 교체하지
 않는다. Project Home과 독립적인 SQL import/export·bundle 화면까지 diagram background를 적용하는 것은 이번
 결정에 포함하지 않는다.

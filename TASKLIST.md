@@ -337,14 +337,17 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
     revision 변경을 만들지 않도록 한다.
   - 검증: `pnpm --filter @er-diagram/web test test/canvas-workspace-shell.test.tsx`
 - [x] `M4-013` workspace overlay interaction·responsive system
-  - 왼쪽 full-height rail에 Source·Outline을 통합하고 command bar에서는 Source·Outline·Tools toggle을 제거한다.
-    동일 tab 재선택은 panel을 접고, 다른 tab은 mount된 surface를 교체하며, 좁은 화면에서는 단일 dialog로 연다.
+  - 왼쪽 full-height panel 상단에 Source·Outline tab을 통합하고 command bar에서는 Source·Outline·Tools toggle을
+    제거한다. 접힌 상태는 12px edge와 중앙 toggle만 유지하고, 다시 열면 마지막 tab을 복원하며 같은 tab 재선택은
+    panel을 접지 않는다. 좁은 화면에서는 단일 dialog로 연다.
   - Full-height right tool dock에 DiagramView·검색·LOD·layout과 Visual Inspector를 통합하고 별도 selection summary
     rail 없이 panel-edge toggle만으로 명시적 reopen action을 제공한다.
   - 넓은 화면에서는 panel 앞쪽의 작은 toggle과 accessible separator로 폭을 360–768px 범위에서 조절하고,
     조절값은 route session에만 유지하며 현재 폭을 diagram safe area에 반영한다.
   - 넓은 valid workspace 기본 open, 좁은 화면 기본 collapsed·full-screen dialog, 독립 scroll, pointer boundary,
     focus trap·Escape·trigger focus return과 panel/toggle 기준 safe area를 보장한다.
+  - Command bar, 좌우 panel과 status·alert의 긴 일반 문구는 panel 안에서 줄바꿈하고, 기술 식별자는 문자 단위로
+    줄바꿈한다. 현재 DiagramView의 전체 이름은 native select 아래에서 별도 설명으로 표시하며 DBML 원문은 변형하지 않는다.
   - 검증: `pnpm --filter @er-diagram/web test test/workspace-overlays.test.tsx`
 - [ ] `M4-014` canvas-first core-flow visual acceptance
   - Source·visual edit, diagnostics, history, layout, import/export 진입·복귀가 같은 diagram context를 보존하고
