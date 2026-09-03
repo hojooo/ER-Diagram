@@ -230,13 +230,13 @@ P2 항목은 P0 요구사항으로 해석하지 않는다. 특히 database conne
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────┐
-│ Floating command bar                                                   │
+│ Floating command bar: project / history / import / export / language   │
 │                                                                        │
-│ Outline / Source       Diagram Canvas        Right tool dock           │
-│ dismissible left dock  persistent background ┌───────────────────────┐ │
-│                                   resize ──▶ │ Editable ERD          │ │
-│                                      toggle  │ view/search/LOD/layout│ │
-│                                              ├───────────────────────┤ │
+│ Left tool dock         Diagram Canvas        Right tool dock           │
+│ ┌──────┬────────────┐  persistent background ┌───────────────────────┐ │
+│ │Source│ Source or  │             resize ──▶ │ Editable ERD          │ │
+│ │Outline  Outline   │                toggle  │ view/search/LOD/layout│ │
+│ └──────┴────────────┘                        ├───────────────────────┤ │
 │                                              │ Inspector             │ │
 │                                              └───────────────────────┘ │
 │ Save / Parse / Conflict · contextual status                           │
@@ -248,8 +248,15 @@ Diagram Canvas는 workspace의 전체 viewport를 차지하며 route 내 source�
 위에 배치되는 dismissible 또는 resizable surface다. Surface를 열고 닫는 동작은 diagram의 saved position,
 viewport, selection과 schema/layout revision을 암묵적으로 변경하지 않는다.
 
-오른쪽 도구 dock은 workspace 전체 높이를 사용하며 shell 안에서 유일한 complementary landmark다. 유효한
-workspace는 넓은 화면에서 dock을 연 상태로 시작하고, 좁은 화면과 200% zoom처럼 가용 폭이 줄어든 환경에서는
+왼쪽에는 항상 보이는 56px rail과 `Source | Outline` 두 action을 둔다. 같은 action을 다시 누르면 content panel을
+접고, 다른 action을 누르면 mount된 surface를 교체한다. Source와 Outline은 command bar에서 열지 않으며 command
+bar는 project·history·import/export·language처럼 workspace 전역 action만 제공한다. 열린 왼쪽 panel은 넓은
+화면에서 512px을 사용하고, 좁은 화면에서는 오른쪽 도구 panel과 상호 배타적인 full-screen dialog가 된다.
+접힌 rail과 열린 panel 모두 canvas pointer/wheel event를 차단하며, Source buffer와 Outline 상태는 접은 뒤에도
+mount를 유지한다.
+
+왼쪽과 오른쪽 도구 dock은 각각 고유한 이름의 complementary landmark이며 workspace 전체 높이를 사용한다. 유효한
+workspace는 넓은 화면에서 오른쪽 dock을 연 상태로 시작하고, 좁은 화면과 200% zoom처럼 가용 폭이 줄어든 환경에서는
 panel-edge toggle만 남긴 채 접힌 상태로 시작한다. 열면 좁은 화면에서는 focus trap, Escape close와 trigger focus
 return을 제공하는 full-screen dialog가 된다. 넓은 화면에서는 Source 또는 Outline과 동시에 열 수 있다. 패널을
 접어도 Diagram controls와 Visual Inspector는 mount를 유지하되 `inert`와 `aria-hidden`으로 비활성화해 검색 상태와
@@ -264,8 +271,8 @@ resize handle을 표시하지 않는다.
 Dock 상단에는 `Editable ER diagram`, source-defined `DiagramView`, current-view 검색, LOD와 명시적 layout action을
 모은다. 상단 영역은 전체 높이의 절반까지만 사용하고 자체 scroll하며, Visual Inspector는 남은 높이에서 독립적으로
 scroll한다. 검색 결과는 panel flow 안에서 펼쳐져 Inspector나 canvas와 겹치지 않는다. 별도의 selection summary
-rail과 선택 없음 문구는 표시하지 않는다. Canvas 선택만으로 panel을 다시 열지는 않으며, 사용자는 command bar 또는
-panel-edge toggle로만 panel을 명시적으로 연다. 선택된 element 정보는 열린 Inspector 안에서만 표시한다.
+rail과 선택 없음 문구는 표시하지 않는다. Canvas 선택만으로 panel을 다시 열지는 않으며, 사용자는 panel-edge
+toggle로만 panel을 명시적으로 연다. 선택된 element 정보는 열린 Inspector 안에서만 표시한다.
 
 DBML compiler의 `INFO` diagnostic은 schema 탐색 맥락을 유지하도록 Outline 하단에 code·message와 모든 source
 위치를 묶어 표시한다. `ERROR`와 `WARNING`은 현재 draft의 수정이 필요한 Problems contextual alert에 유지한다.
@@ -274,9 +281,9 @@ Source surface를 연다.
 
 Overlay는 canvas pan·zoom·drag와 명확한 pointer/wheel boundary를 가져야 하고, keyboard focus order, visible
 focus, Escape/trigger focus return과 narrow viewport의 reflow를 보장해야 한다. Diagram safe area는 조절된 right
-panel의 현재 전체 폭 또는 접힌 toggle reserve와 command/status/contextual surface만 반영한다. Panel open/close와
-resize는 현재 camera를 이동하거나 viewport를 저장하지 않으며, 초기 fit, 검색 focus와 명시적 auto-layout만 최신
-safe area를 사용한다.
+panel의 현재 전체 폭 또는 접힌 toggle reserve, 왼쪽 panel 또는 접힌 rail과 command/status/contextual surface를
+반영한다. Panel open/close와 resize는 현재 camera를 이동하거나 viewport를 저장하지 않으며, 초기 fit, 검색 focus와
+명시적 auto-layout만 최신 safe area를 사용한다.
 Source editing처럼 넓은 작업 면적이 필요한 surface는 확장할 수 있지만 diagram을 별도 sibling page로 교체하지
 않는다. Project Home과 독립적인 SQL import/export·bundle 화면까지 diagram background를 적용하는 것은 이번
 결정에 포함하지 않는다.

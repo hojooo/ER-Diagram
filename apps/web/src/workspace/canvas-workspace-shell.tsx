@@ -1,10 +1,10 @@
 import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
-  type RefObject,
+  type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
+  type RefObject,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -17,6 +17,8 @@ import { useUiLocale } from "../localization/ui-locale.js";
 
 export type WorkspaceLeftSurface = "SOURCE" | "OUTLINE" | null;
 
+const COLLAPSED_LEFT_RAIL_WIDTH_PX = 56;
+const DEFAULT_LEFT_PANEL_WIDTH_PX = 512;
 const COLLAPSED_RIGHT_PANEL_WIDTH_PX = 12;
 const DEFAULT_RIGHT_PANEL_WIDTH_PX = 512;
 const MIN_RIGHT_PANEL_WIDTH_PX = 360;
@@ -32,7 +34,7 @@ export interface CanvasWorkspaceSurfaces {
     trigger?: HTMLElement | null,
   ) => void;
   readonly toggleLeft: (surface: Exclude<WorkspaceLeftSurface, null>, trigger: HTMLElement) => void;
-  readonly closeLeft: (returnFocus?: boolean) => void;
+  readonly closeLeft: (returnFocus?: boolean, fallback?: HTMLElement | null) => void;
   readonly openRightPanel: (trigger?: HTMLElement | null) => void;
   readonly toggleRightPanel: (trigger: HTMLElement) => void;
   readonly closeRightPanel: (returnFocus?: boolean, fallback?: HTMLElement | null) => void;
@@ -58,16 +60,16 @@ export function useCanvasWorkspaceSurfaces({
 
   const openLeft = useCallback(
     (surface: Exclude<WorkspaceLeftSurface, null>, trigger?: HTMLElement | null) => {
-      if (trigger) leftTriggerRef.current = trigger;
+      leftTriggerRef.current = trigger ?? null;
       lastOpenedRef.current = "LEFT";
       setLeftSurface(surface);
       if (narrow) setRightPanelOpen(false);
     },
     [narrow],
   );
-  const closeLeft = useCallback((returnFocus = true) => {
+  const closeLeft = useCallback((returnFocus = true, fallback?: HTMLElement | null) => {
     setLeftSurface(null);
-    if (returnFocus) leftTriggerRef.current?.focus();
+    if (returnFocus) focusConnectedElement(leftTriggerRef.current, fallback);
   }, []);
   const toggleLeft = useCallback(
     (surface: Exclude<WorkspaceLeftSurface, null>, trigger: HTMLElement) => {
@@ -81,7 +83,7 @@ export function useCanvasWorkspaceSurfaces({
   );
   const openRightPanel = useCallback(
     (trigger?: HTMLElement | null) => {
-      if (trigger) rightPanelTriggerRef.current = trigger;
+      rightPanelTriggerRef.current = trigger ?? null;
       lastOpenedRef.current = "RIGHT";
       setRightPanelOpen(true);
       if (narrow) setLeftSurface(null);
@@ -90,7 +92,7 @@ export function useCanvasWorkspaceSurfaces({
   );
   const closeRightPanel = useCallback((returnFocus = true, fallback?: HTMLElement | null) => {
     setRightPanelOpen(false);
-    if (returnFocus) (rightPanelTriggerRef.current ?? fallback)?.focus();
+    if (returnFocus) focusConnectedElement(rightPanelTriggerRef.current, fallback);
   }, []);
   const toggleRightPanel = useCallback(
     (trigger: HTMLElement) => {
@@ -175,7 +177,9 @@ export function CanvasWorkspaceShell({
   const { messages } = useUiLocale();
   const rootRef = useRef<HTMLDivElement>(null);
   const commandBarRef = useRef<HTMLDivElement>(null);
-  const leftDockRef = useRef<HTMLDivElement>(null);
+  const leftDockRef = useRef<HTMLElement>(null);
+  const sourceRailButtonRef = useRef<HTMLButtonElement>(null);
+  const outlineRailButtonRef = useRef<HTMLButtonElement>(null);
   const rightDockRef = useRef<HTMLElement>(null);
   const rightPanelToggleRef = useRef<HTMLButtonElement>(null);
   const rightPanelResizeRef = useRef<{
@@ -188,21 +192,11 @@ export function CanvasWorkspaceShell({
   const setRightDockRef = useCallback((element: HTMLElement | null) => {
     rightDockRef.current = element;
   }, []);
+  const setLeftDockRef = useCallback((element: HTMLElement | null) => {
+    leftDockRef.current = element;
+  }, []);
   const statusRef = useRef<HTMLDivElement>(null);
   const alertsRef = useRef<HTMLDivElement>(null);
-  useWorkspaceInsets({
-    rootRef,
-    commandBarRef,
-    leftDockRef,
-    rightDockRef,
-    statusRef,
-    alertsRef,
-    leftOpen: surfaces.leftSurface !== null,
-    rightPanelOpen: surfaces.rightPanelOpen,
-    rightPanelWidth,
-    ...(onViewportInsetsChange ? { onChange: onViewportInsetsChange } : {}),
-  });
-
   useEffect(() => {
     if (!resizingRightPanel) return;
     const previousCursor = document.documentElement.style.cursor;
@@ -243,6 +237,14 @@ export function CanvasWorkspaceShell({
   const sourceOpen = surfaces.leftSurface === "SOURCE";
   const outlineOpen = surfaces.leftSurface === "OUTLINE";
   const leftOpen = sourceOpen || outlineOpen;
+  const leftPanelWidth = leftOpen ? DEFAULT_LEFT_PANEL_WIDTH_PX : COLLAPSED_LEFT_RAIL_WIDTH_PX;
+  const leftDockWidth = leftOpen
+    ? surfaces.isNarrow
+      ? "100%"
+      : `${DEFAULT_LEFT_PANEL_WIDTH_PX}px`
+    : `${COLLAPSED_LEFT_RAIL_WIDTH_PX}px`;
+  const reservedLeftWidth =
+    (surfaces.isNarrow ? COLLAPSED_LEFT_RAIL_WIDTH_PX : leftPanelWidth) + 12;
   const reservedRightWidth =
     !surfaces.isNarrow && surfaces.rightPanelOpen
       ? rightPanelWidth + 12
@@ -252,6 +254,19 @@ export function CanvasWorkspaceShell({
       ? "100%"
       : `${rightPanelWidth}px`
     : `${COLLAPSED_RIGHT_PANEL_WIDTH_PX}px`;
+  useWorkspaceInsets({
+    rootRef,
+    commandBarRef,
+    leftDockRef,
+    rightDockRef,
+    statusRef,
+    alertsRef,
+    leftPanelOpen: leftOpen,
+    leftPanelWidth,
+    rightPanelOpen: surfaces.rightPanelOpen,
+    rightPanelWidth,
+    ...(onViewportInsetsChange ? { onChange: onViewportInsetsChange } : {}),
+  });
 
   return (
     <div
@@ -262,53 +277,85 @@ export function CanvasWorkspaceShell({
       <div className="absolute inset-0 z-0">{diagram}</div>
       <div
         ref={commandBarRef}
-        className={`pointer-events-none absolute left-3 top-3 z-30 flex justify-center sm:left-5 ${
-          resizingRightPanel ? "transition-none" : "transition-[right] duration-200"
+        data-testid="workspace-command-bar"
+        className={`pointer-events-none absolute top-3 z-30 flex justify-center ${
+          resizingRightPanel ? "transition-none" : "transition-[left,right] duration-200"
         }`}
-        style={{ right: reservedRightWidth }}
+        style={{ left: reservedLeftWidth, right: reservedRightWidth }}
       >
         <div className="pointer-events-auto max-w-full rounded-2xl border border-slate-700/90 bg-slate-950/90 shadow-2xl backdrop-blur-md">
           {commandBar}
         </div>
       </div>
 
-      <div
-        ref={leftDockRef}
-        className={`absolute bottom-16 left-3 top-24 z-20 w-[min(48rem,calc(100vw-1.5rem))] transition duration-200 sm:left-5 sm:w-[min(48rem,calc(100vw-2.5rem))] ${
-          leftOpen
-            ? "translate-x-0 opacity-100"
-            : "pointer-events-none -translate-x-[110%] opacity-0"
+      <LeftToolDock
+        dockRef={setLeftDockRef}
+        label={messages["workspace.leftToolsPanel"]}
+        dialog={surfaces.isNarrow && leftOpen}
+        panelState={leftOpen ? "open" : "collapsed"}
+        onKeyDown={(event) =>
+          handleLeftPanelKeyDown(
+            event,
+            surfaces,
+            leftDockRef.current,
+            sourceOpen ? sourceRailButtonRef.current : outlineRailButtonRef.current,
+          )
+        }
+        className={`absolute inset-y-0 left-0 overflow-hidden border-r border-slate-700/90 bg-slate-950/90 shadow-2xl backdrop-blur-md transition-[width] duration-200 ${
+          surfaces.isNarrow && leftOpen ? "z-50" : "z-40"
         }`}
+        style={{ width: leftDockWidth }}
       >
-        <section
-          id="workspace-source-surface"
-          aria-label={messages["source.surface"]}
-          aria-hidden={!sourceOpen}
-          inert={!sourceOpen}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") surfaces.closeLeft();
-          }}
-          className={`absolute inset-0 overflow-auto rounded-2xl border border-slate-700/90 bg-slate-950/90 p-4 shadow-2xl backdrop-blur-md ${
-            sourceOpen ? "visible" : "invisible"
+        <nav
+          aria-label={messages["workspace.leftToolsPanel"]}
+          className="absolute inset-y-0 left-0 z-10 flex w-14 flex-col items-center gap-2 border-r border-slate-700 bg-slate-950 px-1 py-3"
+          data-testid="workspace-left-tool-rail"
+        >
+          <LeftRailButton
+            buttonRef={sourceRailButtonRef}
+            label={messages["workspace.source"]}
+            controls="workspace-source-surface"
+            expanded={sourceOpen}
+            icon="SOURCE"
+            onClick={(trigger) => surfaces.toggleLeft("SOURCE", trigger)}
+          />
+          <LeftRailButton
+            buttonRef={outlineRailButtonRef}
+            label={messages["workspace.outline"]}
+            controls="workspace-outline-surface"
+            expanded={outlineOpen}
+            icon="OUTLINE"
+            onClick={(trigger) => surfaces.toggleLeft("OUTLINE", trigger)}
+          />
+        </nav>
+        <div
+          id="workspace-left-panel-content"
+          aria-hidden={!leftOpen}
+          inert={!leftOpen}
+          className={`absolute inset-y-0 left-14 right-0 min-w-0 overflow-hidden ${
+            leftOpen ? "visible" : "invisible"
           }`}
         >
-          {source}
-        </section>
-        <section
-          id="workspace-outline-surface"
-          aria-label={messages["outline.label"]}
-          aria-hidden={!outlineOpen}
-          inert={!outlineOpen}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") surfaces.closeLeft();
-          }}
-          className={`absolute inset-0 overflow-auto rounded-2xl border border-slate-700/90 bg-slate-950/90 p-4 shadow-2xl backdrop-blur-md ${
-            outlineOpen ? "visible" : "invisible"
-          }`}
-        >
-          {outline}
-        </section>
-      </div>
+          <section
+            id="workspace-source-surface"
+            aria-label={messages["source.surface"]}
+            aria-hidden={!sourceOpen}
+            inert={!sourceOpen}
+            className={`absolute inset-0 overflow-auto p-4 ${sourceOpen ? "visible" : "invisible"}`}
+          >
+            {source}
+          </section>
+          <section
+            id="workspace-outline-surface"
+            aria-label={messages["outline.label"]}
+            aria-hidden={!outlineOpen}
+            inert={!outlineOpen}
+            className={`absolute inset-0 overflow-auto p-4 ${outlineOpen ? "visible" : "invisible"}`}
+          >
+            {outline}
+          </section>
+        </div>
+      </LeftToolDock>
 
       <RightToolDock
         dockRef={setRightDockRef}
@@ -420,26 +467,120 @@ export function CanvasWorkspaceShell({
       {alerts ? (
         <div
           ref={alertsRef}
-          className={`pointer-events-none absolute bottom-16 left-3 z-30 flex justify-center sm:left-5 ${
-            resizingRightPanel ? "transition-none" : "transition-[right] duration-200"
+          className={`pointer-events-none absolute bottom-16 z-30 flex justify-center ${
+            resizingRightPanel ? "transition-none" : "transition-[left,right] duration-200"
           }`}
-          style={{ right: reservedRightWidth }}
+          style={{ left: reservedLeftWidth, right: reservedRightWidth }}
         >
           <div className="pointer-events-auto max-w-2xl">{alerts}</div>
         </div>
       ) : null}
       <div
         ref={statusRef}
-        className={`pointer-events-none absolute bottom-3 left-3 z-30 flex justify-center sm:left-5 ${
-          resizingRightPanel ? "transition-none" : "transition-[right] duration-200"
+        className={`pointer-events-none absolute bottom-3 z-30 flex justify-center ${
+          resizingRightPanel ? "transition-none" : "transition-[left,right] duration-200"
         }`}
-        style={{ right: reservedRightWidth }}
+        style={{ left: reservedLeftWidth, right: reservedRightWidth }}
       >
         <div className="pointer-events-auto max-w-full rounded-xl border border-slate-700/90 bg-slate-950/90 shadow-xl backdrop-blur-md">
           {status}
         </div>
       </div>
     </div>
+  );
+}
+
+function LeftRailButton({
+  buttonRef,
+  label,
+  controls,
+  expanded,
+  icon,
+  onClick,
+}: {
+  readonly buttonRef: RefObject<HTMLButtonElement | null>;
+  readonly label: string;
+  readonly controls: string;
+  readonly expanded: boolean;
+  readonly icon: "SOURCE" | "OUTLINE";
+  readonly onClick: (trigger: HTMLButtonElement) => void;
+}) {
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      aria-expanded={expanded}
+      aria-controls={controls}
+      className={`flex min-h-14 w-12 flex-col items-center justify-center gap-1 rounded-lg border px-1 py-2 text-[0.65rem] font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${
+        expanded
+          ? "border-cyan-400/70 bg-cyan-400/15 text-cyan-100"
+          : "border-transparent text-slate-300 hover:border-slate-600 hover:bg-slate-800 hover:text-white"
+      }`}
+      onClick={(event) => onClick(event.currentTarget)}
+    >
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        className="size-4 fill-none stroke-current"
+        strokeWidth="1.8"
+      >
+        {icon === "SOURCE" ? (
+          <>
+            <path d="M7 3.5h7l3 3V20.5H7z" />
+            <path d="M14 3.5v3h3M9.5 11h5M9.5 14.5h5" />
+          </>
+        ) : (
+          <>
+            <path d="M5 5h4v4H5zM5 15h4v4H5zM15 5h4v4h-4zM15 15h4v4h-4z" />
+            <path d="M9 7h6M7 9v6M17 9v6M9 17h6" />
+          </>
+        )}
+      </svg>
+      <span className="max-w-full truncate">{label}</span>
+    </button>
+  );
+}
+
+function LeftToolDock({
+  dockRef,
+  label,
+  dialog,
+  panelState,
+  className,
+  style,
+  onKeyDown,
+  children,
+}: {
+  readonly dockRef: (element: HTMLElement | null) => void;
+  readonly label: string;
+  readonly dialog: boolean;
+  readonly panelState: "open" | "collapsed";
+  readonly className: string;
+  readonly style: CSSProperties;
+  readonly onKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => void;
+  readonly children: ReactNode;
+}) {
+  const dialogAttributes = dialog
+    ? ({ role: "dialog", "aria-modal": true } as const)
+    : ({} as const);
+  const eventBoundary = {
+    onPointerDown: (event: ReactPointerEvent<HTMLElement>) => event.stopPropagation(),
+    onWheel: (event: ReactWheelEvent<HTMLElement>) => event.stopPropagation(),
+  };
+  return (
+    <aside
+      ref={dockRef}
+      {...dialogAttributes}
+      aria-label={label}
+      data-testid="workspace-left-tool-dock"
+      data-panel-state={panelState}
+      className={className}
+      style={style}
+      onKeyDown={onKeyDown}
+      {...eventBoundary}
+    >
+      {children}
+    </aside>
   );
 }
 
@@ -462,31 +603,17 @@ function RightToolDock({
   readonly onKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => void;
   readonly children: ReactNode;
 }) {
+  const dialogAttributes = dialog
+    ? ({ role: "dialog", "aria-modal": true } as const)
+    : ({} as const);
   const eventBoundary = {
     onPointerDown: (event: ReactPointerEvent<HTMLElement>) => event.stopPropagation(),
     onWheel: (event: ReactWheelEvent<HTMLElement>) => event.stopPropagation(),
   };
-  if (dialog) {
-    return (
-      <div
-        ref={dockRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={label}
-        data-testid="workspace-right-tool-dock"
-        data-panel-state={panelState}
-        className={className}
-        style={style}
-        onKeyDown={onKeyDown}
-        {...eventBoundary}
-      >
-        {children}
-      </div>
-    );
-  }
   return (
     <aside
       ref={dockRef}
+      {...dialogAttributes}
       aria-label={label}
       data-testid="workspace-right-tool-dock"
       data-panel-state={panelState}
@@ -507,18 +634,20 @@ function useWorkspaceInsets({
   rightDockRef,
   statusRef,
   alertsRef,
-  leftOpen,
+  leftPanelOpen,
+  leftPanelWidth,
   rightPanelOpen,
   rightPanelWidth,
   onChange,
 }: {
   readonly rootRef: RefObject<HTMLDivElement | null>;
   readonly commandBarRef: RefObject<HTMLDivElement | null>;
-  readonly leftDockRef: RefObject<HTMLDivElement | null>;
+  readonly leftDockRef: RefObject<HTMLElement | null>;
   readonly rightDockRef: RefObject<HTMLElement | null>;
   readonly statusRef: RefObject<HTMLDivElement | null>;
   readonly alertsRef: RefObject<HTMLDivElement | null>;
-  readonly leftOpen: boolean;
+  readonly leftPanelOpen: boolean;
+  readonly leftPanelWidth: number;
   readonly rightPanelOpen: boolean;
   readonly rightPanelWidth: number;
   readonly onChange?: (insets: DiagramViewportInsets) => void;
@@ -536,6 +665,15 @@ function useWorkspaceInsets({
       const rightInset = (element: Element | null) =>
         element ? Math.max(0, root.right - element.getBoundingClientRect().left) : 0;
       const withSafeGap = (value: number) => (value > 0 ? value + 12 : 0);
+      const leftDock = leftDockRef.current;
+      const expectedLeftPanelState = leftPanelOpen ? "open" : "collapsed";
+      const activeLeftDock =
+        leftDock?.dataset.panelState === expectedLeftPanelState ? leftDock : null;
+      const measuredLeftInset = leftInset(activeLeftDock);
+      const effectiveLeftInset =
+        activeLeftDock?.style.width === `${leftPanelWidth}px`
+          ? Math.min(root.width, leftPanelWidth)
+          : measuredLeftInset;
       const rightDock = rightDockRef.current;
       const expectedPanelState = rightPanelOpen ? "open" : "collapsed";
       const activeRightDock =
@@ -555,7 +693,7 @@ function useWorkspaceInsets({
             root.bottom - (alertsRef.current?.getBoundingClientRect().top ?? root.bottom),
           ),
         ),
-        left: leftOpen ? withSafeGap(leftInset(leftDockRef.current)) : 0,
+        left: withSafeGap(effectiveLeftInset),
       } satisfies DiagramViewportInsets;
       const previous = previousRef.current;
       if (
@@ -593,13 +731,30 @@ function useWorkspaceInsets({
     alertsRef,
     rightDockRef,
     leftDockRef,
-    leftOpen,
+    leftPanelOpen,
+    leftPanelWidth,
     rightPanelOpen,
     rightPanelWidth,
     onChange,
     rootRef,
     statusRef,
   ]);
+}
+
+function handleLeftPanelKeyDown(
+  event: ReactKeyboardEvent<HTMLElement>,
+  surfaces: CanvasWorkspaceSurfaces,
+  panel: HTMLElement | null,
+  fallbackFocus: HTMLElement | null,
+): void {
+  if (event.defaultPrevented || surfaces.leftSurface === null) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    surfaces.closeLeft(true, fallbackFocus);
+    return;
+  }
+  if (event.key !== "Tab" || !surfaces.isNarrow || !panel) return;
+  trapModalFocus(event, panel);
 }
 
 function clampRightPanelWidth(width: number): number {
@@ -619,6 +774,10 @@ function handleRightPanelKeyDown(
     return;
   }
   if (event.key !== "Tab" || !surfaces.isNarrow || !surfaces.rightPanelOpen || !panel) return;
+  trapModalFocus(event, panel);
+}
+
+function trapModalFocus(event: ReactKeyboardEvent<HTMLElement>, panel: HTMLElement): void {
   const focusable = listFocusable(panel);
   if (focusable.length === 0) {
     event.preventDefault();
@@ -637,6 +796,13 @@ function handleRightPanelKeyDown(
 
 function firstFocusable(container: HTMLElement | null): HTMLElement | null {
   return listFocusable(container)[0] ?? null;
+}
+
+function focusConnectedElement(
+  preferred: HTMLElement | null,
+  fallback: HTMLElement | null | undefined,
+): void {
+  (preferred?.isConnected ? preferred : fallback)?.focus();
 }
 
 function listFocusable(container: HTMLElement | null): HTMLElement[] {

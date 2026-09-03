@@ -22,6 +22,10 @@ describe("canvas workspace shell", () => {
     render(<Harness diagramMounts={diagramMounts} />);
 
     expect(screen.getByTestId("canvas-workspace-shell")).toBeVisible();
+    const commandBar = screen.getByTestId("workspace-command-bar");
+    expect(within(commandBar).queryByRole("button", { name: "Source" })).toBeNull();
+    expect(within(commandBar).queryByRole("button", { name: "Outline" })).toBeNull();
+    expect(within(commandBar).queryByRole("button", { name: "Tools" })).toBeNull();
     expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute(
       "aria-expanded",
       "false",
@@ -30,7 +34,14 @@ describe("canvas workspace shell", () => {
       "aria-expanded",
       "false",
     );
-    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Collapse workspace tools" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    const leftTools = screen.getByRole("complementary", { name: "Source and outline" });
+    expect(leftTools).toHaveClass("inset-y-0", "left-0");
+    expect(leftTools).toHaveStyle({ width: "56px" });
+    expect(screen.getByTestId("workspace-left-tool-rail")).toBeVisible();
     expect(document.getElementById("workspace-source-surface")).toHaveAttribute("inert");
     expect(document.getElementById("workspace-source-surface")).toHaveAttribute(
       "aria-hidden",
@@ -55,6 +66,7 @@ describe("canvas workspace shell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Source" }));
     expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute("aria-expanded", "true");
+    expect(leftTools).toHaveStyle({ width: "512px" });
     expect(screen.getByRole("region", { name: "DBML source" })).not.toHaveAttribute("inert");
 
     fireEvent.click(screen.getByRole("button", { name: "Outline" }));
@@ -66,6 +78,8 @@ describe("canvas workspace shell", () => {
       "aria-expanded",
       "true",
     );
+    fireEvent.click(screen.getByRole("button", { name: "Outline" }));
+    expect(leftTools).toHaveStyle({ width: "56px" });
     expect(diagramMounts).toHaveBeenCalledTimes(1);
   });
 
@@ -86,18 +100,31 @@ describe("canvas workspace shell", () => {
     const { unmount } = render(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: "Source" }));
     expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Collapse workspace tools" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
 
     unmount();
     render(<Harness narrow />);
-    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Open workspace tools" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Source" }));
-    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    expect(screen.getByRole("dialog", { name: "Source and outline" })).toHaveAttribute(
+      "aria-modal",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace tools" }));
     expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute(
       "aria-expanded",
       "false",
     );
-    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Collapse workspace tools" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
     expect(screen.getByRole("dialog", { name: "Workspace tools" })).toHaveAttribute(
       "aria-modal",
       "true",
@@ -117,25 +144,28 @@ describe("canvas workspace shell", () => {
     fireEvent.change(screen.getByLabelText("Inspector draft probe"), {
       target: { value: "renamed_users" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse workspace tools" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Source" }));
     expect(screen.getByLabelText("Source draft probe")).toHaveValue("Table users");
-    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace tools" }));
     expect(screen.getByLabelText("Inspector draft probe")).toHaveValue("renamed_users");
   });
 
   it("keeps only the compact toggle visible when the panel is collapsed", () => {
     render(<Harness />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse workspace tools" }));
     expect(screen.getByTestId("workspace-right-tool-dock")).toHaveAttribute(
       "data-panel-state",
       "collapsed",
     );
     expect(screen.getByTestId("workspace-right-tool-dock")).toHaveStyle({ width: "12px" });
     expect(document.getElementById("workspace-right-panel-content")).toHaveAttribute("inert");
-    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Open workspace tools" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
     expect(screen.queryByTestId("workspace-rail-selection")).toBeNull();
   });
 
@@ -179,7 +209,7 @@ describe("canvas workspace shell", () => {
 
   it("closes the narrow dialog with Escape and returns focus to its trigger", () => {
     render(<Harness narrow />);
-    const trigger = screen.getByRole("button", { name: "Tools" });
+    const trigger = screen.getByRole("button", { name: "Open workspace tools" });
     fireEvent.click(trigger);
     const dialog = screen.getByRole("dialog", { name: "Workspace tools" });
 
@@ -206,12 +236,15 @@ describe("canvas workspace shell", () => {
 
     fireEvent.keyDown(screen.getByLabelText("Inspector draft probe"), { key: "Escape" });
 
-    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Collapse workspace tools" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
   });
 
   it("traps keyboard focus inside an open narrow tool sheet", () => {
     render(<Harness narrow />);
-    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace tools" }));
     const dialog = screen.getByRole("dialog", { name: "Workspace tools" });
     const close = within(dialog).getByRole("button", { name: "Collapse workspace tools" });
     const lastField = within(dialog).getByLabelText("Inspector draft probe");
@@ -223,6 +256,26 @@ describe("canvas workspace shell", () => {
     lastField.focus();
     fireEvent.keyDown(dialog, { key: "Tab" });
     expect(close).toHaveFocus();
+  });
+
+  it("traps focus in the narrow left sheet and returns it to the active rail tab", () => {
+    render(<Harness narrow />);
+    const sourceTrigger = screen.getByRole("button", { name: "Source" });
+    fireEvent.click(sourceTrigger);
+    const dialog = screen.getByRole("dialog", { name: "Source and outline" });
+    const sourceField = within(dialog).getByLabelText("Source draft probe");
+
+    sourceTrigger.focus();
+    fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+    expect(sourceField).toHaveFocus();
+
+    sourceField.focus();
+    fireEvent.keyDown(dialog, { key: "Tab" });
+    expect(sourceTrigger).toHaveFocus();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(sourceTrigger).toHaveFocus();
+    expect(sourceTrigger).toHaveAttribute("aria-expanded", "false");
   });
 
   it("opens source as the explicit recovery exception", () => {
@@ -258,13 +311,19 @@ describe("canvas workspace shell", () => {
     expect(await screen.findByText(/"top":82/)).toBeVisible();
     expect(screen.getByText(/"right":524/)).toBeVisible();
     expect(screen.getByText(/"bottom":72/)).toBeVisible();
+    expect(screen.getByText(/"left":68/)).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Source" }));
+    expect(await screen.findByText(/"left":524/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Source" }));
+    expect(await screen.findByText(/"left":68/)).toBeVisible();
 
     fireEvent.keyDown(screen.getByRole("separator", { name: "Resize workspace tools" }), {
       key: "ArrowLeft",
     });
     expect(await screen.findByText(/"right":540/)).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse workspace tools" }));
     expect(await screen.findByText(/"right":24/)).toBeVisible();
   });
 });
@@ -287,34 +346,7 @@ function Harness({
   return (
     <CanvasWorkspaceShell
       surfaces={surfaces}
-      commandBar={
-        <div>
-          <button
-            type="button"
-            aria-expanded={surfaces.leftSurface === "SOURCE"}
-            aria-controls="workspace-source-surface"
-            onClick={(event) => surfaces.toggleLeft("SOURCE", event.currentTarget)}
-          >
-            Source
-          </button>
-          <button
-            type="button"
-            aria-expanded={surfaces.leftSurface === "OUTLINE"}
-            aria-controls="workspace-outline-surface"
-            onClick={(event) => surfaces.toggleLeft("OUTLINE", event.currentTarget)}
-          >
-            Outline
-          </button>
-          <button
-            type="button"
-            aria-expanded={surfaces.rightPanelOpen}
-            aria-controls="workspace-right-panel-content"
-            onClick={(event) => surfaces.toggleRightPanel(event.currentTarget)}
-          >
-            Tools
-          </button>
-        </div>
-      }
+      commandBar={<p>Command bar</p>}
       diagram={<MountedDiagram onMount={diagramMounts} />}
       diagramTools={<h2>Editable ER diagram</h2>}
       source={<input aria-label="Source draft probe" defaultValue="" />}
