@@ -424,10 +424,14 @@ describe("DBML source workspace", () => {
     const diagram = screen.getByRole("application", { name: "ER diagram canvas" });
     const initialParseCalls = parserClient.parseCalls;
     const initialLayoutReads = api.getLayoutInputs.length;
+    const commandBar = screen.getByTestId("workspace-command-bar");
+    expect(within(commandBar).queryByRole("button", { name: "Source" })).toBeNull();
+    expect(within(commandBar).queryByRole("button", { name: "Outline" })).toBeNull();
+    expect(within(commandBar).queryByRole("button", { name: "Tools" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Source" }));
     fireEvent.click(screen.getByRole("button", { name: "Outline" }));
-    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse workspace tools" }));
     fireEvent.click(screen.getByRole("button", { name: "Outline" }));
 
     expect(screen.getByRole("application", { name: "ER diagram canvas" })).toBe(diagram);
@@ -468,12 +472,20 @@ describe("DBML source workspace", () => {
     fireEvent.select(editor);
     expect(await screen.findByTestId("fake-diagram-selection")).toHaveTextContent("column");
 
-    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
-    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(screen.getByRole("button", { name: "Collapse workspace tools" }));
+    expect(screen.getByRole("button", { name: "Open workspace tools" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Select first diagram table" }));
     expect(revealSourceRange).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByTitle(/Selected table .*users/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Open workspace tools" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.queryByTitle(/Selected table .*users/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace tools" }));
+    expect(screen.getByText(/Selected table .*users/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Outline" }));
     const openSource = await screen.findByRole("button", {
       name: /Open source for table at line/,
@@ -504,7 +516,10 @@ describe("DBML source workspace", () => {
     renderWorkspace(api);
 
     expect(await screen.findByText("No valid diagram yet")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Open workspace tools" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute(
         "aria-expanded",

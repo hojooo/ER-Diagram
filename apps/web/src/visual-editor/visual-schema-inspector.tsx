@@ -119,9 +119,11 @@ export function VisualSchemaInspector({
           <h2 className="font-semibold text-white">{messages["inspector.title"]}</h2>
           <p className="mt-1 text-xs text-slate-400">{messages["visual.inspectorDescription"]}</p>
         </div>
-        <p className="text-xs font-semibold text-cyan-200" aria-live="polite">
-          {selectionLabel(graph, selection, messages)}
-        </p>
+        {selection ? (
+          <p className="text-xs font-semibold text-cyan-200" aria-live="polite">
+            {selectionLabel(graph, selection, messages)}
+          </p>
+        ) : null}
       </div>
 
       {partialProvenance ? (
@@ -229,60 +231,6 @@ export function VisualSchemaInspector({
       />
     </section>
   );
-}
-
-export function VisualInspectorRailSummary({
-  graph,
-  selectionStore,
-}: {
-  readonly graph: SchemaGraph | null;
-  readonly selectionStore: DiagramSelectionStore;
-}) {
-  const { messages } = useUiLocale();
-  const selection = useSyncExternalStore(
-    selectionStore.subscribe,
-    () => selectionStore.getState().selection,
-    () => null,
-  );
-  const label = graph ? selectionLabel(graph, selection, messages) : messages["visual.noSelection"];
-  const name = graph && selection ? selectionName(graph, selection) : null;
-
-  return (
-    <div
-      className="flex h-full min-h-0 flex-col items-center gap-2"
-      data-testid="workspace-rail-selection"
-      title={label}
-    >
-      <span className="sr-only" aria-live="polite">
-        {label}
-      </span>
-      <span className="rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[0.55rem] font-bold uppercase tracking-wide text-cyan-300">
-        {selection?.kind ?? "—"}
-      </span>
-      <span className="max-h-64 overflow-hidden text-ellipsis whitespace-nowrap [writing-mode:vertical-rl]">
-        {name ?? label}
-      </span>
-    </div>
-  );
-}
-
-function selectionName(
-  graph: SchemaGraph,
-  selection: NonNullable<ReturnType<DiagramSelectionStore["getState"]>["selection"]>,
-): string | null {
-  if (selection.kind === "table") {
-    const table = graph.tables.find((candidate) => candidate.key === selection.elementKey);
-    return table ? `${table.schemaName}.${table.name}` : null;
-  }
-  if (selection.kind === "column") {
-    const resolved = findColumn(graph, selection.elementKey);
-    return resolved ? `${resolved.table.name}.${resolved.column.name}` : null;
-  }
-  if (selection.kind === "reference") {
-    const reference = graph.references.find((candidate) => candidate.key === selection.elementKey);
-    return reference?.name ?? reference?.key ?? null;
-  }
-  return graph.groups.find((candidate) => candidate.key === selection.elementKey)?.name ?? null;
 }
 
 function CommandStatusPanel({
@@ -549,10 +497,9 @@ function collectPartialAffectedTables(
 
 function selectionLabel(
   graph: SchemaGraph,
-  selection: ReturnType<DiagramSelectionStore["getState"]>["selection"],
+  selection: NonNullable<ReturnType<DiagramSelectionStore["getState"]>["selection"]>,
   messages: UiMessages,
 ): string {
-  if (!selection) return messages["visual.noSelection"];
   if (selection.kind === "table") {
     const table = graph.tables.find((candidate) => candidate.key === selection.elementKey);
     return table

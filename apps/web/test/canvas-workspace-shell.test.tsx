@@ -22,6 +22,10 @@ describe("canvas workspace shell", () => {
     render(<Harness diagramMounts={diagramMounts} />);
 
     expect(screen.getByTestId("canvas-workspace-shell")).toBeVisible();
+    const commandBar = screen.getByTestId("workspace-command-bar");
+    expect(within(commandBar).queryByRole("button", { name: "Source" })).toBeNull();
+    expect(within(commandBar).queryByRole("button", { name: "Outline" })).toBeNull();
+    expect(within(commandBar).queryByRole("button", { name: "Tools" })).toBeNull();
     expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute(
       "aria-expanded",
       "false",
@@ -30,7 +34,14 @@ describe("canvas workspace shell", () => {
       "aria-expanded",
       "false",
     );
-    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Collapse workspace tools" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    const leftTools = screen.getByRole("complementary", { name: "Source and outline" });
+    expect(leftTools).toHaveClass("inset-y-0", "left-0");
+    expect(leftTools).toHaveStyle({ width: "56px" });
+    expect(screen.getByTestId("workspace-left-tool-rail")).toBeVisible();
     expect(document.getElementById("workspace-source-surface")).toHaveAttribute("inert");
     expect(document.getElementById("workspace-source-surface")).toHaveAttribute(
       "aria-hidden",
@@ -40,8 +51,10 @@ describe("canvas workspace shell", () => {
     expect(document.getElementById("workspace-right-panel-content")).not.toHaveAttribute("inert");
     const tools = screen.getByRole("complementary", { name: "Workspace tools" });
     expect(tools).toHaveClass("inset-y-0", "right-0");
+    expect(tools).toHaveStyle({ width: "512px" });
     expect(within(tools).getByText("Editable ER diagram")).toBeVisible();
     expect(within(tools).getByText("Inspector content")).toBeVisible();
+    expect(screen.queryByTestId("workspace-rail-selection")).toBeNull();
     expect(screen.getByTestId("workspace-diagram-tools")).toHaveClass(
       "max-h-[50%]",
       "overflow-y-auto",
@@ -53,6 +66,7 @@ describe("canvas workspace shell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Source" }));
     expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute("aria-expanded", "true");
+    expect(leftTools).toHaveStyle({ width: "512px" });
     expect(screen.getByRole("region", { name: "DBML source" })).not.toHaveAttribute("inert");
 
     fireEvent.click(screen.getByRole("button", { name: "Outline" }));
@@ -64,6 +78,8 @@ describe("canvas workspace shell", () => {
       "aria-expanded",
       "true",
     );
+    fireEvent.click(screen.getByRole("button", { name: "Outline" }));
+    expect(leftTools).toHaveStyle({ width: "56px" });
     expect(diagramMounts).toHaveBeenCalledTimes(1);
   });
 
@@ -84,22 +100,36 @@ describe("canvas workspace shell", () => {
     const { unmount } = render(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: "Source" }));
     expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Collapse workspace tools" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
 
     unmount();
     render(<Harness narrow />);
-    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Open workspace tools" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Source" }));
-    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    expect(screen.getByRole("dialog", { name: "Source and outline" })).toHaveAttribute(
+      "aria-modal",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace tools" }));
     expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute(
       "aria-expanded",
       "false",
     );
-    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Collapse workspace tools" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
     expect(screen.getByRole("dialog", { name: "Workspace tools" })).toHaveAttribute(
       "aria-modal",
       "true",
     );
+    expect(screen.queryByRole("separator", { name: "Resize workspace tools" })).toBeNull();
   });
 
   it("preserves source and inspector drafts while their mounted surfaces are off canvas", () => {
@@ -114,34 +144,72 @@ describe("canvas workspace shell", () => {
     fireEvent.change(screen.getByLabelText("Inspector draft probe"), {
       target: { value: "renamed_users" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse workspace tools" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Source" }));
     expect(screen.getByLabelText("Source draft probe")).toHaveValue("Table users");
-    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace tools" }));
     expect(screen.getByLabelText("Inspector draft probe")).toHaveValue("renamed_users");
   });
 
-  it("keeps a 56px rail and updates selection summary without reopening a collapsed panel", () => {
+  it("keeps only the compact toggle visible when the panel is collapsed", () => {
     render(<Harness />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse workspace tools" }));
     expect(screen.getByTestId("workspace-right-tool-dock")).toHaveAttribute(
       "data-panel-state",
       "collapsed",
     );
-    expect(screen.getByTestId("workspace-right-tool-dock")).toHaveClass("w-14");
+    expect(screen.getByTestId("workspace-right-tool-dock")).toHaveStyle({ width: "12px" });
     expect(document.getElementById("workspace-right-panel-content")).toHaveAttribute("inert");
+    expect(screen.getByRole("button", { name: "Open workspace tools" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.queryByTestId("workspace-rail-selection")).toBeNull();
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: "Select users table" }));
+  it("places a compact toggle before the panel and supports pointer and keyboard resizing", () => {
+    const { unmount } = render(<Harness />);
 
-    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByText("Table public.users")).toBeVisible();
+    const dock = screen.getByTestId("workspace-right-tool-dock");
+    const toggle = screen.getByRole("button", { name: "Collapse workspace tools" });
+    const resizeHandle = screen.getByRole("separator", { name: "Resize workspace tools" });
+
+    expect(toggle).toHaveClass("absolute", "left-0", "size-6");
+    expect(resizeHandle).toHaveAttribute("aria-valuemin", "360");
+    expect(resizeHandle).toHaveAttribute("aria-valuemax", "768");
+    expect(resizeHandle).toHaveAttribute("aria-valuenow", "512");
+
+    fireEvent.pointerDown(resizeHandle, { button: 0, clientX: 768, pointerId: 7 });
+    fireEvent.pointerMove(resizeHandle, { clientX: 688, pointerId: 7 });
+    fireEvent.pointerUp(resizeHandle, { clientX: 688, pointerId: 7 });
+
+    expect(dock).toHaveStyle({ width: "592px" });
+    expect(resizeHandle).toHaveAttribute("aria-valuenow", "592");
+
+    fireEvent.keyDown(resizeHandle, { key: "ArrowRight" });
+    expect(dock).toHaveStyle({ width: "576px" });
+    fireEvent.keyDown(resizeHandle, { key: "Home" });
+    expect(dock).toHaveStyle({ width: "360px" });
+    fireEvent.keyDown(resizeHandle, { key: "End" });
+    expect(dock).toHaveStyle({ width: "768px" });
+
+    fireEvent.click(toggle);
+    expect(dock).toHaveStyle({ width: "12px" });
+    expect(screen.queryByRole("separator", { name: "Resize workspace tools" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace tools" }));
+    expect(dock).toHaveStyle({ width: "768px" });
+
+    unmount();
+    render(<Harness />);
+    expect(screen.getByTestId("workspace-right-tool-dock")).toHaveStyle({ width: "512px" });
   });
 
   it("closes the narrow dialog with Escape and returns focus to its trigger", () => {
     render(<Harness narrow />);
-    const trigger = screen.getByRole("button", { name: "Tools" });
+    const trigger = screen.getByRole("button", { name: "Open workspace tools" });
     fireEvent.click(trigger);
     const dialog = screen.getByRole("dialog", { name: "Workspace tools" });
 
@@ -151,7 +219,7 @@ describe("canvas workspace shell", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("returns focus to the rail when the initially open desktop panel has no trigger", () => {
+  it("returns focus to the compact toggle when the initially open desktop panel has no trigger", () => {
     render(<Harness />);
     const dock = screen.getByRole("complementary", { name: "Workspace tools" });
     const inspectorField = within(dock).getByLabelText("Inspector draft probe");
@@ -168,12 +236,15 @@ describe("canvas workspace shell", () => {
 
     fireEvent.keyDown(screen.getByLabelText("Inspector draft probe"), { key: "Escape" });
 
-    expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Collapse workspace tools" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
   });
 
   it("traps keyboard focus inside an open narrow tool sheet", () => {
     render(<Harness narrow />);
-    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace tools" }));
     const dialog = screen.getByRole("dialog", { name: "Workspace tools" });
     const close = within(dialog).getByRole("button", { name: "Collapse workspace tools" });
     const lastField = within(dialog).getByLabelText("Inspector draft probe");
@@ -187,6 +258,26 @@ describe("canvas workspace shell", () => {
     expect(close).toHaveFocus();
   });
 
+  it("traps focus in the narrow left sheet and returns it to the active rail tab", () => {
+    render(<Harness narrow />);
+    const sourceTrigger = screen.getByRole("button", { name: "Source" });
+    fireEvent.click(sourceTrigger);
+    const dialog = screen.getByRole("dialog", { name: "Source and outline" });
+    const sourceField = within(dialog).getByLabelText("Source draft probe");
+
+    sourceTrigger.focus();
+    fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+    expect(sourceField).toHaveFocus();
+
+    sourceField.focus();
+    fireEvent.keyDown(dialog, { key: "Tab" });
+    expect(sourceTrigger).toHaveFocus();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(sourceTrigger).toHaveFocus();
+    expect(sourceTrigger).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("opens source as the explicit recovery exception", () => {
     render(<Harness initialSourceOpen />);
 
@@ -194,7 +285,7 @@ describe("canvas workspace shell", () => {
     expect(screen.getByRole("region", { name: "DBML source" })).not.toHaveAttribute("inert");
   });
 
-  it("uses the opened panel or collapsed rail width for the visible safe-area inset", async () => {
+  it("uses the opened panel or compact toggle reserve for the visible safe-area inset", async () => {
     vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (
       this: Element,
     ) {
@@ -203,7 +294,8 @@ describe("canvas workspace shell", () => {
       }
       if (this instanceof HTMLElement && this.dataset.testid === "workspace-right-tool-dock") {
         const expanded = this.dataset.panelState === "open";
-        return testRect(0, 720, expanded ? 512 : 56, expanded ? 768 : 1_224);
+        const width = expanded ? Number.parseFloat(this.style.width) || 512 : 12;
+        return testRect(0, 720, width, 1_280 - width);
       }
       if (this instanceof HTMLElement && this.classList.contains("top-3")) {
         return testRect(12, 70, 1_120);
@@ -219,9 +311,20 @@ describe("canvas workspace shell", () => {
     expect(await screen.findByText(/"top":82/)).toBeVisible();
     expect(screen.getByText(/"right":524/)).toBeVisible();
     expect(screen.getByText(/"bottom":72/)).toBeVisible();
+    expect(screen.getByText(/"left":68/)).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
-    expect(await screen.findByText(/"right":68/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Source" }));
+    expect(await screen.findByText(/"left":524/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Source" }));
+    expect(await screen.findByText(/"left":68/)).toBeVisible();
+
+    fireEvent.keyDown(screen.getByRole("separator", { name: "Resize workspace tools" }), {
+      key: "ArrowLeft",
+    });
+    expect(await screen.findByText(/"right":540/)).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse workspace tools" }));
+    expect(await screen.findByText(/"right":24/)).toBeVisible();
   });
 });
 
@@ -239,47 +342,12 @@ function Harness({
     initialRightPanelOpen: true,
     isNarrow: narrow,
   });
-  const [selectionSummary, setSelectionSummary] = useState("No selection");
   const [insets, setInsets] = useState({ top: 0, right: 0, bottom: 0, left: 0 });
   return (
     <CanvasWorkspaceShell
       surfaces={surfaces}
-      commandBar={
-        <div>
-          <button
-            type="button"
-            aria-expanded={surfaces.leftSurface === "SOURCE"}
-            aria-controls="workspace-source-surface"
-            onClick={(event) => surfaces.toggleLeft("SOURCE", event.currentTarget)}
-          >
-            Source
-          </button>
-          <button
-            type="button"
-            aria-expanded={surfaces.leftSurface === "OUTLINE"}
-            aria-controls="workspace-outline-surface"
-            onClick={(event) => surfaces.toggleLeft("OUTLINE", event.currentTarget)}
-          >
-            Outline
-          </button>
-          <button
-            type="button"
-            aria-expanded={surfaces.rightPanelOpen}
-            aria-controls="workspace-right-panel-content"
-            onClick={(event) => surfaces.toggleRightPanel(event.currentTarget)}
-          >
-            Tools
-          </button>
-        </div>
-      }
-      diagram={
-        <>
-          <MountedDiagram onMount={diagramMounts} />
-          <button type="button" onClick={() => setSelectionSummary("Table public.users")}>
-            Select users table
-          </button>
-        </>
-      }
+      commandBar={<p>Command bar</p>}
+      diagram={<MountedDiagram onMount={diagramMounts} />}
       diagramTools={<h2>Editable ER diagram</h2>}
       source={<input aria-label="Source draft probe" defaultValue="" />}
       outline={<p>Outline content</p>}
@@ -295,7 +363,6 @@ function Harness({
           />
         </div>
       }
-      rightRailSummary={<p>{selectionSummary}</p>}
       status={<output>Insets {JSON.stringify(insets)}</output>}
       onViewportInsetsChange={setInsets}
     />

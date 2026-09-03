@@ -69,9 +69,9 @@ import {
   type SchemaHistorySessionController,
   type SchemaHistorySessionSnapshot,
 } from "../history/history-session.js";
-import type { ProjectApi } from "../projects/project-api.js";
 import type { UiMessages } from "../localization/messages.js";
 import { LanguageSelect, useUiLocale } from "../localization/ui-locale.js";
+import type { ProjectApi } from "../projects/project-api.js";
 import { dialectLabel, ValidityBadge } from "../projects/project-home-page.js";
 import { projectQueryKeys } from "../projects/project-queries.js";
 import { useRuntimeResourceLimits } from "../runtime-config.js";
@@ -80,10 +80,7 @@ import {
   type VisualCommandSessionController,
   type VisualCommandSessionSnapshot,
 } from "../visual-editor/visual-command-session.js";
-import {
-  VisualInspectorRailSummary,
-  VisualSchemaInspector,
-} from "../visual-editor/visual-schema-inspector.js";
+import { VisualSchemaInspector } from "../visual-editor/visual-schema-inspector.js";
 import {
   CanvasWorkspaceShell,
   useCanvasWorkspaceSurfaces,
@@ -280,6 +277,10 @@ export function ProjectSourceWorkspace({
     setInitialDiagramReady(true);
     setSourceEditorLoadReady(true);
   }, [sourceEditorRecoveryRequired]);
+
+  useEffect(() => {
+    if (surfaces.leftSurface === "SOURCE") setSourceEditorLoadReady(true);
+  }, [surfaces.leftSurface]);
 
   useEffect(() => {
     if (
@@ -1087,36 +1088,6 @@ export function ProjectSourceWorkspace({
             </div>
             <ValidityBadge validity={serverState.currentRevision.validity} />
             <div className="h-6 w-px bg-slate-700" aria-hidden="true" />
-            <button
-              className={commandBarButtonClass}
-              type="button"
-              aria-expanded={surfaces.leftSurface === "SOURCE"}
-              aria-controls="workspace-source-surface"
-              onClick={(event) => {
-                setSourceEditorLoadReady(true);
-                surfaces.toggleLeft("SOURCE", event.currentTarget);
-              }}
-            >
-              {messages["workspace.source"]}
-            </button>
-            <button
-              className={commandBarButtonClass}
-              type="button"
-              aria-expanded={surfaces.leftSurface === "OUTLINE"}
-              aria-controls="workspace-outline-surface"
-              onClick={(event) => surfaces.toggleLeft("OUTLINE", event.currentTarget)}
-            >
-              {messages["workspace.outline"]}
-            </button>
-            <button
-              className={commandBarButtonClass}
-              type="button"
-              aria-expanded={surfaces.rightPanelOpen}
-              aria-controls="workspace-right-panel-content"
-              onClick={(event) => surfaces.toggleRightPanel(event.currentTarget)}
-            >
-              {messages["workspace.tools"]}
-            </button>
             {historySession && historySnapshot ? (
               <SchemaHistoryControls
                 session={historySession}
@@ -1341,9 +1312,6 @@ export function ProjectSourceWorkspace({
               <p className="mt-2">{messages["source.inspectorEmpty"]}</p>
             </div>
           )
-        }
-        rightRailSummary={
-          <VisualInspectorRailSummary graph={activeGraph} selectionStore={selectionStore} />
         }
         status={
           <div className="flex flex-wrap items-center justify-center gap-2 px-3 py-2 text-xs sm:justify-start">

@@ -8,7 +8,8 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useEffect, useState } from "react";
 import { createMemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
+import { App, createAppRoutes } from "../src/App.js";
+import { englishMessages, koreanMessages } from "../src/localization/messages.js";
 import {
   DEFAULT_UI_LOCALE,
   LanguageSelect,
@@ -16,8 +17,6 @@ import {
   UiLocaleProvider,
   useUiLocale,
 } from "../src/localization/ui-locale.js";
-import { englishMessages, koreanMessages } from "../src/localization/messages.js";
-import { App, createAppRoutes } from "../src/App.js";
 import { createHttpProjectApi } from "../src/projects/project-api.js";
 
 afterEach(() => {
@@ -159,9 +158,9 @@ describe("Korean-first Web localization", () => {
     expect(englishMessages["diagram.canvas"]).toBe("ER diagram canvas");
     expect(englishMessages["source.editorAria"]).toBe("DBML source editor");
     expect(englishMessages["outline.compilerInformationLocations"](2)).toBe("2 source locations");
-    expect(englishMessages["workspace.tools"]).toBe("Tools");
+    expect(englishMessages["workspace.leftToolsPanel"]).toBe("Source and outline");
     expect(englishMessages["workspace.toolsPanel"]).toBe("Workspace tools");
-    expect(koreanMessages["workspace.tools"]).toBe("도구");
+    expect(koreanMessages["workspace.leftToolsPanel"]).toBe("소스와 개요");
     expect(koreanMessages["workspace.toolsPanel"]).toBe("작업 공간 도구");
 
     const korean = render(

@@ -53,7 +53,7 @@ describe("workspace overlay system", () => {
     expect(results).not.toHaveClass("absolute");
   });
 
-  it("contains panel pointer and wheel events instead of forwarding them to the canvas", () => {
+  it("contains dock pointer and wheel events instead of forwarding them to the canvas", () => {
     const onWheel = vi.fn();
     const onPointerDown = vi.fn();
 
@@ -63,9 +63,13 @@ describe("workspace overlay system", () => {
       </div>,
     );
 
-    const dock = screen.getByTestId("workspace-right-tool-dock");
-    fireEvent.wheel(dock);
-    fireEvent.pointerDown(dock);
+    for (const dock of [
+      screen.getByTestId("workspace-left-tool-dock"),
+      screen.getByTestId("workspace-right-tool-dock"),
+    ]) {
+      fireEvent.wheel(dock);
+      fireEvent.pointerDown(dock);
+    }
 
     expect(onWheel).not.toHaveBeenCalled();
     expect(onPointerDown).not.toHaveBeenCalled();
@@ -83,7 +87,6 @@ function OverlayHarness() {
       source={<p>Source</p>}
       outline={<p>Outline</p>}
       inspector={<p>Inspector</p>}
-      rightRailSummary={<p>No selection</p>}
       status={<p>Status</p>}
     />
   );

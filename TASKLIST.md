@@ -331,16 +331,20 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - Gate A~F command wiring과 outbound·log redaction evidence를 fail-closed로 고정한다.
   - 검증: `pnpm test:p0-gate`
 - [x] `M4-012` canvas-first Schema Workspace shell
-  - Diagram Canvas를 workspace 전체 viewport의 full-bleed base layer로 유지하고 command bar, source, outline,
-    inspector, history와 status를 overlay surface로 재구성한다.
+  - Diagram Canvas를 workspace 전체 viewport의 full-bleed base layer로 유지하고 command bar, 좌우 tool dock,
+    history와 status를 overlay surface로 재구성한다.
   - Overlay open/close가 diagram remount, implicit ELK, viewport·selection·saved position 또는 schema/layout
     revision 변경을 만들지 않도록 한다.
   - 검증: `pnpm --filter @er-diagram/web test test/canvas-workspace-shell.test.tsx`
 - [x] `M4-013` workspace overlay interaction·responsive system
-  - Full-height right tool dock에 DiagramView·검색·LOD·layout과 Visual Inspector를 통합하고 접힌 56px rail에서도
-    현재 selection summary와 명시적 reopen action을 유지한다.
+  - 왼쪽 full-height rail에 Source·Outline을 통합하고 command bar에서는 Source·Outline·Tools toggle을 제거한다.
+    동일 tab 재선택은 panel을 접고, 다른 tab은 mount된 surface를 교체하며, 좁은 화면에서는 단일 dialog로 연다.
+  - Full-height right tool dock에 DiagramView·검색·LOD·layout과 Visual Inspector를 통합하고 별도 selection summary
+    rail 없이 panel-edge toggle만으로 명시적 reopen action을 제공한다.
+  - 넓은 화면에서는 panel 앞쪽의 작은 toggle과 accessible separator로 폭을 360–768px 범위에서 조절하고,
+    조절값은 route session에만 유지하며 현재 폭을 diagram safe area에 반영한다.
   - 넓은 valid workspace 기본 open, 좁은 화면 기본 collapsed·full-screen dialog, 독립 scroll, pointer boundary,
-    focus trap·Escape·trigger focus return과 panel/rail 기준 safe area를 보장한다.
+    focus trap·Escape·trigger focus return과 panel/toggle 기준 safe area를 보장한다.
   - 검증: `pnpm --filter @er-diagram/web test test/workspace-overlays.test.tsx`
 - [ ] `M4-014` canvas-first core-flow visual acceptance
   - Source·visual edit, diagnostics, history, layout, import/export 진입·복귀가 같은 diagram context를 보존하고
