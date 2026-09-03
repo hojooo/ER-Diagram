@@ -43,6 +43,7 @@ describe("canvas workspace shell", () => {
     expect(tools).toHaveStyle({ width: "512px" });
     expect(within(tools).getByText("Editable ER diagram")).toBeVisible();
     expect(within(tools).getByText("Inspector content")).toBeVisible();
+    expect(screen.queryByTestId("workspace-rail-selection")).toBeNull();
     expect(screen.getByTestId("workspace-diagram-tools")).toHaveClass(
       "max-h-[50%]",
       "overflow-y-auto",
@@ -124,7 +125,7 @@ describe("canvas workspace shell", () => {
     expect(screen.getByLabelText("Inspector draft probe")).toHaveValue("renamed_users");
   });
 
-  it("keeps a 56px rail and updates selection summary without reopening a collapsed panel", () => {
+  it("keeps only the compact toggle visible when the panel is collapsed", () => {
     render(<Harness />);
 
     fireEvent.click(screen.getByRole("button", { name: "Tools" }));
@@ -132,13 +133,10 @@ describe("canvas workspace shell", () => {
       "data-panel-state",
       "collapsed",
     );
-    expect(screen.getByTestId("workspace-right-tool-dock")).toHaveStyle({ width: "56px" });
+    expect(screen.getByTestId("workspace-right-tool-dock")).toHaveStyle({ width: "12px" });
     expect(document.getElementById("workspace-right-panel-content")).toHaveAttribute("inert");
-
-    fireEvent.click(screen.getByRole("button", { name: "Select users table" }));
-
     expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByText("Table public.users")).toBeVisible();
+    expect(screen.queryByTestId("workspace-rail-selection")).toBeNull();
   });
 
   it("places a compact toggle before the panel and supports pointer and keyboard resizing", () => {
@@ -168,7 +166,7 @@ describe("canvas workspace shell", () => {
     expect(dock).toHaveStyle({ width: "768px" });
 
     fireEvent.click(toggle);
-    expect(dock).toHaveStyle({ width: "56px" });
+    expect(dock).toHaveStyle({ width: "12px" });
     expect(screen.queryByRole("separator", { name: "Resize workspace tools" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Open workspace tools" }));
@@ -191,7 +189,7 @@ describe("canvas workspace shell", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("returns focus to the rail when the initially open desktop panel has no trigger", () => {
+  it("returns focus to the compact toggle when the initially open desktop panel has no trigger", () => {
     render(<Harness />);
     const dock = screen.getByRole("complementary", { name: "Workspace tools" });
     const inspectorField = within(dock).getByLabelText("Inspector draft probe");
@@ -234,7 +232,7 @@ describe("canvas workspace shell", () => {
     expect(screen.getByRole("region", { name: "DBML source" })).not.toHaveAttribute("inert");
   });
 
-  it("uses the opened panel or collapsed rail width for the visible safe-area inset", async () => {
+  it("uses the opened panel or compact toggle reserve for the visible safe-area inset", async () => {
     vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (
       this: Element,
     ) {
@@ -243,7 +241,7 @@ describe("canvas workspace shell", () => {
       }
       if (this instanceof HTMLElement && this.dataset.testid === "workspace-right-tool-dock") {
         const expanded = this.dataset.panelState === "open";
-        const width = expanded ? Number.parseFloat(this.style.width) || 512 : 56;
+        const width = expanded ? Number.parseFloat(this.style.width) || 512 : 12;
         return testRect(0, 720, width, 1_280 - width);
       }
       if (this instanceof HTMLElement && this.classList.contains("top-3")) {
@@ -267,7 +265,7 @@ describe("canvas workspace shell", () => {
     expect(await screen.findByText(/"right":540/)).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Tools" }));
-    expect(await screen.findByText(/"right":68/)).toBeVisible();
+    expect(await screen.findByText(/"right":24/)).toBeVisible();
   });
 });
 
@@ -285,7 +283,6 @@ function Harness({
     initialRightPanelOpen: true,
     isNarrow: narrow,
   });
-  const [selectionSummary, setSelectionSummary] = useState("No selection");
   const [insets, setInsets] = useState({ top: 0, right: 0, bottom: 0, left: 0 });
   return (
     <CanvasWorkspaceShell
@@ -318,14 +315,7 @@ function Harness({
           </button>
         </div>
       }
-      diagram={
-        <>
-          <MountedDiagram onMount={diagramMounts} />
-          <button type="button" onClick={() => setSelectionSummary("Table public.users")}>
-            Select users table
-          </button>
-        </>
-      }
+      diagram={<MountedDiagram onMount={diagramMounts} />}
       diagramTools={<h2>Editable ER diagram</h2>}
       source={<input aria-label="Source draft probe" defaultValue="" />}
       outline={<p>Outline content</p>}
@@ -341,7 +331,6 @@ function Harness({
           />
         </div>
       }
-      rightRailSummary={<p>{selectionSummary}</p>}
       status={<output>Insets {JSON.stringify(insets)}</output>}
       onViewportInsetsChange={setInsets}
     />

@@ -80,10 +80,7 @@ import {
   type VisualCommandSessionController,
   type VisualCommandSessionSnapshot,
 } from "../visual-editor/visual-command-session.js";
-import {
-  VisualInspectorRailSummary,
-  VisualSchemaInspector,
-} from "../visual-editor/visual-schema-inspector.js";
+import { VisualSchemaInspector } from "../visual-editor/visual-schema-inspector.js";
 import {
   CanvasWorkspaceShell,
   useCanvasWorkspaceSurfaces,
@@ -1341,9 +1338,6 @@ export function ProjectSourceWorkspace({
               <p className="mt-2">{messages["source.inspectorEmpty"]}</p>
             </div>
           )
-        }
-        rightRailSummary={
-          <VisualInspectorRailSummary graph={activeGraph} selectionStore={selectionStore} />
         }
         status={
           <div className="flex flex-wrap items-center justify-center gap-2 px-3 py-2 text-xs sm:justify-start">

@@ -473,7 +473,9 @@ describe("DBML source workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Select first diagram table" }));
     expect(revealSourceRange).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Tools" })).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByTitle(/Selected table .*users/)).toBeVisible();
+    expect(screen.queryByTitle(/Selected table .*users/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    expect(screen.getByText(/Selected table .*users/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Outline" }));
     const openSource = await screen.findByRole("button", {
       name: /Open source for table at line/,

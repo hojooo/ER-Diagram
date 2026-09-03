@@ -273,7 +273,7 @@ describe("accessible visual schema inspector", () => {
     const store = createDiagramSelectionStore();
     const commandSession = fakeCommandSession();
     renderInspector(store, commandSession.controller);
-    expect(screen.getByText("No diagram element selected")).toBeTruthy();
+    expect(screen.queryByText("No diagram element selected")).toBeNull();
 
     act(() => store.getState().setSelection(selection("table", posts.key, [posts.key])));
     expect(screen.getByText("Selected table public.posts")).toBeTruthy();

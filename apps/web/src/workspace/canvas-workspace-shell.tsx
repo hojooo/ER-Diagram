@@ -17,7 +17,7 @@ import { useUiLocale } from "../localization/ui-locale.js";
 
 export type WorkspaceLeftSurface = "SOURCE" | "OUTLINE" | null;
 
-const RIGHT_RAIL_WIDTH_PX = 56;
+const COLLAPSED_RIGHT_PANEL_WIDTH_PX = 12;
 const DEFAULT_RIGHT_PANEL_WIDTH_PX = 512;
 const MIN_RIGHT_PANEL_WIDTH_PX = 360;
 const MAX_RIGHT_PANEL_WIDTH_PX = 768;
@@ -157,7 +157,6 @@ export function CanvasWorkspaceShell({
   source,
   outline,
   inspector,
-  rightRailSummary,
   status,
   alerts,
   onViewportInsetsChange,
@@ -169,7 +168,6 @@ export function CanvasWorkspaceShell({
   readonly source: ReactNode;
   readonly outline: ReactNode;
   readonly inspector: ReactNode;
-  readonly rightRailSummary: ReactNode;
   readonly status: ReactNode;
   readonly alerts?: ReactNode;
   readonly onViewportInsetsChange?: (insets: DiagramViewportInsets) => void;
@@ -246,12 +244,14 @@ export function CanvasWorkspaceShell({
   const outlineOpen = surfaces.leftSurface === "OUTLINE";
   const leftOpen = sourceOpen || outlineOpen;
   const reservedRightWidth =
-    !surfaces.isNarrow && surfaces.rightPanelOpen ? rightPanelWidth + 12 : RIGHT_RAIL_WIDTH_PX + 12;
+    !surfaces.isNarrow && surfaces.rightPanelOpen
+      ? rightPanelWidth + 12
+      : COLLAPSED_RIGHT_PANEL_WIDTH_PX + 12;
   const dockWidth = surfaces.rightPanelOpen
     ? surfaces.isNarrow
       ? "100%"
       : `${rightPanelWidth}px`
-    : `${RIGHT_RAIL_WIDTH_PX}px`;
+    : `${COLLAPSED_RIGHT_PANEL_WIDTH_PX}px`;
 
   return (
     <div
@@ -391,32 +391,27 @@ export function CanvasWorkspaceShell({
             }}
           />
         ) : null}
-        <div className="flex h-full w-full min-w-0 flex-row-reverse overflow-hidden">
-          <div className="flex w-14 shrink-0 flex-col items-center gap-3 border-l border-slate-700/80 bg-slate-950 px-2 py-3">
-            <div className="min-h-0 flex-1 overflow-hidden text-xs text-slate-300">
-              {rightRailSummary}
-            </div>
-          </div>
-          <div
-            id="workspace-right-panel-content"
-            aria-hidden={!surfaces.rightPanelOpen}
-            inert={!surfaces.rightPanelOpen}
-            className={`min-w-0 flex-1 ${surfaces.rightPanelOpen ? "visible" : "invisible"}`}
-          >
-            <div className="flex h-full min-h-0 flex-col">
-              <section
-                className="flex max-h-[50%] min-h-0 shrink-0 flex-col overflow-y-auto border-b border-slate-700"
-                aria-label={messages["diagram.editable"]}
-                data-testid="workspace-diagram-tools"
-              >
-                {diagramTools}
-              </section>
-              <div
-                className="min-h-0 flex-1 overflow-y-auto"
-                data-testid="workspace-inspector-scroll"
-              >
-                {inspector}
-              </div>
+        <div
+          id="workspace-right-panel-content"
+          aria-hidden={!surfaces.rightPanelOpen}
+          inert={!surfaces.rightPanelOpen}
+          className={`h-full w-full min-w-0 overflow-hidden ${
+            surfaces.rightPanelOpen ? "visible" : "invisible"
+          }`}
+        >
+          <div className="flex h-full min-h-0 flex-col">
+            <section
+              className="flex max-h-[50%] min-h-0 shrink-0 flex-col overflow-y-auto border-b border-slate-700"
+              aria-label={messages["diagram.editable"]}
+              data-testid="workspace-diagram-tools"
+            >
+              {diagramTools}
+            </section>
+            <div
+              className="min-h-0 flex-1 overflow-y-auto"
+              data-testid="workspace-inspector-scroll"
+            >
+              {inspector}
             </div>
           </div>
         </div>

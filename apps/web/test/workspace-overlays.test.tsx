@@ -83,7 +83,6 @@ function OverlayHarness() {
       source={<p>Source</p>}
       outline={<p>Outline</p>}
       inspector={<p>Inspector</p>}
-      rightRailSummary={<p>No selection</p>}
       status={<p>Status</p>}
     />
   );

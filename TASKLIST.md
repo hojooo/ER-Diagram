@@ -337,12 +337,12 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
     revision 변경을 만들지 않도록 한다.
   - 검증: `pnpm --filter @er-diagram/web test test/canvas-workspace-shell.test.tsx`
 - [x] `M4-013` workspace overlay interaction·responsive system
-  - Full-height right tool dock에 DiagramView·검색·LOD·layout과 Visual Inspector를 통합하고 접힌 56px rail에서도
-    현재 selection summary와 명시적 reopen action을 유지한다.
+  - Full-height right tool dock에 DiagramView·검색·LOD·layout과 Visual Inspector를 통합하고 별도 selection summary
+    rail 없이 panel-edge toggle만으로 명시적 reopen action을 제공한다.
   - 넓은 화면에서는 panel 앞쪽의 작은 toggle과 accessible separator로 폭을 360–768px 범위에서 조절하고,
     조절값은 route session에만 유지하며 현재 폭을 diagram safe area에 반영한다.
   - 넓은 valid workspace 기본 open, 좁은 화면 기본 collapsed·full-screen dialog, 독립 scroll, pointer boundary,
-    focus trap·Escape·trigger focus return과 panel/rail 기준 safe area를 보장한다.
+    focus trap·Escape·trigger focus return과 panel/toggle 기준 safe area를 보장한다.
   - 검증: `pnpm --filter @er-diagram/web test test/workspace-overlays.test.tsx`
 - [ ] `M4-014` canvas-first core-flow visual acceptance
   - Source·visual edit, diagnostics, history, layout, import/export 진입·복귀가 같은 diagram context를 보존하고
