@@ -1075,18 +1075,21 @@ export function ProjectSourceWorkspace({
         surfaces={surfaces}
         onViewportInsetsChange={setViewportInsets}
         commandBar={
-          <div className="flex max-w-[calc(100vw-1.5rem)] items-center gap-2 overflow-x-auto px-3 py-2 text-sm sm:max-w-[calc(100vw-2.5rem)] sm:px-4">
+          <div className="flex w-full min-w-0 max-w-[calc(100vw-1.5rem)] flex-wrap items-center gap-2 px-3 py-2 text-sm [overflow-wrap:anywhere] sm:max-w-[calc(100vw-2.5rem)] sm:px-4">
             <Link className={commandBarButtonClass} to="/">
               {messages["workspace.backToProjects"]}
             </Link>
-            <div className="min-w-0 px-1 sm:px-2">
-              <p className="truncate text-[0.65rem] font-bold uppercase tracking-[0.14em] text-cyan-300">
+            <div className="min-w-0 max-w-full basis-48 px-1 sm:px-2">
+              <p className="min-w-0 whitespace-normal break-words text-[0.65rem] font-bold uppercase tracking-[0.14em] text-cyan-300 [overflow-wrap:anywhere]">
                 {messages["workspace.revisionSummary"](
                   dialectLabel(serverState.project.primaryDialect),
                   serverState.project.schemaRevisionNo,
                 )}
               </p>
-              <h1 id="workspace-heading" className="truncate font-semibold text-white">
+              <h1
+                id="workspace-heading"
+                className="min-w-0 whitespace-normal break-words font-semibold text-white [overflow-wrap:anywhere]"
+              >
                 {serverState.project.name}
               </h1>
             </div>
@@ -1182,13 +1185,13 @@ export function ProjectSourceWorkspace({
           />
         }
         source={
-          <div className="flex min-h-full flex-col">
-            <div className="flex flex-col gap-3 border-b border-slate-700 pb-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">
+          <div className="flex min-h-full min-w-0 flex-col">
+            <div className="flex min-w-0 flex-col gap-3 border-b border-slate-700 pb-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="min-w-0 break-words text-xs font-bold uppercase tracking-[0.16em] text-cyan-300 [overflow-wrap:anywhere]">
                   {messages["source.canonicalTitle"]}
                 </p>
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 min-w-0 break-words text-xs text-slate-400 [overflow-wrap:anywhere]">
                   {messages["source.autosaveDescription"]}
                 </p>
               </div>
@@ -1232,7 +1235,7 @@ export function ProjectSourceWorkspace({
                 </div>
               )}
             </div>
-            <section className="mt-4 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <section className="mt-4 min-w-0 break-words rounded-xl border border-slate-800 bg-slate-900/70 p-4 [overflow-wrap:anywhere]">
               <h2 className="font-semibold text-white">{messages["source.draftStatus"]}</h2>
               <dl className="mt-4 grid gap-3 text-sm">
                 <DetailRow
@@ -1269,7 +1272,7 @@ export function ProjectSourceWorkspace({
           </div>
         }
         outline={
-          <div className="flex min-h-full flex-col gap-4">
+          <div className="flex min-h-full min-w-0 flex-col gap-4 break-words [overflow-wrap:anywhere]">
             {activeGraph && visibility ? (
               <SchemaOutline
                 graph={activeGraph}
@@ -1311,16 +1314,16 @@ export function ProjectSourceWorkspace({
               onReloadLayouts={() => void handleReloadLayout()}
             />
           ) : (
-            <div className="p-2 text-sm text-slate-300">
+            <div className="min-w-0 break-words p-2 text-sm text-slate-300 [overflow-wrap:anywhere]">
               <h2 className="font-semibold text-white">{messages["inspector.title"]}</h2>
               <p className="mt-2">{messages["source.inspectorEmpty"]}</p>
             </div>
           )
         }
         status={
-          <div className="flex flex-wrap items-center justify-center gap-2 px-3 py-2 text-xs sm:justify-start">
+          <div className="flex min-w-0 flex-wrap items-center justify-center gap-2 px-3 py-2 text-xs [overflow-wrap:anywhere] sm:justify-start">
             <span
-              className="rounded-full border border-slate-700 px-2.5 py-1 text-slate-200"
+              className="max-w-full whitespace-normal break-words rounded-full border border-slate-700 px-2.5 py-1 text-center text-slate-200 [overflow-wrap:anywhere]"
               data-testid="persistence-status"
             >
               {messages["source.statusSource"](
@@ -1328,21 +1331,21 @@ export function ProjectSourceWorkspace({
               )}
             </span>
             <span
-              className="rounded-full border border-slate-700 px-2.5 py-1 text-slate-200"
+              className="max-w-full whitespace-normal break-words rounded-full border border-slate-700 px-2.5 py-1 text-center text-slate-200 [overflow-wrap:anywhere]"
               data-testid="validation-status"
             >
               {messages["source.statusSchema"](
                 validationLabel(sessionSnapshot.validation, messages),
               )}
             </span>
-            <span className="text-slate-400">
+            <span className="min-w-0 break-words text-slate-400 [overflow-wrap:anywhere]">
               {messages["source.statusRevision"](
                 sessionSnapshot.expectedSchemaRevisionNo,
                 viewLabel,
               )}
             </span>
             <button
-              className="min-h-9 rounded-lg border border-slate-600 px-3 font-semibold text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-h-9 max-w-full whitespace-normal break-words rounded-lg border border-slate-600 px-3 text-center font-semibold text-slate-100 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               disabled={sessionSnapshot.persistence === "CONFLICT"}
               onClick={() => sessionRef.current?.flush()}
@@ -1352,7 +1355,7 @@ export function ProjectSourceWorkspace({
           </div>
         }
         alerts={
-          <div className="max-h-[45vh] space-y-3 overflow-auto">
+          <div className="min-w-0 max-h-[45vh] space-y-3 overflow-auto break-words [overflow-wrap:anywhere]">
             <SessionRecoveryPanel
               snapshot={sessionSnapshot}
               session={sessionRef.current}
@@ -1378,7 +1381,9 @@ export function ProjectSourceWorkspace({
                 className="rounded-2xl border border-amber-300/50 bg-amber-950/90 p-4 text-sm text-amber-100"
                 role="status"
               >
-                <p>{messages["source.hiddenByView"](hiddenSourceSelection.viewLabel)}</p>
+                <p className="min-w-0 break-words [overflow-wrap:anywhere]">
+                  {messages["source.hiddenByView"](hiddenSourceSelection.viewLabel)}
+                </p>
                 <button
                   className="mt-3 min-h-10 rounded-lg border border-amber-200 px-3 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200"
                   type="button"
@@ -1717,9 +1722,12 @@ function LayoutToolbar({
     layoutView.status === "ERROR" ||
     layoutConflict !== null;
   return (
-    <div className="border-b border-slate-700 bg-slate-950/50 px-4 py-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs font-semibold text-slate-300" aria-live="polite">
+    <div className="min-w-0 break-words border-b border-slate-700 bg-slate-950/50 px-4 py-3 [overflow-wrap:anywhere]">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <p
+          className="min-w-0 break-words text-xs font-semibold text-slate-300 [overflow-wrap:anywhere]"
+          aria-live="polite"
+        >
           {layoutRequest?.mode === "PREVIEW"
             ? layoutPreview
               ? messages["layout.previewReady"]
@@ -1779,7 +1787,7 @@ function LayoutToolbar({
         </p>
       ) : null}
       {layoutView?.error?.correlationId ? (
-        <p className="mt-2 text-xs text-red-200">
+        <p className="mt-2 break-all text-xs text-red-200">
           {messages["error.correlationId"](layoutView.error.correlationId)}
         </p>
       ) : null}
@@ -1967,7 +1975,10 @@ function SessionRecoveryPanel({
 
   if (snapshot.persistence === "ERROR" || snapshot.validation === "ERROR") {
     return (
-      <section className="rounded-2xl border border-red-400/40 bg-red-950/30 p-5" role="alert">
+      <section
+        className="min-w-0 break-words rounded-2xl border border-red-400/40 bg-red-950/30 p-5 [overflow-wrap:anywhere]"
+        role="alert"
+      >
         <h2 className="font-semibold text-red-100">{messages["source.attentionTitle"]}</h2>
         {snapshot.persistenceError ? (
           <ErrorDescription
@@ -2017,9 +2028,9 @@ function ProblemsPanel({
 }) {
   const { messages } = useUiLocale();
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="font-semibold text-white">{messages["source.problems"]}</h2>
+    <section className="min-w-0 break-words rounded-2xl border border-slate-800 bg-slate-900 p-5 [overflow-wrap:anywhere]">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <h2 className="min-w-0 font-semibold text-white">{messages["source.problems"]}</h2>
         <span className="rounded-full bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-300">
           {diagnostics.length}
         </span>
@@ -2033,7 +2044,7 @@ function ProblemsPanel({
               className="rounded-lg border border-slate-700 bg-slate-950/60 p-3"
               key={`${diagnostic.code}:${diagnostic.severity}:${diagnostic.range?.filepath ?? "none"}:${diagnostic.range?.startOffset ?? "none"}:${diagnostic.message}`}
             >
-              <div className="flex items-start justify-between gap-2">
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
                 <span className="text-xs font-bold uppercase tracking-wide text-slate-300">
                   {diagnostic.severity}
                 </span>
@@ -2048,7 +2059,9 @@ function ProblemsPanel({
                   </button>
                 ) : null}
               </div>
-              <p className="mt-2 break-words text-sm text-slate-200">{diagnostic.message}</p>
+              <p className="mt-2 min-w-0 break-words text-sm text-slate-200 [overflow-wrap:anywhere]">
+                {diagnostic.message}
+              </p>
               <p className="mt-2 break-all text-[0.7rem] text-slate-400">{diagnostic.code}</p>
             </li>
           ))}
@@ -2069,11 +2082,13 @@ function CompilerInformationPanel({
   const groups = groupDiagnosticsByMessage(diagnostics);
   return (
     <section
-      className="mt-auto rounded-2xl border border-sky-800/70 bg-sky-950/40 p-5"
+      className="mt-auto min-w-0 break-words rounded-2xl border border-sky-800/70 bg-sky-950/40 p-5 [overflow-wrap:anywhere]"
       aria-label={messages["outline.compilerInformation"]}
     >
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="font-semibold text-white">{messages["outline.compilerInformation"]}</h2>
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <h2 className="min-w-0 font-semibold text-white">
+          {messages["outline.compilerInformation"]}
+        </h2>
         <span className="rounded-full bg-sky-950 px-2.5 py-1 text-xs font-semibold text-sky-200">
           {diagnostics.length}
         </span>
@@ -2087,7 +2102,9 @@ function CompilerInformationPanel({
             className="rounded-lg border border-sky-900/80 bg-slate-950/60 p-3"
             key={`${group.code}:${group.message}`}
           >
-            <p className="break-words text-sm text-slate-200">{group.message}</p>
+            <p className="min-w-0 break-words text-sm text-slate-200 [overflow-wrap:anywhere]">
+              {group.message}
+            </p>
             <p className="mt-2 break-all text-[0.7rem] text-slate-400">{group.code}</p>
             {group.diagnostics.some((diagnostic) => diagnostic.range) ? (
               <details className="mt-3 text-xs text-slate-300">
@@ -2303,7 +2320,7 @@ function UnsavedNavigationDialog({
 function StatusBadge({ label, testId }: { readonly label: string; readonly testId: string }) {
   return (
     <span
-      className="inline-flex min-h-8 items-center rounded-full border border-slate-600 bg-slate-950 px-3 text-xs font-semibold text-slate-200"
+      className="inline-flex min-h-8 max-w-full items-center whitespace-normal break-words rounded-full border border-slate-600 bg-slate-950 px-3 text-center text-xs font-semibold text-slate-200 [overflow-wrap:anywhere]"
       data-testid={testId}
     >
       <span aria-hidden="true" className="mr-1.5 text-cyan-300">
@@ -2316,9 +2333,11 @@ function StatusBadge({ label, testId }: { readonly label: string; readonly testI
 
 function DetailRow({ label, value }: { readonly label: string; readonly value: string }) {
   return (
-    <div>
-      <dt className="text-slate-400">{label}</dt>
-      <dd className="mt-1 font-semibold text-slate-200">{value}</dd>
+    <div className="min-w-0">
+      <dt className="break-words text-slate-400 [overflow-wrap:anywhere]">{label}</dt>
+      <dd className="mt-1 break-words font-semibold text-slate-200 [overflow-wrap:anywhere]">
+        {value}
+      </dd>
     </div>
   );
 }
@@ -2332,12 +2351,14 @@ function ErrorDescription({
 }) {
   const { messages } = useUiLocale();
   return (
-    <div className="mt-3 text-sm text-red-100/80">
-      <p>
+    <div className="mt-3 min-w-0 break-words text-sm text-red-100/80 [overflow-wrap:anywhere]">
+      <p className="min-w-0">
         <strong>{title}:</strong> {error.message}
       </p>
       {error.correlationId ? (
-        <p className="mt-1 text-xs">{messages["error.correlationId"](error.correlationId)}</p>
+        <p className="mt-1 break-all text-xs">
+          {messages["error.correlationId"](error.correlationId)}
+        </p>
       ) : null}
     </div>
   );
@@ -2491,8 +2512,8 @@ function isSchemaHistoryShortcutTarget(target: EventTarget | null): boolean {
 }
 
 const secondaryButtonClass =
-  "min-h-10 rounded-lg border border-slate-600 px-3 text-sm font-semibold text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:opacity-50";
+  "min-h-10 max-w-full whitespace-normal break-words rounded-lg border border-slate-600 px-3 text-center text-sm font-semibold text-slate-100 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:opacity-50";
 const primaryButtonClass =
-  "min-h-10 rounded-lg bg-cyan-300 px-3 text-sm font-semibold text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:opacity-50";
+  "min-h-10 max-w-full whitespace-normal break-words rounded-lg bg-cyan-300 px-3 text-center text-sm font-semibold text-slate-950 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:opacity-50";
 const commandBarButtonClass =
-  "inline-flex min-h-10 items-center rounded-lg border border-slate-600 px-3 text-xs font-semibold text-slate-100 no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:opacity-50";
+  "inline-flex min-h-10 max-w-full items-center whitespace-normal break-words rounded-lg border border-slate-600 px-3 text-center text-xs font-semibold text-slate-100 no-underline [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:opacity-50";
