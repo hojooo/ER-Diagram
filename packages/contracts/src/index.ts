@@ -370,9 +370,7 @@ export const visualCommandKindSchema = z.enum([
   "RENAME_TABLE",
   "DELETE_TABLE",
   "CREATE_COLUMN",
-  "UPDATE_COLUMN",
-  "RENAME_COLUMN",
-  "REORDER_COLUMN",
+  "ALTER_COLUMN",
   "DELETE_COLUMN",
   "CREATE_REFERENCE",
   "UPDATE_REFERENCE",
@@ -576,7 +574,7 @@ export const deleteTableCommandSchema = z
   .strict();
 export type DeleteTableCommand = z.infer<typeof deleteTableCommandSchema>;
 
-const visualColumnChangesSchema = z
+export const visualColumnChangesSchema = z
   .object({
     type: visualDbmlTypeSchema.optional(),
     primaryKey: z.boolean().optional(),
@@ -588,6 +586,7 @@ const visualColumnChangesSchema = z
   })
   .strict()
   .superRefine(requireNonEmptyPatch);
+export type VisualColumnChanges = z.infer<typeof visualColumnChangesSchema>;
 
 export const createColumnCommandSchema = z
   .object({
@@ -599,38 +598,25 @@ export const createColumnCommandSchema = z
   .strict();
 export type CreateColumnCommand = z.infer<typeof createColumnCommandSchema>;
 
-export const updateColumnCommandSchema = z
+export const alterColumnCommandSchema = z
   .object({
     ...visualCommandBaseShape,
-    kind: z.literal("UPDATE_COLUMN"),
+    kind: z.literal("ALTER_COLUMN"),
     targetTableKey: visualTableKeySchema,
     targetColumnKey: visualColumnKeySchema,
-    changes: visualColumnChangesSchema,
-  })
-  .strict();
-export type UpdateColumnCommand = z.infer<typeof updateColumnCommandSchema>;
-
-export const renameColumnCommandSchema = z
-  .object({
-    ...visualCommandBaseShape,
-    kind: z.literal("RENAME_COLUMN"),
-    targetTableKey: visualTableKeySchema,
-    targetColumnKey: visualColumnKeySchema,
-    newName: visualIdentifierSchema,
-  })
-  .strict();
-export type RenameColumnCommand = z.infer<typeof renameColumnCommandSchema>;
-
-export const reorderColumnCommandSchema = z
-  .object({
-    ...visualCommandBaseShape,
-    kind: z.literal("REORDER_COLUMN"),
-    targetTableKey: visualTableKeySchema,
-    targetColumnKey: visualColumnKeySchema,
-    beforeColumnKey: visualColumnKeySchema.nullable(),
+    newName: visualIdentifierSchema.optional(),
+    changes: visualColumnChangesSchema.optional(),
+    beforeColumnKey: visualColumnKeySchema.nullable().optional(),
   })
   .strict()
   .superRefine((command, context) => {
+    if (
+      command.newName === undefined &&
+      command.changes === undefined &&
+      command.beforeColumnKey === undefined
+    ) {
+      context.addIssue({ code: "custom", message: "At least one column change is required." });
+    }
     if (command.beforeColumnKey === command.targetColumnKey) {
       context.addIssue({
         code: "custom",
@@ -639,7 +625,7 @@ export const reorderColumnCommandSchema = z
       });
     }
   });
-export type ReorderColumnCommand = z.infer<typeof reorderColumnCommandSchema>;
+export type AlterColumnCommand = z.infer<typeof alterColumnCommandSchema>;
 
 export const deleteColumnCommandSchema = z
   .object({
@@ -911,9 +897,7 @@ export const visualCommandSchema = z.discriminatedUnion("kind", [
   renameTableCommandSchema,
   deleteTableCommandSchema,
   createColumnCommandSchema,
-  updateColumnCommandSchema,
-  renameColumnCommandSchema,
-  reorderColumnCommandSchema,
+  alterColumnCommandSchema,
   deleteColumnCommandSchema,
   createReferenceCommandSchema,
   updateReferenceCommandSchema,
