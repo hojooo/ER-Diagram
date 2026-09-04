@@ -16,6 +16,7 @@ interface SchemaOutlineProps {
   readonly selectionStore: DiagramSelectionStore;
   readonly sourceNavigationEnabled: boolean;
   readonly onToggleGroup: (groupKey: string) => void;
+  readonly onSetGroupsCollapsed: (groupKeys: readonly string[], collapsed: boolean) => void;
   readonly onNavigateSource: (selection: DiagramSelection) => void;
 }
 
@@ -42,12 +43,14 @@ export function SchemaOutline({ visibility, viewLabel, ...contentProps }: Schema
   }, [visibility]);
   return (
     <section
-      className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+      className="min-w-0 break-words rounded-2xl border border-slate-800 bg-slate-900 p-5 [overflow-wrap:anywhere]"
       aria-label={messages["outline.label"]}
       aria-busy={updating}
     >
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="font-semibold text-white">{messages["outline.heading"](viewLabel)}</h2>
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <h2 className="min-w-0 break-words font-semibold text-white [overflow-wrap:anywhere]">
+          {messages["outline.heading"](viewLabel)}
+        </h2>
         <span className="text-xs text-slate-400">
           {messages["diagram.inventory"](
             visibility.tableKeys.size,
@@ -80,6 +83,7 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
   selectionStore,
   sourceNavigationEnabled,
   onToggleGroup,
+  onSetGroupsCollapsed,
   onNavigateSource,
 }: Omit<SchemaOutlineProps, "viewLabel">) {
   const { messages } = useUiLocale();
@@ -104,6 +108,10 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
     () => graph.groups.filter((group) => visibility.groupKeys.has(group.key)),
     [graph.groups, visibility.groupKeys],
   );
+  const visibleGroupKeys = useMemo(() => visibleGroups.map((group) => group.key), [visibleGroups]);
+  const collapsedVisibleGroupCount = visibleGroupKeys.filter((groupKey) =>
+    collapsedGroupKeys.has(groupKey),
+  ).length;
   const visibleReferences = useMemo(
     () => graph.references.filter((reference) => visibility.referenceKeys.has(reference.key)),
     [graph.references, visibility.referenceKeys],
@@ -135,9 +143,29 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
     <>
       {visibleGroups.length > 0 ? (
         <div className="mt-5">
-          <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
-            {messages["outline.tableGroups"]}
-          </h3>
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+            <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+              {messages["outline.tableGroups"]}
+            </h3>
+            <div className="flex min-w-0 flex-wrap gap-2">
+              <button
+                className="min-h-9 max-w-full whitespace-normal break-words rounded border border-slate-600 px-2 py-1 text-xs font-semibold text-slate-200 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:text-slate-600"
+                type="button"
+                disabled={collapsedVisibleGroupCount === 0}
+                onClick={() => onSetGroupsCollapsed(visibleGroupKeys, false)}
+              >
+                {messages["outline.expandAllGroups"]}
+              </button>
+              <button
+                className="min-h-9 max-w-full whitespace-normal break-words rounded border border-slate-600 px-2 py-1 text-xs font-semibold text-slate-200 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:text-slate-600"
+                type="button"
+                disabled={collapsedVisibleGroupCount === visibleGroupKeys.length}
+                onClick={() => onSetGroupsCollapsed(visibleGroupKeys, true)}
+              >
+                {messages["outline.collapseAllGroups"]}
+              </button>
+            </div>
+          </div>
           <ol className="mt-3 grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
             {visibleGroups.map((group) => {
               const groupSelection: DiagramSelection = {
@@ -158,7 +186,9 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
                   className="rounded-lg border border-slate-700 bg-slate-950/60 p-3 text-xs"
                   key={group.key}
                 >
-                  <p className="font-semibold text-slate-100">{qualifiedName}</p>
+                  <p className="min-w-0 break-words font-semibold text-slate-100 [overflow-wrap:anywhere]">
+                    {qualifiedName}
+                  </p>
                   <p className="mt-1 text-slate-400">
                     {messages["outline.groupSummary"](
                       visibleMemberKeys.length,
@@ -232,7 +262,7 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
                       });
                     }}
                   >
-                    <summary className="cursor-pointer text-sm font-semibold text-slate-100">
+                    <summary className="min-w-0 cursor-pointer break-words text-sm font-semibold text-slate-100 [overflow-wrap:anywhere]">
                       {qualifiedTableName(table)}
                       {selectedTable ? (
                         <span className="ml-2 text-xs text-cyan-300">
@@ -284,7 +314,9 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
                                 >
                                   {column.name}
                                 </OutlineAction>
-                                <code className="text-sky-300">{column.type.display}</code>
+                                <code className="min-w-0 break-all text-sky-300">
+                                  {column.type.display}
+                                </code>
                                 {labels.map((label) => (
                                   <span className="font-bold text-amber-300" key={label}>
                                     {label}
@@ -324,13 +356,13 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
                     className="rounded-lg border border-slate-700 bg-slate-950/60 p-3 text-xs"
                     key={reference.key}
                   >
-                    <p className="font-semibold text-slate-100">
+                    <p className="min-w-0 break-words font-semibold text-slate-100 [overflow-wrap:anywhere]">
                       {reference.name ?? messages["outline.anonymousReference"]}
                       {reference.inactive ? (
                         <span className="ml-2 text-amber-300">{messages["outline.inactive"]}</span>
                       ) : null}
                     </p>
-                    <p className="mt-1 break-words text-slate-400">
+                    <p className="mt-1 min-w-0 break-words text-slate-400 [overflow-wrap:anywhere]">
                       {formatReference(reference, tableByKey)}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -357,7 +389,7 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
           )}
           {!showAllReferences && visibleReferences.length > INITIAL_RELATIONSHIP_COUNT ? (
             <button
-              className="mt-3 min-h-10 rounded-lg border border-slate-600 px-3 text-sm font-semibold text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+              className="mt-3 min-h-10 max-w-full whitespace-normal break-words rounded-lg border border-slate-600 px-3 text-center text-sm font-semibold text-slate-100 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
               type="button"
               onClick={() => setShowAllReferences(true)}
             >
@@ -384,7 +416,7 @@ function OutlineAction({
   const { messages } = useUiLocale();
   return (
     <button
-      className="rounded border border-slate-600 px-2 py-1 font-semibold text-cyan-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+      className="max-w-full whitespace-normal break-words rounded border border-slate-600 px-2 py-1 text-center font-semibold text-cyan-300 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
       type="button"
       aria-label={label}
       aria-current={current ? "true" : undefined}
@@ -411,7 +443,7 @@ function SourceLineAction({
   const range = graph.sourceMap[selection.elementKey];
   return (
     <button
-      className="rounded px-2 py-1 font-semibold text-slate-300 underline decoration-slate-500 underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:text-slate-600"
+      className="max-w-full whitespace-normal break-words rounded px-2 py-1 text-center font-semibold text-slate-300 underline decoration-slate-500 underline-offset-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:text-slate-600"
       type="button"
       aria-label={messages["outline.openSource"](
         selection.kind,

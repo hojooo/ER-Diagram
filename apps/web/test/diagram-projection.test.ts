@@ -95,7 +95,7 @@ describe("diagram projection", () => {
     }
   });
 
-  it("switches to a focused source view by projection without changing the parsed graph", () => {
+  it("switches to the source view's TableGroup projection without changing the parsed graph", () => {
     const focusView = graph.views.find((view) => view.name === "focus_01");
     if (!focusView?.visibleTableKeys || !focusView.visibleGroupKeys) {
       throw new Error("focus_01 must define explicit table and group visibility");
@@ -108,15 +108,9 @@ describe("diagram projection", () => {
       lod: "KEYS_ONLY",
     });
 
-    const expectedTableKeys = new Set(focusView.visibleTableKeys);
     const expectedGroupKeys = new Set(focusView.visibleGroupKeys);
-    for (const table of graph.tables) {
-      if (focusView.visibleSchemaNames?.includes(table.schemaName))
-        expectedTableKeys.add(table.key);
-    }
+    const expectedTableKeys = new Set<string>();
     for (const group of graph.groups) {
-      if (focusView.visibleSchemaNames?.includes(group.schemaName))
-        expectedGroupKeys.add(group.key);
       if (expectedGroupKeys.has(group.key)) {
         for (const tableKey of group.tableKeys) expectedTableKeys.add(tableKey);
       }
@@ -160,7 +154,7 @@ describe("diagram projection", () => {
     expect(emptyProjection.edges).toHaveLength(0);
   });
 
-  it("unions tables selected through TableGroups and Schemas", () => {
+  it("ignores direct table and schema filters while preserving the selected TableGroup", () => {
     const template = graph.views[0];
     const selectedGroup = graph.groups[0];
     if (!template || !selectedGroup) throw new Error("fidelity view/group is missing");
@@ -168,9 +162,9 @@ describe("diagram projection", () => {
       ...template,
       key: 'view:[null,"group-only"]',
       name: "group-only",
-      visibleTableKeys: null,
+      visibleTableKeys: [graph.tables.at(-1)?.key ?? "missing"],
       visibleGroupKeys: [selectedGroup.key],
-      visibleSchemaNames: null,
+      visibleSchemaNames: ["core"],
     };
     const schemaOnlyView = {
       ...template,
@@ -197,12 +191,8 @@ describe("diagram projection", () => {
       collapsedGroupKeys: new Set(),
       lod: "NAME_ONLY",
     });
-    expect(new Set(tableNodes(schemaProjection).map((node) => node.data.schemaName))).toEqual(
-      new Set(["core"]),
-    );
-    expect(
-      groupNodes(schemaProjection).every((node) => node.data.groupKey !== selectedGroup.key),
-    ).toBe(true);
+    expect(schemaProjection.nodes).toHaveLength(0);
+    expect(schemaProjection.edges).toHaveLength(0);
   });
 
   it("hides collapsed children and aggregates external reference endpoints with counts", () => {

@@ -2,7 +2,7 @@ import type { SchemaGraph } from "@er-diagram/core";
 import { useId, useMemo, useState } from "react";
 
 import { useUiLocale } from "../localization/ui-locale.js";
-import { listDiagramViews } from "./projection.js";
+import { GLOBAL_VIEW_KEY, listDiagramViews } from "./projection.js";
 import { searchDiagramVisibility } from "./search-index.js";
 import type {
   DiagramLod,
@@ -44,6 +44,8 @@ export function DiagramWorkspaceControls({
   const [activeIndex, setActiveIndex] = useState(-1);
   const [resultsOpen, setResultsOpen] = useState(false);
   const viewOptions = useMemo(() => listDiagramViews(graph), [graph]);
+  const currentViewLabel =
+    viewOptions.find((view) => view.key === viewKey)?.label ?? messages["diagram.global"];
   const search = useMemo(
     () => searchDiagramVisibility(graph, visibility, searchQuery),
     [graph, searchQuery, visibility],
@@ -65,18 +67,20 @@ export function DiagramWorkspaceControls({
       data-layout={sidebar ? "sidebar" : "overlay"}
       className={
         sidebar
-          ? "grid w-full min-w-0 grid-cols-2 gap-3 bg-transparent px-4 py-3"
+          ? "grid w-full min-w-0 grid-cols-2 items-start gap-3 bg-transparent px-4 py-3"
           : "grid w-full min-w-0 gap-3 border-b border-slate-700 bg-slate-900/95 px-4 py-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,0.7fr)_minmax(0,1.4fr)_minmax(0,0.6fr)_minmax(0,auto)] xl:items-end"
       }
     >
-      <label
-        className={`grid min-w-0 gap-1 text-xs font-semibold text-slate-300 ${sidebar ? "col-start-1 row-start-1" : ""}`}
+      <div
+        className={`grid min-w-0 content-start self-start gap-1 text-xs font-semibold text-slate-300 ${sidebar ? "col-start-1 row-start-1" : ""}`}
       >
-        {messages["diagram.view"]}
+        <label htmlFor={`${listboxId}-view`}>{messages["diagram.view"]}</label>
         <select
-          className={`min-h-10 w-full min-w-0 max-w-full rounded-lg border border-slate-600 bg-slate-950 px-3 text-sm text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${sidebar ? "truncate" : ""}`}
+          id={`${listboxId}-view`}
+          className="min-h-10 w-full min-w-0 max-w-full rounded-lg border border-slate-600 bg-slate-950 px-3 text-sm text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
           value={viewKey}
           disabled={disabled}
+          aria-describedby={sidebar ? `${listboxId}-current-view` : undefined}
           onChange={(event) => {
             setActiveIndex(-1);
             onViewChange(event.target.value);
@@ -88,7 +92,21 @@ export function DiagramWorkspaceControls({
             </option>
           ))}
         </select>
-      </label>
+        {sidebar ? (
+          <p
+            id={`${listboxId}-current-view`}
+            className="min-w-0 whitespace-normal break-words text-xs font-normal text-slate-400 [overflow-wrap:anywhere]"
+            data-testid="diagram-current-view-name"
+          >
+            {messages["diagram.currentViewName"](currentViewLabel)}
+            {viewKey !== GLOBAL_VIEW_KEY ? (
+              <span className="mt-1 block text-cyan-200/80">
+                {messages["diagram.groupScopedView"]}
+              </span>
+            ) : null}
+          </p>
+        ) : null}
+      </div>
 
       <div
         className={`relative grid min-w-0 gap-1 text-xs font-semibold text-slate-300 ${sidebar ? "col-span-2 row-start-2" : ""}`}
@@ -158,7 +176,7 @@ export function DiagramWorkspaceControls({
               search.results.map((result, index) => (
                 <button
                   id={optionId(listboxId, index)}
-                  className={`block w-full rounded px-3 py-2 text-left text-sm font-normal text-slate-200 hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-cyan-300 ${index === activeIndex ? "bg-slate-800" : ""}`}
+                  className={`block w-full min-w-0 whitespace-normal break-words rounded px-3 py-2 text-left text-sm font-normal text-slate-200 [overflow-wrap:anywhere] hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-cyan-300 ${index === activeIndex ? "bg-slate-800" : ""}`}
                   type="button"
                   role="option"
                   aria-label={messages["diagram.resultAccessibleName"](
@@ -196,7 +214,7 @@ export function DiagramWorkspaceControls({
       </div>
 
       <label
-        className={`grid min-w-0 gap-1 text-xs font-semibold text-slate-300 ${sidebar ? "col-start-2 row-start-1" : ""}`}
+        className={`grid min-w-0 content-start self-start gap-1 text-xs font-semibold text-slate-300 ${sidebar ? "col-start-2 row-start-1" : ""}`}
       >
         {messages["diagram.detailLevel"]}
         <select
