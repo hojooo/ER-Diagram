@@ -177,6 +177,7 @@ export function CanvasWorkspaceShell({
   source,
   outline,
   inspector,
+  canvasOverlay,
   status,
   alerts,
   onViewportInsetsChange,
@@ -188,6 +189,7 @@ export function CanvasWorkspaceShell({
   readonly source: ReactNode;
   readonly outline: ReactNode;
   readonly inspector: ReactNode;
+  readonly canvasOverlay?: ReactNode;
   readonly status: ReactNode;
   readonly alerts?: ReactNode;
   readonly onViewportInsetsChange?: (insets: DiagramViewportInsets) => void;
@@ -308,6 +310,14 @@ export function CanvasWorkspaceShell({
       data-testid="canvas-workspace-shell"
     >
       <div className="absolute inset-0 z-0">{diagram}</div>
+      {canvasOverlay ? (
+        <div
+          className="pointer-events-none absolute inset-0 z-30"
+          data-testid="workspace-canvas-overlay"
+        >
+          {canvasOverlay}
+        </div>
+      ) : null}
       <div
         ref={commandBarRef}
         data-testid="workspace-command-bar"
