@@ -234,7 +234,7 @@ P2 항목은 P0 요구사항으로 해석하지 않는다. 특히 database conne
 │                                                                        │
 │ Left tool dock         Diagram Canvas        Right tool dock           │
 │ ┌─────────────────┐  persistent background ┌───────────────────────┐ │
-│ │ Source | Outline│             resize ──▶ │ Editable ERD          │ │
+│ │ Source | Outline│ ◀── resize     resize ──▶ │ Editable ERD          │ │
 │ │ active surface  │                toggle  │ view/search/LOD/layout│ │
 │ └─────────────────┘                        ├───────────────────────┤ │
 │                                              │ Inspector             │ │
@@ -253,7 +253,7 @@ viewport, selection과 schema/layout revision을 암묵적으로 변경하지 �
 다시 선택해도 panel은 접히지 않으며, 접었다 다시 열면 마지막 tab을 복원한다. Tab은 `ArrowLeft`, `ArrowRight`,
 `Home`, `End` keyboard 이동을 지원한다. Source와 Outline은 command bar에서 열지 않으며 command bar는
 project·history·import/export·language처럼 workspace 전역 action만 제공한다. 열린 왼쪽 panel은 넓은 화면에서
-512px을 사용하고, 좁은 화면에서는 오른쪽 도구 panel과 상호 배타적인 full-screen dialog가 된다. 접힌 edge와
+기본 512px을 사용하고, 좁은 화면에서는 오른쪽 도구 panel과 상호 배타적인 full-screen dialog가 된다. 접힌 edge와
 열린 panel 모두 canvas pointer/wheel event를 차단하며, Source buffer와 Outline 상태는 접은 뒤에도 mount를 유지한다.
 
 왼쪽과 오른쪽 도구 dock은 각각 고유한 이름의 complementary landmark이며 workspace 전체 높이를 사용한다. 유효한
@@ -263,22 +263,31 @@ return을 제공하는 full-screen dialog가 된다. 넓은 화면에서는 Sour
 접어도 Diagram controls와 Visual Inspector는 mount를 유지하되 `inert`와 `aria-hidden`으로 비활성화해 검색 상태와
 visual form draft를 보존한다.
 
-넓은 화면의 dock은 기본 512px이고, panel 앞쪽 경계를 pointer로 끌거나 keyboard separator의 `ArrowLeft`,
-`ArrowRight`, `Home`, `End`를 사용해 360–768px 범위에서 조절할 수 있다. 작은 open/collapse toggle은 별도 rail
-없이 panel 앞쪽 경계에 부착해 canvas에서 바로 찾을 수 있게 한다. 조절한 폭은 현재 workspace route session에만
-유지하며 DBML, diagram layout, revision 또는 `localStorage`에는 저장하지 않는다. 좁은 화면의 full-screen dialog에는
-resize handle을 표시하지 않는다.
+넓은 화면의 좌우 dock은 각각 기본 512px이고, canvas와 맞닿은 경계를 pointer로 끌거나 keyboard separator의
+`ArrowLeft`, `ArrowRight`, `Home`, `End`를 사용해 서로 독립적으로 360–768px 범위에서 조절할 수 있다. 작은
+open/collapse toggle은 별도 rail 없이 panel 경계에 부착해 canvas에서 바로 찾을 수 있게 한다. 조절한 폭은 현재
+workspace route session에만 유지하며 DBML, diagram layout, revision 또는 `localStorage`에는 저장하지 않는다. 좁은
+화면의 full-screen dialog에는 resize handle을 표시하지 않는다.
 
 Dock 상단에는 `Editable ER diagram`, source-defined `DiagramView`, current-view 검색, LOD와 명시적 layout action을
-모은다. 상단 영역은 전체 높이의 절반까지만 사용하고 자체 scroll하며, Visual Inspector는 남은 높이에서 독립적으로
+모은다. `Global`은 전체 schema를 표시하지만 source-defined `DiagramView`는 해당 view의 `TableGroups` filter와 선택된
+group의 member table만 canvas에 투영한다. `Tables`, `Notes`, `Schemas` filter는 DBML source와 visual command에서
+손실 없이 유지하되 workspace projection을 확장하지 않는다. 관계는 투영된 table 양쪽 endpoint가 모두 보일 때만
+표시한다. 상단 영역은 전체 높이의 절반까지만 사용하고 자체 scroll하며, Visual Inspector는 남은 높이에서 독립적으로
 scroll한다. 검색 결과는 panel flow 안에서 펼쳐져 Inspector나 canvas와 겹치지 않는다. 별도의 selection summary
 rail과 선택 없음 문구는 표시하지 않는다. Canvas 선택만으로 panel을 다시 열지는 않으며, 사용자는 panel-edge
-toggle로만 panel을 명시적으로 연다. 선택된 element 정보는 열린 Inspector 안에서만 표시한다.
+toggle로만 panel을 명시적으로 연다. Canvas의 table, column, group 또는 relationship를 직접 클릭하면 selection만
+갱신하고 현재 camera를 자동 focus·이동하지 않는다. Outline의 명시적 diagram focus와 검색 결과 선택은 계속 현재
+safe area를 기준으로 대상을 보여준다. 선택된 element 정보는 열린 Inspector 안에서만 표시한다.
 
 DBML compiler의 `INFO` diagnostic은 schema 탐색 맥락을 유지하도록 Outline 하단에 code·message와 모든 source
 위치를 묶어 표시한다. `ERROR`와 `WARNING`은 현재 draft의 수정이 필요한 Problems contextual alert에 유지한다.
 Severity 배치는 diagnostic을 숨기거나 source range를 제거하지 않으며, 어느 위치에서든 명시적 source 이동만
 Source surface를 연다.
+
+Outline의 `TableGroup` 영역은 각 group의 개별 펼치기·접기와 함께 현재 view에 보이는 group 전체를 한 번에
+`모두 펼치기` 또는 `모두 접기`로 전환한다. Bulk action은 현재 view의 layout sidecar를 한 번만 변경하며 보이지 않는
+group, DBML source, schema revision과 viewport에는 영향을 주지 않는다.
 
 Overlay는 canvas pan·zoom·drag와 명확한 pointer/wheel boundary를 가져야 하고, keyboard focus order, visible
 focus, Escape/trigger focus return과 narrow viewport의 reflow를 보장해야 한다. Diagram safe area는 조절된 right
@@ -636,7 +645,7 @@ candidate의 SQL과 versioned ConversionReport JSON은 별도 파일로 제공�
 | `DGM-001` | P0 | table과 column, PK/FK, relationship를 렌더링한다. | source inventory와 canvas inventory가 일치한다. |
 | `DGM-002` | P0 | `TableGroup`을 compound group으로 표현한다. | group color·name·membership이 source와 일치한다. |
 | `DGM-003` | P0 | group collapse 시 외부 relationship를 group summary edge로 집계한다. | 숨겨진 child edge 때문에 관계가 사라진 것으로 오인되지 않는다. |
-| `DGM-004` | P0 | `DiagramView` selector를 제공한다. | 7개 view fixture를 재파싱 없이 전환하고 visible entity가 source 정의와 일치한다. |
+| `DGM-004` | P0 | `DiagramView` selector를 제공하고 source-defined view는 `TableGroups` 범위로 집중한다. | 7개 view fixture를 재파싱 없이 전환하고 canvas group·table이 source의 `visibleGroupKeys`와 해당 membership에 정확히 일치한다. `Global`은 전체 schema를 유지한다. |
 | `DGM-005` | P0 | global view와 view별 layout을 분리한다. | 한 view의 node 이동이 다른 view 위치를 덮어쓰지 않으며 모든 view write는 project-global layout revision으로 직렬화된다. |
 | `DGM-006` | P0 | table·column·group·schema 검색과 focus를 제공한다. | 검색 결과 선택 시 해당 node가 viewport 중앙에 표시된다. |
 | `DGM-007` | P0 | `NAME_ONLY`, `KEYS_ONLY`, `FULL` detail level을 제공한다. | 큰 graph에서 detail을 낮춰도 node identity와 edge가 유지된다. |

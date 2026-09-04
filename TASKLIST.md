@@ -341,13 +341,18 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
     제거한다. 접힌 상태는 12px edge와 중앙 toggle만 유지하고, 다시 열면 마지막 tab을 복원하며 같은 tab 재선택은
     panel을 접지 않는다. 좁은 화면에서는 단일 dialog로 연다.
   - Full-height right tool dock에 DiagramView·검색·LOD·layout과 Visual Inspector를 통합하고 별도 selection summary
-    rail 없이 panel-edge toggle만으로 명시적 reopen action을 제공한다.
-  - 넓은 화면에서는 panel 앞쪽의 작은 toggle과 accessible separator로 폭을 360–768px 범위에서 조절하고,
-    조절값은 route session에만 유지하며 현재 폭을 diagram safe area에 반영한다.
+    rail 없이 panel-edge toggle만으로 명시적 reopen action을 제공한다. Source-defined DiagramView는 `TableGroups`
+    filter와 해당 member table만 투영하며 `Global`은 전체 schema를 유지한다.
+  - 넓은 화면에서는 좌우 panel 경계의 작은 toggle과 accessible separator로 각 폭을 360–768px 범위에서 독립적으로
+    조절하고, 조절값은 route session에만 유지하며 현재 폭을 diagram safe area에 반영한다.
   - 넓은 valid workspace 기본 open, 좁은 화면 기본 collapsed·full-screen dialog, 독립 scroll, pointer boundary,
     focus trap·Escape·trigger focus return과 panel/toggle 기준 safe area를 보장한다.
   - Command bar, 좌우 panel과 status·alert의 긴 일반 문구는 panel 안에서 줄바꿈하고, 기술 식별자는 문자 단위로
     줄바꿈한다. 현재 DiagramView의 전체 이름은 native select 아래에서 별도 설명으로 표시하며 DBML 원문은 변형하지 않는다.
+  - Outline의 현재 view에 보이는 TableGroup은 개별 또는 `모두 펼치기`·`모두 접기`로 제어하며 bulk action은
+    단일 layout sidecar 변경으로 처리한다.
+  - Canvas element 직접 클릭은 selection만 변경하고 camera를 자동 focus하지 않으며, Outline·검색의 명시적
+    focus action만 현재 safe area로 viewport를 이동한다.
   - 검증: `pnpm --filter @er-diagram/web test test/workspace-overlays.test.tsx`
 - [ ] `M4-014` canvas-first core-flow visual acceptance
   - Source·visual edit, diagnostics, history, layout, import/export 진입·복귀가 같은 diagram context를 보존하고
