@@ -2,7 +2,7 @@ import type { SchemaGraph } from "@er-diagram/core";
 import { useId, useMemo, useState } from "react";
 
 import { useUiLocale } from "../localization/ui-locale.js";
-import { listDiagramViews } from "./projection.js";
+import { GLOBAL_VIEW_KEY, listDiagramViews } from "./projection.js";
 import { searchDiagramVisibility } from "./search-index.js";
 import type {
   DiagramLod,
@@ -67,12 +67,12 @@ export function DiagramWorkspaceControls({
       data-layout={sidebar ? "sidebar" : "overlay"}
       className={
         sidebar
-          ? "grid w-full min-w-0 grid-cols-2 gap-3 bg-transparent px-4 py-3"
+          ? "grid w-full min-w-0 grid-cols-2 items-start gap-3 bg-transparent px-4 py-3"
           : "grid w-full min-w-0 gap-3 border-b border-slate-700 bg-slate-900/95 px-4 py-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,0.7fr)_minmax(0,1.4fr)_minmax(0,0.6fr)_minmax(0,auto)] xl:items-end"
       }
     >
       <div
-        className={`grid min-w-0 gap-1 text-xs font-semibold text-slate-300 ${sidebar ? "col-start-1 row-start-1" : ""}`}
+        className={`grid min-w-0 content-start self-start gap-1 text-xs font-semibold text-slate-300 ${sidebar ? "col-start-1 row-start-1" : ""}`}
       >
         <label htmlFor={`${listboxId}-view`}>{messages["diagram.view"]}</label>
         <select
@@ -99,6 +99,11 @@ export function DiagramWorkspaceControls({
             data-testid="diagram-current-view-name"
           >
             {messages["diagram.currentViewName"](currentViewLabel)}
+            {viewKey !== GLOBAL_VIEW_KEY ? (
+              <span className="mt-1 block text-cyan-200/80">
+                {messages["diagram.groupScopedView"]}
+              </span>
+            ) : null}
           </p>
         ) : null}
       </div>
@@ -209,7 +214,7 @@ export function DiagramWorkspaceControls({
       </div>
 
       <label
-        className={`grid min-w-0 gap-1 text-xs font-semibold text-slate-300 ${sidebar ? "col-start-2 row-start-1" : ""}`}
+        className={`grid min-w-0 content-start self-start gap-1 text-xs font-semibold text-slate-300 ${sidebar ? "col-start-2 row-start-1" : ""}`}
       >
         {messages["diagram.detailLevel"]}
         <select

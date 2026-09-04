@@ -10,6 +10,25 @@ export function toggleCollapsedGroup(
   return next;
 }
 
+export function setGroupsCollapsed(
+  current: ReadonlySet<SchemaElementKey>,
+  groupKeys: readonly SchemaElementKey[],
+  collapsed: boolean,
+): ReadonlySet<SchemaElementKey> {
+  const next = new Set(current);
+  let changed = false;
+  for (const groupKey of groupKeys) {
+    if (collapsed) {
+      if (next.has(groupKey)) continue;
+      next.add(groupKey);
+      changed = true;
+      continue;
+    }
+    changed = next.delete(groupKey) || changed;
+  }
+  return changed ? next : current;
+}
+
 export function retainAvailableCollapsedGroups(
   current: ReadonlySet<SchemaElementKey>,
   availableGroupKeys: ReadonlySet<SchemaElementKey>,

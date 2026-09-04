@@ -114,6 +114,7 @@ export function BaseSchemaDiagram({
     completion: Promise<unknown>;
   } | null>(null);
   const focusedRequestRef = useRef<number | null>(null);
+  const canvasSelectionWithoutFocusRef = useRef<DiagramSelection | null>(null);
   const referenceByKey = useMemo(
     () => new Map(graph.references.map((reference) => [reference.key, reference])),
     [graph.references],
@@ -277,6 +278,9 @@ export function BaseSchemaDiagram({
 
   useEffect(() => {
     if (!flowInstance || !selection || displayProjection.nodes.length === 0) return;
+    const skipFocus = canvasSelectionWithoutFocusRef.current === selection;
+    canvasSelectionWithoutFocusRef.current = null;
+    if (skipFocus) return;
     const selectedNodeIds = representativeNodeIds(displayProjection, selection);
     if (selectedNodeIds.size === 0) return;
     const selectedNodes = displayProjection.nodes.filter((node) => selectedNodeIds.has(node.id));
@@ -335,6 +339,7 @@ export function BaseSchemaDiagram({
 
   const activateElement = useCallback(
     (nextSelection: DiagramSelection) => {
+      canvasSelectionWithoutFocusRef.current = nextSelection;
       selectionStore.getState().setSelection(nextSelection);
       onActivateElement?.(nextSelection);
     },

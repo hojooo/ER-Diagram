@@ -49,26 +49,10 @@ export function createDiagramVisibility(
   const view = resolveView(graph, viewKey);
   const existingTableKeys = new Set(graph.tables.map((table) => table.key));
   const existingGroupKeys = new Set(graph.groups.map((group) => group.key));
-  const allSchemaNames = new Set([
-    ...graph.tables.map((table) => table.schemaName),
-    ...graph.groups.map((group) => group.schemaName),
-  ]);
-  const tableKeys = view
-    ? selectFilterKeys(view.visibleTableKeys, existingTableKeys)
-    : new Set(existingTableKeys);
+  const tableKeys = view ? new Set<string>() : new Set(existingTableKeys);
   const groupKeys = view
     ? selectFilterKeys(view.visibleGroupKeys, existingGroupKeys)
     : new Set(existingGroupKeys);
-  const selectedSchemaNames = view
-    ? selectFilterKeys(view.visibleSchemaNames, allSchemaNames)
-    : new Set(allSchemaNames);
-
-  for (const table of graph.tables) {
-    if (selectedSchemaNames.has(table.schemaName)) tableKeys.add(table.key);
-  }
-  for (const group of graph.groups) {
-    if (selectedSchemaNames.has(group.schemaName)) groupKeys.add(group.key);
-  }
   for (const group of graph.groups) {
     if (!groupKeys.has(group.key)) continue;
     for (const tableKey of group.tableKeys) {

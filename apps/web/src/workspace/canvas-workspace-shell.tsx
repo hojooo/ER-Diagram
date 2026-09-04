@@ -21,9 +21,18 @@ const COLLAPSED_LEFT_PANEL_WIDTH_PX = 12;
 const DEFAULT_LEFT_PANEL_WIDTH_PX = 512;
 const COLLAPSED_RIGHT_PANEL_WIDTH_PX = 12;
 const DEFAULT_RIGHT_PANEL_WIDTH_PX = 512;
-const MIN_RIGHT_PANEL_WIDTH_PX = 360;
-const MAX_RIGHT_PANEL_WIDTH_PX = 768;
-const RIGHT_PANEL_KEYBOARD_STEP_PX = 16;
+const MIN_TOOL_PANEL_WIDTH_PX = 360;
+const MAX_TOOL_PANEL_WIDTH_PX = 768;
+const TOOL_PANEL_KEYBOARD_STEP_PX = 16;
+
+type WorkspacePanelSide = "LEFT" | "RIGHT";
+
+interface WorkspacePanelResize {
+  readonly side: WorkspacePanelSide;
+  readonly pointerId: number;
+  readonly startX: number;
+  readonly startWidth: number;
+}
 
 export interface CanvasWorkspaceSurfaces {
   readonly activeLeftTab: WorkspaceLeftSurface;
@@ -192,13 +201,10 @@ export function CanvasWorkspaceShell({
   const outlineTabRef = useRef<HTMLButtonElement>(null);
   const rightDockRef = useRef<HTMLElement>(null);
   const rightPanelToggleRef = useRef<HTMLButtonElement>(null);
-  const rightPanelResizeRef = useRef<{
-    readonly pointerId: number;
-    readonly startX: number;
-    readonly startWidth: number;
-  } | null>(null);
+  const panelResizeRef = useRef<WorkspacePanelResize | null>(null);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(DEFAULT_LEFT_PANEL_WIDTH_PX);
   const [rightPanelWidth, setRightPanelWidth] = useState(DEFAULT_RIGHT_PANEL_WIDTH_PX);
-  const [resizingRightPanel, setResizingRightPanel] = useState(false);
+  const [resizingPanel, setResizingPanel] = useState<WorkspacePanelSide | null>(null);
   const setRightDockRef = useCallback((element: HTMLElement | null) => {
     rightDockRef.current = element;
   }, []);
@@ -208,21 +214,27 @@ export function CanvasWorkspaceShell({
   const statusRef = useRef<HTMLDivElement>(null);
   const alertsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!resizingRightPanel) return;
+    if (!resizingPanel) return;
     const previousCursor = document.documentElement.style.cursor;
     const previousUserSelect = document.documentElement.style.userSelect;
     document.documentElement.style.cursor = "ew-resize";
     document.documentElement.style.userSelect = "none";
     const handlePointerMove = (event: PointerEvent) => {
-      const resize = rightPanelResizeRef.current;
+      const resize = panelResizeRef.current;
       if (!resize || event.pointerId !== resize.pointerId) return;
-      setRightPanelWidth(clampRightPanelWidth(resize.startWidth + resize.startX - event.clientX));
+      const horizontalDelta = event.clientX - resize.startX;
+      const nextWidth =
+        resize.side === "LEFT"
+          ? resize.startWidth + horizontalDelta
+          : resize.startWidth - horizontalDelta;
+      if (resize.side === "LEFT") setLeftPanelWidth(clampToolPanelWidth(nextWidth));
+      else setRightPanelWidth(clampToolPanelWidth(nextWidth));
     };
     const finishResize = (event: PointerEvent) => {
-      const resize = rightPanelResizeRef.current;
+      const resize = panelResizeRef.current;
       if (!resize || event.pointerId !== resize.pointerId) return;
-      rightPanelResizeRef.current = null;
-      setResizingRightPanel(false);
+      panelResizeRef.current = null;
+      setResizingPanel(null);
     };
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", finishResize);
@@ -234,7 +246,7 @@ export function CanvasWorkspaceShell({
       document.documentElement.style.cursor = previousCursor;
       document.documentElement.style.userSelect = previousUserSelect;
     };
-  }, [resizingRightPanel]);
+  }, [resizingPanel]);
 
   useEffect(() => {
     if (!surfaces.isNarrow || !surfaces.leftPanelOpen) return;
@@ -254,13 +266,13 @@ export function CanvasWorkspaceShell({
 
   const sourceActive = surfaces.activeLeftTab === "SOURCE";
   const outlineActive = surfaces.activeLeftTab === "OUTLINE";
-  const leftPanelWidth = surfaces.leftPanelOpen
-    ? DEFAULT_LEFT_PANEL_WIDTH_PX
+  const effectiveLeftPanelWidth = surfaces.leftPanelOpen
+    ? leftPanelWidth
     : COLLAPSED_LEFT_PANEL_WIDTH_PX;
   const leftDockWidth = surfaces.leftPanelOpen
     ? surfaces.isNarrow
       ? "100%"
-      : `${DEFAULT_LEFT_PANEL_WIDTH_PX}px`
+      : `${leftPanelWidth}px`
     : `${COLLAPSED_LEFT_PANEL_WIDTH_PX}px`;
   const reservedLeftWidth =
     (!surfaces.isNarrow && surfaces.leftPanelOpen
@@ -283,7 +295,7 @@ export function CanvasWorkspaceShell({
     statusRef,
     alertsRef,
     leftPanelOpen: surfaces.leftPanelOpen,
-    leftPanelWidth,
+    leftPanelWidth: effectiveLeftPanelWidth,
     rightPanelOpen: surfaces.rightPanelOpen,
     rightPanelWidth,
     ...(onViewportInsetsChange ? { onChange: onViewportInsetsChange } : {}),
@@ -300,7 +312,7 @@ export function CanvasWorkspaceShell({
         ref={commandBarRef}
         data-testid="workspace-command-bar"
         className={`pointer-events-none absolute top-3 z-30 flex justify-center ${
-          resizingRightPanel ? "transition-none" : "transition-[left,right] duration-200"
+          resizingPanel ? "transition-none" : "transition-[left,right] duration-200"
         }`}
         style={{ left: reservedLeftWidth, right: reservedRightWidth }}
       >
@@ -320,7 +332,7 @@ export function CanvasWorkspaceShell({
         onKeyDown={(event) =>
           handleLeftPanelKeyDown(event, surfaces, leftDockRef.current, leftPanelToggleRef.current)
         }
-        className={`absolute inset-y-0 left-0 overflow-visible border-r border-slate-700/90 bg-slate-950/90 shadow-2xl backdrop-blur-md transition-[width] duration-200 ${
+        className={`absolute inset-y-0 left-0 overflow-visible border-r border-slate-700/90 bg-slate-950/90 shadow-2xl backdrop-blur-md ${resizingPanel === "LEFT" ? "transition-none" : "transition-[width] duration-200"} ${
           surfaces.isNarrow && surfaces.leftPanelOpen ? "z-50" : "z-40"
         }`}
         style={{ width: leftDockWidth }}
@@ -351,6 +363,46 @@ export function CanvasWorkspaceShell({
             <path d={surfaces.leftPanelOpen ? "m15 6-6 6 6 6" : "m9 6 6 6-6 6"} />
           </svg>
         </button>
+        {surfaces.leftPanelOpen && !surfaces.isNarrow ? (
+          <hr
+            aria-label={messages["workspace.resizeLeftTools"]}
+            aria-orientation="vertical"
+            aria-controls="workspace-left-panel-content"
+            aria-valuemin={MIN_TOOL_PANEL_WIDTH_PX}
+            aria-valuemax={MAX_TOOL_PANEL_WIDTH_PX}
+            aria-valuenow={leftPanelWidth}
+            aria-valuetext={messages["workspace.toolsWidth"](leftPanelWidth)}
+            tabIndex={0}
+            className="absolute inset-y-0 right-0 z-10 h-full w-3 translate-x-1/2 cursor-ew-resize touch-none before:pointer-events-none before:absolute before:left-1/2 before:top-1/2 before:h-12 before:w-0.5 before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-full before:bg-slate-600 before:content-[''] hover:bg-cyan-300/10 hover:before:bg-cyan-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 focus-visible:before:bg-cyan-300"
+            onPointerDown={(event) => {
+              if (event.button !== 0) return;
+              event.preventDefault();
+              event.currentTarget.focus();
+              panelResizeRef.current = {
+                side: "LEFT",
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startWidth: leftPanelWidth,
+              };
+              setResizingPanel("LEFT");
+            }}
+            onKeyDown={(event) => {
+              let nextWidth: number | null = null;
+              if (event.key === "ArrowLeft") {
+                nextWidth = leftPanelWidth - TOOL_PANEL_KEYBOARD_STEP_PX;
+              } else if (event.key === "ArrowRight") {
+                nextWidth = leftPanelWidth + TOOL_PANEL_KEYBOARD_STEP_PX;
+              } else if (event.key === "Home") {
+                nextWidth = MIN_TOOL_PANEL_WIDTH_PX;
+              } else if (event.key === "End") {
+                nextWidth = MAX_TOOL_PANEL_WIDTH_PX;
+              }
+              if (nextWidth === null) return;
+              event.preventDefault();
+              setLeftPanelWidth(clampToolPanelWidth(nextWidth));
+            }}
+          />
+        ) : null}
         <div
           id="workspace-left-panel-content"
           aria-hidden={!surfaces.leftPanelOpen}
@@ -427,7 +479,7 @@ export function CanvasWorkspaceShell({
             rightPanelToggleRef.current,
           )
         }
-        className={`absolute inset-y-0 right-0 z-40 overflow-visible border-l border-slate-700/90 bg-slate-950/90 shadow-2xl backdrop-blur-md ${resizingRightPanel ? "transition-none" : "transition-[width] duration-200"}`}
+        className={`absolute inset-y-0 right-0 z-40 overflow-visible border-l border-slate-700/90 bg-slate-950/90 shadow-2xl backdrop-blur-md ${resizingPanel === "RIGHT" ? "transition-none" : "transition-[width] duration-200"}`}
         style={{ width: dockWidth }}
       >
         <button
@@ -461,37 +513,38 @@ export function CanvasWorkspaceShell({
             aria-label={messages["workspace.resizeTools"]}
             aria-orientation="vertical"
             aria-controls="workspace-right-panel-content"
-            aria-valuemin={MIN_RIGHT_PANEL_WIDTH_PX}
-            aria-valuemax={MAX_RIGHT_PANEL_WIDTH_PX}
+            aria-valuemin={MIN_TOOL_PANEL_WIDTH_PX}
+            aria-valuemax={MAX_TOOL_PANEL_WIDTH_PX}
             aria-valuenow={rightPanelWidth}
             aria-valuetext={messages["workspace.toolsWidth"](rightPanelWidth)}
             tabIndex={0}
-            className="absolute inset-y-0 left-0 z-10 m-0 w-3 -translate-x-1/2 cursor-ew-resize touch-none border-0 before:pointer-events-none before:absolute before:left-1/2 before:top-1/2 before:h-12 before:w-0.5 before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-full before:bg-slate-600 before:content-[''] hover:before:bg-cyan-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 focus-visible:before:bg-cyan-300"
+            className="absolute inset-y-0 left-0 z-10 h-full w-3 -translate-x-1/2 cursor-ew-resize touch-none before:pointer-events-none before:absolute before:left-1/2 before:top-1/2 before:h-12 before:w-0.5 before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-full before:bg-slate-600 before:content-[''] hover:bg-cyan-300/10 hover:before:bg-cyan-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 focus-visible:before:bg-cyan-300"
             onPointerDown={(event) => {
               if (event.button !== 0) return;
               event.preventDefault();
               event.currentTarget.focus();
-              rightPanelResizeRef.current = {
+              panelResizeRef.current = {
+                side: "RIGHT",
                 pointerId: event.pointerId,
                 startX: event.clientX,
                 startWidth: rightPanelWidth,
               };
-              setResizingRightPanel(true);
+              setResizingPanel("RIGHT");
             }}
             onKeyDown={(event) => {
               let nextWidth: number | null = null;
               if (event.key === "ArrowLeft") {
-                nextWidth = rightPanelWidth + RIGHT_PANEL_KEYBOARD_STEP_PX;
+                nextWidth = rightPanelWidth + TOOL_PANEL_KEYBOARD_STEP_PX;
               } else if (event.key === "ArrowRight") {
-                nextWidth = rightPanelWidth - RIGHT_PANEL_KEYBOARD_STEP_PX;
+                nextWidth = rightPanelWidth - TOOL_PANEL_KEYBOARD_STEP_PX;
               } else if (event.key === "Home") {
-                nextWidth = MIN_RIGHT_PANEL_WIDTH_PX;
+                nextWidth = MIN_TOOL_PANEL_WIDTH_PX;
               } else if (event.key === "End") {
-                nextWidth = MAX_RIGHT_PANEL_WIDTH_PX;
+                nextWidth = MAX_TOOL_PANEL_WIDTH_PX;
               }
               if (nextWidth === null) return;
               event.preventDefault();
-              setRightPanelWidth(clampRightPanelWidth(nextWidth));
+              setRightPanelWidth(clampToolPanelWidth(nextWidth));
             }}
           />
         ) : null}
@@ -525,7 +578,7 @@ export function CanvasWorkspaceShell({
         <div
           ref={alertsRef}
           className={`pointer-events-none absolute bottom-16 z-30 flex justify-center ${
-            resizingRightPanel ? "transition-none" : "transition-[left,right] duration-200"
+            resizingPanel ? "transition-none" : "transition-[left,right] duration-200"
           }`}
           style={{ left: reservedLeftWidth, right: reservedRightWidth }}
         >
@@ -540,7 +593,7 @@ export function CanvasWorkspaceShell({
       <div
         ref={statusRef}
         className={`pointer-events-none absolute bottom-3 z-30 flex justify-center ${
-          resizingRightPanel ? "transition-none" : "transition-[left,right] duration-200"
+          resizingPanel ? "transition-none" : "transition-[left,right] duration-200"
         }`}
         style={{ left: reservedLeftWidth, right: reservedRightWidth }}
       >
@@ -829,8 +882,8 @@ function handleLeftTabKeyDown(
   (next === "SOURCE" ? sourceTabRef.current : outlineTabRef.current)?.focus();
 }
 
-function clampRightPanelWidth(width: number): number {
-  return Math.min(MAX_RIGHT_PANEL_WIDTH_PX, Math.max(MIN_RIGHT_PANEL_WIDTH_PX, width));
+function clampToolPanelWidth(width: number): number {
+  return Math.min(MAX_TOOL_PANEL_WIDTH_PX, Math.max(MIN_TOOL_PANEL_WIDTH_PX, width));
 }
 
 function handleRightPanelKeyDown(

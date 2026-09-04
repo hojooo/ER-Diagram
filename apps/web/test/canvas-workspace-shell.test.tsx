@@ -125,6 +125,7 @@ describe("canvas workspace shell", () => {
       "true",
     );
     expect(screen.queryByRole("separator", { name: "Resize workspace tools" })).toBeNull();
+    expect(screen.queryByRole("separator", { name: "Resize source and outline" })).toBeNull();
   });
 
   it("preserves source and inspector drafts while their mounted surfaces are off canvas", () => {
@@ -200,6 +201,8 @@ describe("canvas workspace shell", () => {
     const resizeHandle = screen.getByRole("separator", { name: "Resize workspace tools" });
 
     expect(toggle).toHaveClass("absolute", "left-0", "size-6");
+    expect(resizeHandle.tagName).toBe("HR");
+    expect(resizeHandle).toHaveClass("h-full", "w-3", "cursor-ew-resize");
     expect(resizeHandle).toHaveAttribute("aria-valuemin", "360");
     expect(resizeHandle).toHaveAttribute("aria-valuemax", "768");
     expect(resizeHandle).toHaveAttribute("aria-valuenow", "512");
@@ -228,6 +231,46 @@ describe("canvas workspace shell", () => {
     unmount();
     render(<Harness />);
     expect(screen.getByTestId("workspace-right-tool-dock")).toHaveStyle({ width: "512px" });
+  });
+
+  it("resizes the left source and outline panel independently with pointer and keyboard input", () => {
+    const { unmount } = render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "Open source and outline" }));
+
+    const leftDock = screen.getByTestId("workspace-left-tool-dock");
+    const rightDock = screen.getByTestId("workspace-right-tool-dock");
+    const resizeHandle = screen.getByRole("separator", { name: "Resize source and outline" });
+
+    expect(resizeHandle).toHaveAttribute("aria-valuemin", "360");
+    expect(resizeHandle).toHaveAttribute("aria-valuemax", "768");
+    expect(resizeHandle).toHaveAttribute("aria-valuenow", "512");
+    expect(resizeHandle.tagName).toBe("HR");
+    expect(resizeHandle).toHaveClass("h-full", "w-3", "cursor-ew-resize");
+
+    fireEvent.pointerDown(resizeHandle, { button: 0, clientX: 512, pointerId: 11 });
+    fireEvent.pointerMove(resizeHandle, { clientX: 608, pointerId: 11 });
+    fireEvent.pointerUp(resizeHandle, { clientX: 608, pointerId: 11 });
+
+    expect(leftDock).toHaveStyle({ width: "608px" });
+    expect(rightDock).toHaveStyle({ width: "512px" });
+    expect(resizeHandle).toHaveAttribute("aria-valuenow", "608");
+
+    fireEvent.keyDown(resizeHandle, { key: "ArrowLeft" });
+    expect(leftDock).toHaveStyle({ width: "592px" });
+    fireEvent.keyDown(resizeHandle, { key: "Home" });
+    expect(leftDock).toHaveStyle({ width: "360px" });
+    fireEvent.keyDown(resizeHandle, { key: "End" });
+    expect(leftDock).toHaveStyle({ width: "768px" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse source and outline" }));
+    expect(screen.queryByRole("separator", { name: "Resize source and outline" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Open source and outline" }));
+    expect(leftDock).toHaveStyle({ width: "768px" });
+
+    unmount();
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "Open source and outline" }));
+    expect(screen.getByTestId("workspace-left-tool-dock")).toHaveStyle({ width: "512px" });
   });
 
   it("closes the narrow dialog with Escape and returns focus to its trigger", () => {
@@ -342,6 +385,10 @@ describe("canvas workspace shell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open source and outline" }));
     expect(await screen.findByText(/"left":524/)).toBeVisible();
+    fireEvent.keyDown(screen.getByRole("separator", { name: "Resize source and outline" }), {
+      key: "ArrowRight",
+    });
+    expect(await screen.findByText(/"left":540/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Collapse source and outline" }));
     expect(await screen.findByText(/"left":24/)).toBeVisible();
 

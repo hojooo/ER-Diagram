@@ -45,10 +45,17 @@ describe("workspace overlay system", () => {
     const controls = screen.getByTestId("diagram-workspace-controls");
     expect(controls).toHaveAttribute("data-layout", "sidebar");
     expect(controls).toHaveClass("grid-cols-2");
-    expect(screen.getByRole("combobox", { name: "Diagram view" })).not.toHaveClass("truncate");
+    const viewSelector = screen.getByRole("combobox", { name: "Diagram view" });
+    const detailSelector = screen.getByRole("combobox", { name: "Detail level" });
+    expect(viewSelector).not.toHaveClass("truncate");
+    expect(viewSelector.parentElement).toHaveClass("self-start", "content-start");
+    expect(detailSelector.parentElement).toHaveClass("self-start", "content-start");
     const currentViewName = screen.getByTestId("diagram-current-view-name");
     expect(currentViewName).toHaveTextContent(
       "Current view: 아주 긴 다이어그램 뷰 이름 that stays inside the tool panel",
+    );
+    expect(currentViewName).toHaveTextContent(
+      "Only this view's TableGroups and their member tables are shown.",
     );
     expect(currentViewName).toHaveClass("break-words", "whitespace-normal");
 

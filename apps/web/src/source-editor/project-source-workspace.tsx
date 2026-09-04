@@ -31,7 +31,7 @@ import type {
   DiagramLayoutRequestResult,
   DiagramViewportInsets,
 } from "../diagram/base-schema-diagram-contract.js";
-import { toggleCollapsedGroup } from "../diagram/collapse-state.js";
+import { setGroupsCollapsed, toggleCollapsedGroup } from "../diagram/collapse-state.js";
 import { DiagramWorkspaceControls } from "../diagram/diagram-workspace-controls.js";
 import {
   createDefaultLayoutValue,
@@ -377,6 +377,22 @@ export function ProjectSourceWorkspace({
         return {
           ...current,
           collapsedGroupKeys: [...collapsed],
+          baseSchemaHash: activeGraph?.schemaHash ?? current.baseSchemaHash,
+        };
+      });
+    },
+    [activeGraph?.schemaHash, editActiveLayout],
+  );
+
+  const handleSetGroupsCollapsed = useCallback(
+    (groupKeys: readonly string[], collapsed: boolean) => {
+      editActiveLayout((current) => {
+        const currentCollapsed = new Set(current.collapsedGroupKeys);
+        const nextCollapsed = setGroupsCollapsed(currentCollapsed, groupKeys, collapsed);
+        if (nextCollapsed === currentCollapsed) return current;
+        return {
+          ...current,
+          collapsedGroupKeys: [...nextCollapsed],
           baseSchemaHash: activeGraph?.schemaHash ?? current.baseSchemaHash,
         };
       });
@@ -1282,6 +1298,7 @@ export function ProjectSourceWorkspace({
                 selectionStore={selectionStore}
                 sourceNavigationEnabled={sourceNavigationEnabled}
                 onToggleGroup={handleToggleGroup}
+                onSetGroupsCollapsed={handleSetGroupsCollapsed}
                 onNavigateSource={handleNavigateSource}
               />
             ) : (

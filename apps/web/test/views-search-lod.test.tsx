@@ -54,7 +54,7 @@ describe("DiagramView visibility", () => {
     ]);
   });
 
-  it("uses one tri-state union for visible tables, groups, schemas, and relationships", () => {
+  it("uses only each source view's TableGroup filter and member tables", () => {
     const identityView = requiredView(demoSchemaGraph, "identity_only");
     const visibility = createDiagramVisibility(demoSchemaGraph, identityView.key);
 
@@ -68,6 +68,34 @@ describe("DiagramView visibility", () => {
     expect(fullVisibility.tableKeys.size).toBe(demoSchemaGraph.tables.length);
     expect(fullVisibility.groupKeys.size).toBe(demoSchemaGraph.groups.length);
     expect(fullVisibility.referenceKeys.size).toBe(demoSchemaGraph.references.length);
+
+    const commerceView = requiredView(demoSchemaGraph, "catalog");
+    const commerceVisibility = createDiagramVisibility(demoSchemaGraph, commerceView.key);
+    expect(namesForTables(demoSchemaGraph, commerceVisibility.tableKeys)).toEqual([
+      "order",
+      "payment",
+      "product",
+    ]);
+    expect(namesForGroups(demoSchemaGraph, commerceVisibility.groupKeys)).toEqual(["Commerce"]);
+
+    const tableAndSchemaOnlyView: DiagramViewNode = {
+      ...fullView,
+      key: 'view:[null,"table-and-schema-only"]',
+      name: "table-and-schema-only",
+      visibleTableKeys: [requiredTable(demoSchemaGraph, "product").key],
+      visibleGroupKeys: null,
+      visibleSchemaNames: ["identity"],
+    };
+    const groupScopedGraph = {
+      ...demoSchemaGraph,
+      views: [...demoSchemaGraph.views, tableAndSchemaOnlyView],
+    };
+    const groupScopedVisibility = createDiagramVisibility(
+      groupScopedGraph,
+      tableAndSchemaOnlyView.key,
+    );
+    expect(groupScopedVisibility.tableKeys.size).toBe(0);
+    expect(groupScopedVisibility.groupKeys.size).toBe(0);
 
     const emptyView: DiagramViewNode = {
       ...fullView,
@@ -85,7 +113,7 @@ describe("DiagramView visibility", () => {
     expect(emptyVisibility.schemaNames.size).toBe(0);
   });
 
-  it("renders an explicitly visible table at the root when its group is hidden", () => {
+  it("does not render an explicitly listed table when its TableGroup is hidden", () => {
     const template = requiredView(demoSchemaGraph, "identity_only");
     const product = requiredTable(demoSchemaGraph, "product");
     const tableOnlyView: DiagramViewNode = {
@@ -104,9 +132,7 @@ describe("DiagramView visibility", () => {
       lod: "FULL",
     });
 
-    expect(projection.nodes).toHaveLength(1);
-    expect(projection.nodes[0]).toMatchObject({ id: product.key, type: "table" });
-    expect(projection.nodes[0]?.parentId).toBeUndefined();
+    expect(projection.nodes).toHaveLength(0);
     expect(projection.edges).toHaveLength(0);
   });
 });
@@ -310,9 +336,13 @@ describe("accessible view, search, and detail controls", () => {
     const controls = screen.getByTestId("diagram-workspace-controls");
 
     expect(controls).toHaveClass("min-w-0", "w-full", "sm:grid-cols-2");
-    expect(viewSelector.parentElement).toHaveClass("min-w-0");
+    expect(viewSelector.parentElement).toHaveClass("min-w-0", "self-start", "content-start");
     expect(screen.getByText("Diagram view")).toHaveAttribute("for", viewSelector.id);
     expect(viewSelector).toHaveClass("min-w-0", "w-full", "max-w-full");
+    expect(screen.getByRole("combobox", { name: "Detail level" }).parentElement).toHaveClass(
+      "self-start",
+      "content-start",
+    );
     expect(search.parentElement).toHaveClass("min-w-0");
     expect(search).toHaveClass("min-w-0", "w-full", "max-w-full");
   });
@@ -415,6 +445,7 @@ describe("accessible view, search, and detail controls", () => {
         selectionStore={createDiagramSelectionStore()}
         sourceNavigationEnabled
         onToggleGroup={vi.fn()}
+        onSetGroupsCollapsed={vi.fn()}
         onNavigateSource={vi.fn()}
       />,
     );
@@ -454,6 +485,7 @@ describe("accessible view, search, and detail controls", () => {
         selectionStore={createDiagramSelectionStore()}
         sourceNavigationEnabled
         onToggleGroup={vi.fn()}
+        onSetGroupsCollapsed={vi.fn()}
         onNavigateSource={vi.fn()}
       />,
     );

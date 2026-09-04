@@ -16,6 +16,7 @@ interface SchemaOutlineProps {
   readonly selectionStore: DiagramSelectionStore;
   readonly sourceNavigationEnabled: boolean;
   readonly onToggleGroup: (groupKey: string) => void;
+  readonly onSetGroupsCollapsed: (groupKeys: readonly string[], collapsed: boolean) => void;
   readonly onNavigateSource: (selection: DiagramSelection) => void;
 }
 
@@ -82,6 +83,7 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
   selectionStore,
   sourceNavigationEnabled,
   onToggleGroup,
+  onSetGroupsCollapsed,
   onNavigateSource,
 }: Omit<SchemaOutlineProps, "viewLabel">) {
   const { messages } = useUiLocale();
@@ -106,6 +108,10 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
     () => graph.groups.filter((group) => visibility.groupKeys.has(group.key)),
     [graph.groups, visibility.groupKeys],
   );
+  const visibleGroupKeys = useMemo(() => visibleGroups.map((group) => group.key), [visibleGroups]);
+  const collapsedVisibleGroupCount = visibleGroupKeys.filter((groupKey) =>
+    collapsedGroupKeys.has(groupKey),
+  ).length;
   const visibleReferences = useMemo(
     () => graph.references.filter((reference) => visibility.referenceKeys.has(reference.key)),
     [graph.references, visibility.referenceKeys],
@@ -137,9 +143,29 @@ const SchemaOutlineContent = memo(function SchemaOutlineContent({
     <>
       {visibleGroups.length > 0 ? (
         <div className="mt-5">
-          <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
-            {messages["outline.tableGroups"]}
-          </h3>
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+            <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+              {messages["outline.tableGroups"]}
+            </h3>
+            <div className="flex min-w-0 flex-wrap gap-2">
+              <button
+                className="min-h-9 max-w-full whitespace-normal break-words rounded border border-slate-600 px-2 py-1 text-xs font-semibold text-slate-200 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:text-slate-600"
+                type="button"
+                disabled={collapsedVisibleGroupCount === 0}
+                onClick={() => onSetGroupsCollapsed(visibleGroupKeys, false)}
+              >
+                {messages["outline.expandAllGroups"]}
+              </button>
+              <button
+                className="min-h-9 max-w-full whitespace-normal break-words rounded border border-slate-600 px-2 py-1 text-xs font-semibold text-slate-200 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:text-slate-600"
+                type="button"
+                disabled={collapsedVisibleGroupCount === visibleGroupKeys.length}
+                onClick={() => onSetGroupsCollapsed(visibleGroupKeys, true)}
+              >
+                {messages["outline.collapseAllGroups"]}
+              </button>
+            </div>
+          </div>
           <ol className="mt-3 grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
             {visibleGroups.map((group) => {
               const groupSelection: DiagramSelection = {

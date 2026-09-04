@@ -618,6 +618,27 @@ describe("DBML source workspace", () => {
     expect(api.saveDraftInputs).toHaveLength(0);
     expect(parserClient.parseCalls).toBe(initialParseCalls);
   });
+
+  it("collapses and expands every visible diagram group from the outline in one layout update", async () => {
+    const api = new SourceProjectApi(projectState(VIEW_SOURCE, 1, "VALID"));
+    renderWorkspace(api);
+    await screen.findByText("Canonical DBML source");
+    await findWorkspaceStatus("Draft valid");
+    await waitFor(() => expect(api.getLayoutInputs).toHaveLength(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Open source and outline" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Outline" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Collapse all groups" }));
+
+    expect(screen.getByTestId("fake-diagram-collapse-count")).toHaveTextContent("1");
+    await waitFor(() => expect(api.saveLayoutInputs).toHaveLength(1), { timeout: 1_500 });
+    expect(api.saveLayoutInputs[0]?.layout.collapsedGroupKeys).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand all groups" }));
+    expect(screen.getByTestId("fake-diagram-collapse-count")).toHaveTextContent("0");
+    await waitFor(() => expect(api.saveLayoutInputs).toHaveLength(2), { timeout: 1_500 });
+    expect(api.saveLayoutInputs[1]?.layout.collapsedGroupKeys).toEqual([]);
+  });
 });
 
 describe("Monaco DBML adapter", () => {
