@@ -251,11 +251,11 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
 ### Milestone 3 — Visual Schema Editing
 
 - [x] `M3-001` expected revision을 포함한 `VisualCommand` Zod union
-  - 20개 command와 strict payload, typed default, stable-key kind, non-empty patch를 검증한다.
+  - 현재 18개 command와 strict payload, typed default, stable-key kind, non-empty patch를 검증한다.
   - pinned DBML v2의 empty-table 제약에 맞춰 `CREATE_TABLE`은 unique한 초기 column을 한 개 이상 요구한다.
   - 검증: `pnpm --filter @er-diagram/contracts test test/visual-command.test.ts`
-- [x] `M3-002` table/column create/update/rename/reorder/delete minimal patch
-  - token-aware fragment patch, official table rename, structural column rename, dependency·partial 보호와 full reparse·semantic diff rollback을 적용한다.
+- [x] `M3-002` table/column create/alter/delete minimal patch
+  - token-aware fragment patch, official table rename, atomic column alter, dependency·partial 보호와 full reparse·semantic diff rollback을 적용한다.
   - 검증: `pnpm --filter @er-diagram/source-transform test test/table-column.test.ts`
 - [x] `M3-003` reference/index/constraint patch와 DBML capability guard
   - standalone·inline Ref, ordered composite endpoint와 16가지 multiplicity를 source-preserving edit로 처리한다.
@@ -272,7 +272,7 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - strict command/path validation, durable replay response, partial impact transport와 redacted error mapping을 제공한다.
   - 검증: `pnpm --filter @er-diagram/server test:integration visual-commands`
 - [x] `M3-007` accessible visual inspector/form과 source fallback
-  - selection-driven inspector에서 20종 command를 제공하고 source/layout flush, authoritative state adoption, safe replay와 partial source fallback을 적용한다.
+  - selection-driven inspector에서 현재 18종 command를 제공하고 source/layout flush, authoritative state adoption, safe replay와 partial source fallback을 적용한다.
   - 검증: `pnpm --filter @er-diagram/web test test/visual-editor.test.tsx`
 - [x] `M3-008` source/visual session undo-redo와 durable restore
   - project별 100단계 revision snapshot stack에서 source autosave와 visual command를 통합하고 reload·외부 conflict에서는 초기화한다.
@@ -280,7 +280,7 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - source-free History, invalid revision restore와 accessible button·shortcut·상태를 제공한다.
   - 검증: `pnpm --filter @er-diagram/web test test/history-session.test.ts test/history-ui.test.tsx && pnpm test:e2e undo-redo`
 - [x] `M3-GATE` unrelated source preservation, reparse, semantic diff, rollback 통과
-  - versioned corpus의 20종 command를 모두 실행하고 target 밖 source byte, full reparse와 semantic closure를 검증한다.
+  - version 2 corpus의 현재 18종 command를 모두 실행하고 target 밖 source byte, full reparse와 semantic closure를 검증한다.
   - 실제 Fastify·file-backed SQLite restart와 Monaco/parser/React Flow/ELK browser acceptance를 분리해 검증한다.
   - 검증: `pnpm test:m3-gate`
 
@@ -365,7 +365,13 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - versioned client-only preference를 유효한 경우에만 복구하고 locale 전환이 source, diagram, query cache,
     layout session과 visual form draft를 remount·초기화하지 않도록 한다.
   - 검증: `pnpm --filter @er-diagram/web test test/localization.test.tsx`
-- [ ] `P0-RELEASE` M4-012~M4-015 디자인·언어 재정비, `pnpm ci:verify`, Release Gate A~F, OrbStack restore drill,
+- [x] `M4-016` atomic column alter와 Canvas inline editor
+  - `ALTER_COLUMN` 하나가 column name, 속성과 순서를 최소 source edit와 단일 reparse·semantic verification으로
+    원자 적용한다. 기존 update·rename·reorder command는 public contract에서 제거하되 과거 receipt evidence는 보존한다.
+  - Canvas column row의 double-click editor는 explicit Apply 또는 Cancel만 허용하고 Inspector와 같은 authoritative
+    source adoption, stale review, safe replay와 partial fallback을 사용한다.
+  - 검증: `pnpm --filter @er-diagram/source-transform test test/table-column.test.ts && pnpm --filter @er-diagram/web test test/visual-editor.test.tsx`
+- [ ] `P0-RELEASE` M4-012~M4-016 디자인·언어·편집 재정비, `pnpm ci:verify`, Release Gate A~F, OrbStack restore drill,
       source/image mapping과 exact candidate approval 통과 후에만 `v0.1.0` tag 생성
   - preparation gate는 `P0_RELEASE_EVIDENCE_VERSION = 1` profile과 `pnpm test:p0-release`로 online backup,
     source volume 제거, plan-hash Apply와 replacement restart를 검증한다.

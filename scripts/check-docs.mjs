@@ -27,6 +27,7 @@ const requiredFiles = [
   "docs/adr/0017-complete-p0-acceptance.md",
   "docs/adr/0018-p0-release-gate.md",
   "docs/adr/0019-korean-first-web-localization.md",
+  "docs/adr/0020-atomic-column-alter.md",
   "docs/operations/accessibility-checklist.md",
   "docs/operations/backup-restore.md",
   "docs/operations/container.md",

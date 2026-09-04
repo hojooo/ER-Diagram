@@ -163,6 +163,7 @@ docs/
 - [ADR 0017: Complete P0 production acceptance](docs/adr/0017-complete-p0-acceptance.md)
 - [ADR 0018: P0 v0.1.0 release candidate와 OrbStack recovery gate](docs/adr/0018-p0-release-gate.md)
 - [ADR 0019: Korean-first Web localization과 client-only language preference](docs/adr/0019-korean-first-web-localization.md)
+- [ADR 0020: Atomic column alter와 historical receipt compatibility](docs/adr/0020-atomic-column-alter.md)
 
 운영 backup, restore dry-run/apply와 pre-migration 절차는
 [SQLite volume backup·restore runbook](docs/operations/backup-restore.md)을 따른다.

@@ -38,7 +38,7 @@ floating command bar, router 이전 startup·root error는 각 recovery surface�
 
 ### Translation boundary
 
-Project Home, canvas workspace, Source·Outline·Inspector, visual command 20종, history, SQL import·export,
+Project Home, canvas workspace, Source·Outline·Inspector, visual command 18종, history, SQL import·export,
 portable bundle, startup·route·error와 접근성 문구를 모두 catalog에서 제공한다. DBML, SQL,
 parser, schema hash, PostgreSQL·MySQL 같은 기술 식별자는 유지한다.
 

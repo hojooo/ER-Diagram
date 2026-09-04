@@ -109,6 +109,12 @@ Semantic no-op은 receipt만 insert하고 project `updated_at`과 schema/layout 
 migration, receipt insert와 pruning을 같은 transaction으로 묶는다. Layout new-key position 충돌이나 어느
 write 실패도 전체 transaction을 rollback한다.
 
+Storage schema version 3는 public column mutation을 `ALTER_COLUMN`으로 원자화한다. Receipt table을 더 넓은
+historical kind allowlist로 재생성해 version 2의 `UPDATE_COLUMN`, `RENAME_COLUMN`, `REORDER_COLUMN` row를
+byte-identical하게 복사하고 새 `ALTER_COLUMN` receipt를 허용한다. Historical row의 kind·hash·revision evidence를
+변환하거나 삭제하지 않는다. Application public command type은 현재 18종만 허용하되 receipt repository는
+pre-release history를 읽을 수 있는 별도 historical kind type을 사용한다.
+
 하나의 server process만 SQLite에 write한다. Multi-process horizontal write와 shared network filesystem database는 P0 범위가 아니다.
 
 ## Alternatives considered
@@ -137,8 +143,8 @@ Portable하게 보이지만 revision, optimistic version, multiple sidecar의 tr
 - Empty database migration, foreign-key violation, transaction rollback과 restart recovery를 검사한다.
 - WAL, foreign keys와 busy timeout의 effective value를 확인한다.
 - 여섯 product table과 Drizzle migration table, column/index inventory와 migration hash를 확인한다.
-- Version 1 database의 project, revision, layout과 import artifact를 보존하면서 version 2 receipt table로
-  upgrade되는지 확인한다.
+- Version 1 database의 project, revision, layout과 import artifact를 보존하면서 version 3까지 upgrade되는지
+  확인한다. Version 2의 legacy column receipt도 version 3에서 byte-identical하게 유지되어야 한다.
 - read-only storage, unsupported schema version, invalid migration과 built package의 migration path가
   fail-closed인지 확인한다.
 - 실제 Fastify·Core·source-transform과 file-backed SQLite를 조합해 visual revision, receipt와 모든 view의
