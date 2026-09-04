@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export const VISUAL_COMMAND_GATE_FIXTURE_VERSION = 1 as const;
+export const VISUAL_COMMAND_GATE_FIXTURE_VERSION = 2 as const;
 
 export type VisualCommandGateCommandKind =
   | "CREATE_TABLE"
@@ -8,9 +8,7 @@ export type VisualCommandGateCommandKind =
   | "RENAME_TABLE"
   | "DELETE_TABLE"
   | "CREATE_COLUMN"
-  | "UPDATE_COLUMN"
-  | "RENAME_COLUMN"
-  | "REORDER_COLUMN"
+  | "ALTER_COLUMN"
   | "DELETE_COLUMN"
   | "CREATE_REFERENCE"
   | "UPDATE_REFERENCE"
@@ -188,7 +186,7 @@ const STEP_EVIDENCE: readonly StepEvidence[] = [
   [
     "e9906689103ecda57752f86f5ef70aee8bb0f7aa6f73dd2e1eeea714189b9252",
     "cc7d9ddd53417cb90e9a8d0fb6f404dcabeb837d0922332bb7cbbcc2e4de1dba",
-    INITIAL_SCHEMA_HASH,
+    "646597546f59889a79a4e33d2b86f0eef5978be12c305e6bc8b381891088e049",
     "e2cf02bd23649e53db697435bd5a8a8efbc86f57e3c6fda3c434c914a6a68b9c",
     [2, 2, 0, 0, 0],
     ["column", "table"],
@@ -219,99 +217,83 @@ const STEP_EVIDENCE: readonly StepEvidence[] = [
   ],
   [
     "004ba255d5a726d2ce154774fbf5222b3272c5838003fbcb60b3c1a0aa6ca7a1",
-    "d900047d69ea4e0eeb6518ad4822182534a8eb77b966da4fc1da65a06c5e46eb",
+    "026bce96bf39a0719868776ede1e099bfcb4dbf09a8898086e3ab8938e835c31",
     "8793fca4594e8900f6f551304d3a00efa76f9864ac58c36add9822c1fe35b9d9",
-    "41affe81a970a006c262e4d0582cc62570dc9d1419c25f39e82fb253dd9f1e1e",
-    [1, 0, 1, 0, 0],
-    ["column"],
-  ],
-  [
-    "d900047d69ea4e0eeb6518ad4822182534a8eb77b966da4fc1da65a06c5e46eb",
-    "77f79d543e9771593be4c5ce350f361b6ae121c18d8acafb63043351e4a1533c",
-    "41affe81a970a006c262e4d0582cc62570dc9d1419c25f39e82fb253dd9f1e1e",
-    "dab26fd0c78cd7ba541c34903c987cdccf36609885a311d5cb500126e0a3cda4",
+    "bb342152cdd51cfb87b8854f084442b44d2777999e99092042a9897a3415ad20",
     [1, 1, 0, 0, 0],
     ["reference"],
   ],
   [
-    "77f79d543e9771593be4c5ce350f361b6ae121c18d8acafb63043351e4a1533c",
-    "029bdfa0c669e5216f0ebe8b7fa823db5604be5003a78f67cf052309a1a336b1",
-    "dab26fd0c78cd7ba541c34903c987cdccf36609885a311d5cb500126e0a3cda4",
-    "c37756b4bde132b7ff16ff45e8080215f9312a4d7794829933df5b4b57c69792",
+    "026bce96bf39a0719868776ede1e099bfcb4dbf09a8898086e3ab8938e835c31",
+    "23d48586d154dfed3910416cb6d0400a5549aff8f51a968334001653f35d8ace",
+    "bb342152cdd51cfb87b8854f084442b44d2777999e99092042a9897a3415ad20",
+    "9525eb40d4ab3c87323e0f22ce951273127f2e793e2dd4990a0e5ba454bc3833",
     [1, 1, 0, 0, 0],
     ["index"],
   ],
   [
-    "029bdfa0c669e5216f0ebe8b7fa823db5604be5003a78f67cf052309a1a336b1",
-    "ca870352ddb8f0946123e4978374ef24321a6e2a5bbb7b929c2278c2bbe4f5da",
-    "c37756b4bde132b7ff16ff45e8080215f9312a4d7794829933df5b4b57c69792",
-    "97fa7ece62722936ae5e7e1108458f0efec0c03c4cb0560a02c86e90e09f87bd",
+    "23d48586d154dfed3910416cb6d0400a5549aff8f51a968334001653f35d8ace",
+    "a49b87a4aff1c232c1b83238b8e26294733f3cd8a48bb141c73af2edbcfc37fe",
+    "9525eb40d4ab3c87323e0f22ce951273127f2e793e2dd4990a0e5ba454bc3833",
+    "2ff03f5ab9db13dac3726f4c1c7cf8532401271d4cc0d525b1f998786a31536e",
     [5, 1, 3, 1, 1],
     ["column", "index", "reference", "table"],
   ],
   [
-    "ca870352ddb8f0946123e4978374ef24321a6e2a5bbb7b929c2278c2bbe4f5da",
-    "83505af82bd3defc6138414118426ae4c4f3633c2e6f9a0b895a6af4b64f98c6",
-    "97fa7ece62722936ae5e7e1108458f0efec0c03c4cb0560a02c86e90e09f87bd",
-    "9202fed4975c71b063866e3e7b19a54e637e027cde3a4f1e32eefd534b917d44",
+    "a49b87a4aff1c232c1b83238b8e26294733f3cd8a48bb141c73af2edbcfc37fe",
+    "d5766c368398864e84d024b014e2d45e1c11574a1c00699136e9938869491203",
+    "2ff03f5ab9db13dac3726f4c1c7cf8532401271d4cc0d525b1f998786a31536e",
+    "d8657067587424f0b1d6e3cb07d753d45a9fefbaff7dc9840fa9c3d4a79e3bba",
     [1, 0, 1, 0, 0],
     ["reference"],
   ],
   [
-    "83505af82bd3defc6138414118426ae4c4f3633c2e6f9a0b895a6af4b64f98c6",
-    "effe2aa75a8697617e372b8a9e071c4c2a35f819cce14cd05e3e46784db0413e",
-    "9202fed4975c71b063866e3e7b19a54e637e027cde3a4f1e32eefd534b917d44",
-    "52083c9ebcbfddf5d3c82052057b7b2677dc60545b8bd0ee5c857c961647f877",
+    "d5766c368398864e84d024b014e2d45e1c11574a1c00699136e9938869491203",
+    "d2d128a4bf4b80de251c75d24b980c133ee5084e63b2fb197d7d27d9affd1f28",
+    "d8657067587424f0b1d6e3cb07d753d45a9fefbaff7dc9840fa9c3d4a79e3bba",
+    "1adee2d55cde399c060c8cd2ff014028a6c321ec416320f30d7988250ba52a06",
     [1, 0, 1, 0, 0],
     ["index"],
   ],
   [
-    "effe2aa75a8697617e372b8a9e071c4c2a35f819cce14cd05e3e46784db0413e",
-    "1fe5560ebc92be4b8cd235f6987365468cfca220a15d0f0b81052446b922766c",
-    "52083c9ebcbfddf5d3c82052057b7b2677dc60545b8bd0ee5c857c961647f877",
-    "f9c3ce80c15b1593778c73b27738d5ea7408c4eca290d61eab5a3ced241921fd",
+    "d2d128a4bf4b80de251c75d24b980c133ee5084e63b2fb197d7d27d9affd1f28",
+    "56e7eb0719b76f72f6296be374bfa823b5c76cbd89af14c58f4154369273e438",
+    "1adee2d55cde399c060c8cd2ff014028a6c321ec416320f30d7988250ba52a06",
+    "0fb83bf945f9122e7b25b1c53a1032551a837f95c1a2a584c890effb8e594767",
     [1, 1, 0, 0, 0],
     ["check"],
   ],
   [
-    "1fe5560ebc92be4b8cd235f6987365468cfca220a15d0f0b81052446b922766c",
-    "f648427abdc5e1068424f9644a2711c3bb2a8d33b0daad9ac82ce8c28b10a51b",
-    "f9c3ce80c15b1593778c73b27738d5ea7408c4eca290d61eab5a3ced241921fd",
-    "661c60511867b06cc95b708b8d8a9c5816add4315a754cfc5e9a8a402a9ccb08",
+    "56e7eb0719b76f72f6296be374bfa823b5c76cbd89af14c58f4154369273e438",
+    "292490e779d9855ee4280f19edd331c576f8bc9f365a868115beabe50bcdd04f",
+    "0fb83bf945f9122e7b25b1c53a1032551a837f95c1a2a584c890effb8e594767",
+    "c9b606231b64823f5a520eefe70200a3cbb94b124e79548db1c99a41310f5f83",
     [1, 0, 1, 0, 0],
     ["check"],
   ],
   [
-    "f648427abdc5e1068424f9644a2711c3bb2a8d33b0daad9ac82ce8c28b10a51b",
-    "4e1a8095bf04ea91c76eccb0ce3a4bd65c2e2f2c4ddee0aa349b0d5bd3431abc",
-    "661c60511867b06cc95b708b8d8a9c5816add4315a754cfc5e9a8a402a9ccb08",
-    "52083c9ebcbfddf5d3c82052057b7b2677dc60545b8bd0ee5c857c961647f877",
+    "292490e779d9855ee4280f19edd331c576f8bc9f365a868115beabe50bcdd04f",
+    "d6cf19756ded0fe3d61183ab67a19f4791513aacb6ddbe42a178dd779a88e290",
+    "c9b606231b64823f5a520eefe70200a3cbb94b124e79548db1c99a41310f5f83",
+    "1adee2d55cde399c060c8cd2ff014028a6c321ec416320f30d7988250ba52a06",
     [1, 0, 0, 1, 0],
     ["check"],
   ],
   [
-    "4e1a8095bf04ea91c76eccb0ce3a4bd65c2e2f2c4ddee0aa349b0d5bd3431abc",
-    "134ded761caa563518a920b3cc32cfc35811f9b43dee69347b744c64ff7d7006",
-    "52083c9ebcbfddf5d3c82052057b7b2677dc60545b8bd0ee5c857c961647f877",
-    "e5c5da8cd38c42c2b48d7815a3ced19aae4e699a4812ddea9a430facc5c50da5",
+    "d6cf19756ded0fe3d61183ab67a19f4791513aacb6ddbe42a178dd779a88e290",
+    "70cbb58ebfc71ff548971512b3463590df8c630cf2886670d793930f7ac03471",
+    "1adee2d55cde399c060c8cd2ff014028a6c321ec416320f30d7988250ba52a06",
+    "0b58e3984849661d9cccdfaaab5f02291a9bc4f24eb9342bb24f972d2e5a246f",
     [1, 0, 0, 1, 0],
     ["reference"],
   ],
   [
-    "134ded761caa563518a920b3cc32cfc35811f9b43dee69347b744c64ff7d7006",
-    "6045a6eda4aacb743d5293962ab2d97638f1e4677fbf6198236a237c42591211",
-    "e5c5da8cd38c42c2b48d7815a3ced19aae4e699a4812ddea9a430facc5c50da5",
-    "03805e818de0b8df435d8b82784633ca981b817a7d98fcf8f3c41ee90228dffc",
+    "70cbb58ebfc71ff548971512b3463590df8c630cf2886670d793930f7ac03471",
+    "d8c6652058796ad384a510b333c0e0118fb2c7d95a6566ec1574bb8a1f10c7f6",
+    "0b58e3984849661d9cccdfaaab5f02291a9bc4f24eb9342bb24f972d2e5a246f",
+    "997f76e036e182f455788e4c98828aa7525b65c0af514860a21bf9b0a0e990b0",
     [1, 0, 0, 1, 0],
     ["index"],
-  ],
-  [
-    "6045a6eda4aacb743d5293962ab2d97638f1e4677fbf6198236a237c42591211",
-    "d8c6652058796ad384a510b333c0e0118fb2c7d95a6566ec1574bb8a1f10c7f6",
-    "03805e818de0b8df435d8b82784633ca981b817a7d98fcf8f3c41ee90228dffc",
-    "997f76e036e182f455788e4c98828aa7525b65c0af514860a21bf9b0a0e990b0",
-    [1, 0, 1, 0, 0],
-    ["table"],
   ],
   [
     "d8c6652058796ad384a510b333c0e0118fb2c7d95a6566ec1574bb8a1f10c7f6",
@@ -345,7 +327,7 @@ const STEP_EVIDENCE: readonly StepEvidence[] = [
     [2, 0, 0, 2, 0],
     ["column", "table"],
   ],
-];
+] as const;
 
 const steps: readonly VisualCommandGateStep[] = [
   successStep(1, "create-table", {
@@ -376,13 +358,7 @@ const steps: readonly VisualCommandGateStep[] = [
       note: "M3 gate sort order",
     }),
   }),
-  successStep(5, "update-column", {
-    kind: "UPDATE_COLUMN",
-    targetTableKey: ACCOUNTS,
-    targetColumnKey: CREATED_COLUMN,
-    changes: { notNull: true, note: "M3 gate updated sort order" },
-  }),
-  successStep(6, "create-reference", {
+  successStep(5, "create-reference", {
     kind: "CREATE_REFERENCE",
     reference: {
       schemaName: "public",
@@ -405,7 +381,7 @@ const steps: readonly VisualCommandGateStep[] = [
       inactive: false,
     },
   }),
-  successStep(7, "create-index", {
+  successStep(6, "create-index", {
     kind: "CREATE_INDEX",
     targetTableKey: ACCOUNTS,
     index: {
@@ -420,74 +396,70 @@ const steps: readonly VisualCommandGateStep[] = [
       note: "M3 gate index",
     },
   }),
-  successStep(8, "rename-column", {
-    kind: "RENAME_COLUMN",
+  successStep(7, "alter-column", {
+    kind: "ALTER_COLUMN",
     targetTableKey: ACCOUNTS,
     targetColumnKey: CREATED_COLUMN,
     newName: "display_order",
+    changes: { notNull: true, note: "M3 gate updated sort order" },
+    beforeColumnKey: ACCOUNTS_ID,
   }),
-  successStep(9, "update-reference", {
+  successStep(8, "update-reference", {
     kind: "UPDATE_REFERENCE",
     targetReferenceKey: CREATED_REFERENCE,
     changes: { onDelete: "cascade", onUpdate: "restrict", color: "#445566" },
   }),
-  successStep(10, "update-index", {
+  successStep(9, "update-index", {
     kind: "UPDATE_INDEX",
     targetTableKey: ACCOUNTS,
     targetIndexKey: CREATED_INDEX,
     changes: { unique: true, note: "M3 gate updated index" },
   }),
-  successStep(11, "create-check", {
+  successStep(10, "create-check", {
     kind: "CREATE_CHECK",
     targetTableKey: ACCOUNTS,
     ownerColumnKey: null,
     check: { name: "accounts_id_positive", expression: "id > 0" },
   }),
-  successStep(12, "update-check", {
+  successStep(11, "update-check", {
     kind: "UPDATE_CHECK",
     targetTableKey: ACCOUNTS,
     ownerColumnKey: null,
     targetCheckKey: CREATED_CHECK,
     changes: { expression: "id >= 0" },
   }),
-  successStep(13, "delete-check", {
+  successStep(12, "delete-check", {
     kind: "DELETE_CHECK",
     targetTableKey: ACCOUNTS,
     ownerColumnKey: null,
     targetCheckKey: CREATED_CHECK,
   }),
-  successStep(14, "delete-reference", {
+  successStep(13, "delete-reference", {
     kind: "DELETE_REFERENCE",
     targetReferenceKey: CREATED_REFERENCE,
   }),
-  successStep(15, "delete-index", {
+  successStep(14, "delete-index", {
     kind: "DELETE_INDEX",
     targetTableKey: ACCOUNTS,
     targetIndexKey: CREATED_INDEX,
   }),
-  successStep(16, "reorder-column", {
-    kind: "REORDER_COLUMN",
-    targetTableKey: ACCOUNTS,
-    targetColumnKey: RENAMED_COLUMN,
-    beforeColumnKey: ACCOUNTS_ID,
-  }),
-  successStep(17, "delete-column", {
+  successStep(15, "delete-column", {
     kind: "DELETE_COLUMN",
     targetTableKey: ACCOUNTS,
     targetColumnKey: RENAMED_COLUMN,
   }),
-  successStep(18, "update-group-membership", {
+  successStep(16, "update-group-membership", {
     kind: "UPDATE_GROUP_MEMBERSHIP",
     targetGroupKey: GROUP,
     addTableKeys: [RENAMED_TRANSIENT],
     removeTableKeys: [RETIRED],
   }),
-  successStep(19, "update-diagram-view", {
+  successStep(17, "update-diagram-view", {
     kind: "UPDATE_DIAGRAM_VIEW",
     targetViewKey: VIEW,
     changes: { visibleTableKeys: [USERS, RENAMED_TRANSIENT] },
   }),
-  successStep(20, "delete-table", {
+  successStep(18, "delete-table", {
     kind: "DELETE_TABLE",
     targetTableKey: RETIRED,
   }),

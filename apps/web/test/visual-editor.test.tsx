@@ -14,6 +14,10 @@ import type {
   VisualCommandSessionSnapshot,
 } from "../src/visual-editor/visual-command-session.js";
 import {
+  CanvasColumnInlineEditor,
+  positionInlineColumnEditor,
+} from "../src/visual-editor/canvas-column-inline-editor.js";
+import {
   createInitialVisualDraft,
   listVisualEditorActions,
 } from "../src/visual-editor/visual-editor-model.js";
@@ -72,7 +76,7 @@ beforeAll(async () => {
 afterEach(cleanup);
 
 describe("visual editor command model", () => {
-  it("exposes all 20 VisualCommand variants and produces strict contract payloads", () => {
+  it("exposes all 18 VisualCommand variants and produces strict contract payloads", () => {
     const users = requiredTable("users");
     const userId = requiredColumn(users, "id");
     const reference = graph.references[0];
@@ -107,9 +111,7 @@ describe("visual editor command model", () => {
         "RENAME_TABLE",
         "DELETE_TABLE",
         "CREATE_COLUMN",
-        "UPDATE_COLUMN",
-        "RENAME_COLUMN",
-        "REORDER_COLUMN",
+        "ALTER_COLUMN",
         "DELETE_COLUMN",
         "CREATE_REFERENCE",
         "UPDATE_REFERENCE",
@@ -155,7 +157,9 @@ describe("visual editor command model", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Create column" }));
     const typeInput = screen.getByLabelText("DBML column type");
-    expect(typeInput.getAttribute("list")).toBe("visual-column-types");
+    const typeListId = typeInput.getAttribute("list");
+    expect(typeListId).toBeTruthy();
+    expect(document.getElementById(typeListId ?? "")).toBeInstanceOf(HTMLDataListElement);
     fireEvent.change(typeInput, { target: { value: "vector(1536)" } });
     fireEvent.change(screen.getByLabelText("Column name"), { target: { value: "embedding" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply command" }));
@@ -191,12 +195,41 @@ describe("visual editor command model", () => {
       graph.schemaHash,
     );
   });
+
+  it("submits name, attributes, and order as one atomic ALTER_COLUMN draft", () => {
+    const users = requiredTable("users");
+    const userId = requiredColumn(users, "id");
+    const store = createDiagramSelectionStore();
+    store.getState().setSelection(selection("column", userId.key, [users.key]));
+    const commandSession = fakeCommandSession();
+    renderInspector(store, commandSession.controller);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit column" }));
+    fireEvent.change(screen.getByLabelText("Column name"), { target: { value: "user_id" } });
+    fireEvent.change(screen.getByLabelText("DBML column type"), { target: { value: "uuid" } });
+    fireEvent.click(screen.getByLabelText("Not null"));
+    fireEvent.change(screen.getByLabelText("Move before"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply command" }));
+
+    expect(commandSession.submit).toHaveBeenCalledTimes(1);
+    expect(commandSession.submit).toHaveBeenCalledWith(
+      {
+        kind: "ALTER_COLUMN",
+        targetTableKey: users.key,
+        targetColumnKey: userId.key,
+        newName: "user_id",
+        changes: { type: "uuid", notNull: true },
+        beforeColumnKey: null,
+      },
+      graph.schemaHash,
+    );
+  });
 });
 
 describe("accessible visual schema inspector", () => {
-  it("labels every control in all 20 VisualCommand forms", () => {
+  it("labels every control in all 18 VisualCommand forms", () => {
     const actions = visualActionContexts();
-    expect(actions.size).toBe(20);
+    expect(actions.size).toBe(18);
 
     for (const { action, currentSelection } of actions.values()) {
       cleanup();
@@ -327,7 +360,7 @@ describe("accessible visual schema inspector", () => {
     );
 
     expect(screen.getByText(/Partial audit_fields owns this element/)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Update column" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit column" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Open partial definition" }));
     fireEvent.click(screen.getByRole("button", { name: "Open table injection" }));
     expect(onOpenSource).toHaveBeenCalledTimes(2);
@@ -443,6 +476,70 @@ describe("accessible visual schema inspector", () => {
     const sourceAction = screen.getByRole("button", { name: "Open in source" });
     if (!(sourceAction instanceof HTMLButtonElement)) throw new Error("Expected source action.");
     expect(sourceAction.disabled).toBe(true);
+  });
+});
+
+describe("canvas column inline editor", () => {
+  it("keeps a fixed draft open and applies it with the explicit keyboard shortcut", () => {
+    const users = requiredTable("users");
+    const userId = requiredColumn(users, "id");
+    const currentSelection = selection("column", userId.key, [users.key]);
+    const action = {
+      id: `ALTER_COLUMN:${userId.key}:canvas`,
+      kind: "ALTER_COLUMN" as const,
+      label: "Edit column",
+      targetElementKey: userId.key,
+    };
+    const draft = createInitialVisualDraft(graph, currentSelection, action);
+    if (draft?.kind !== "ALTER_COLUMN") throw new Error("Missing ALTER_COLUMN draft.");
+    const commandSession = fakeCommandSession();
+    const onCancel = vi.fn();
+
+    render(
+      <CanvasColumnInlineEditor
+        state={{
+          request: {
+            selection: currentSelection,
+            anchor: { top: 40, right: 320, bottom: 68, left: 40 },
+          },
+          initialDraft: draft,
+          openedSchemaHash: graph.schemaHash,
+          switchBlocked: true,
+        }}
+        graph={graph}
+        primaryDialect="POSTGRESQL"
+        commandSession={commandSession.controller}
+        interactionDisabled={false}
+        sourceNavigationEnabled
+        onCancel={onCancel}
+        onOpenSource={vi.fn()}
+        onReloadLayouts={vi.fn()}
+        onReviewLatest={vi.fn()}
+      />,
+    );
+
+    const dialog = screen.getByRole("dialog", { name: /Edit column id/ });
+    expect(dialog).toHaveClass("nodrag", "nopan", "nowheel");
+    expect(screen.getByLabelText("Column name")).toHaveFocus();
+    expect(screen.getByRole("alert")).toHaveTextContent(/Apply or cancel this column draft/);
+    fireEvent.change(screen.getByLabelText("Column name"), { target: { value: "user_id" } });
+    fireEvent.keyDown(screen.getByRole("form"), { key: "Enter", ctrlKey: true });
+    expect(commandSession.submit).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "ALTER_COLUMN", newName: "user_id" }),
+      graph.schemaHash,
+    );
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(onCancel).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the anchored editor inside the viewport", () => {
+    expect(
+      positionInlineColumnEditor(
+        { top: 890, right: 1_420, bottom: 918, left: 1_120 },
+        { width: 1_440, height: 900 },
+      ),
+    ).toEqual({ left: 728, top: 308 });
   });
 });
 

@@ -23,6 +23,8 @@ const VALID_SOURCE = "Table users {\n  id int [pk]\n}\n";
 const CHANGED_SOURCE = "Table users {\n  id int [pk]\n  email varchar\n}\n";
 const TABLE_KEY = 'table:["public","users"]';
 const RENAMED_TABLE_KEY = 'table:["public","accounts"]';
+const COLUMN_KEY = 'column:["public","users","id"]';
+const RENAMED_COLUMN_KEY = 'column:["public","users","user_id"]';
 
 class FakeVisualCommandPersistence
   implements VisualCommandPersistencePort, VisualCommandPersistenceTransaction
@@ -194,6 +196,73 @@ function renameTableCommand(commandId = COMMAND_ID): VisualCommand {
     kind: "RENAME_TABLE",
     targetTableKey: TABLE_KEY,
     newName: "accounts",
+  };
+}
+
+function alterColumnCommand(commandId = COMMAND_ID): VisualCommand {
+  return {
+    commandId,
+    expectedSchemaRevisionNo: 1,
+    kind: "ALTER_COLUMN",
+    targetTableKey: TABLE_KEY,
+    targetColumnKey: COLUMN_KEY,
+    newName: "user_id",
+    changes: { type: "bigint", notNull: true },
+    beforeColumnKey: null,
+  };
+}
+
+function alteredColumnTransform(renamed: boolean): VisualCommandTransformResult {
+  return {
+    ok: true,
+    changed: true,
+    source: renamed
+      ? "Table users {\n  user_id bigint [pk, not null]\n}\n"
+      : "Table users {\n  id bigint [pk, not null]\n}\n",
+    beforeSchemaHash: BEFORE_HASH,
+    afterSchemaHash: AFTER_HASH,
+    semanticDiff: {
+      changes: renamed
+        ? [
+            { operation: "DELETE", elementKind: "column", key: COLUMN_KEY, parentKey: TABLE_KEY },
+            {
+              operation: "ADD",
+              elementKind: "column",
+              key: RENAMED_COLUMN_KEY,
+              parentKey: TABLE_KEY,
+            },
+            {
+              operation: "UPDATE",
+              elementKind: "table",
+              key: TABLE_KEY,
+              parentKey: null,
+              changedFields: ["columnOrder"],
+            },
+          ]
+        : [
+            {
+              operation: "UPDATE",
+              elementKind: "column",
+              key: COLUMN_KEY,
+              parentKey: TABLE_KEY,
+              changedFields: ["type", "notNull"],
+            },
+          ],
+      renameCandidates: renamed
+        ? [
+            {
+              elementKind: "column",
+              beforeKey: COLUMN_KEY,
+              afterKey: RENAMED_COLUMN_KEY,
+              beforeParentKey: TABLE_KEY,
+              afterParentKey: TABLE_KEY,
+              confidence: "HIGH",
+              reason: "UNIQUE_EXACT_STRUCTURE",
+            },
+          ]
+        : [],
+    },
+    diagnostics: [],
   };
 }
 
@@ -460,6 +529,98 @@ describe("visual command application", () => {
     expect(view?.positions[RENAMED_TABLE_KEY]).toEqual({ x: 10, y: 20 });
     expect(view?.collapsedGroupKeys).toEqual(["group:stable"]);
     expect(view?.viewport).toEqual({ x: 1, y: 2, zoom: 0.8 });
+  });
+
+  it("migrates column layout keys only when ALTER_COLUMN returns verified rename evidence", async () => {
+    const renamedPersistence = new FakeVisualCommandPersistence();
+    const baseLayout = layout("GLOBAL", 0, BEFORE_HASH, false);
+    renamedPersistence.layouts.set(`${PROJECT_ID}:GLOBAL`, {
+      ...baseLayout,
+      positions: { [COLUMN_KEY]: { x: 30, y: 40 } },
+      hiddenElementKeys: [COLUMN_KEY],
+    });
+    const renamed = success(
+      await createApplication(renamedPersistence, async () => alteredColumnTransform(true)).apply({
+        projectId: PROJECT_ID,
+        command: alterColumnCommand(),
+      }),
+    );
+
+    expect(renamed).toMatchObject({
+      revisionCreated: true,
+      layoutMigrated: true,
+      appliedSchemaRevisionNo: 2,
+      appliedLayoutRevisionNo: 1,
+    });
+    expect(renamedPersistence.revisions.size).toBe(2);
+    expect(renamedPersistence.receipts.size).toBe(1);
+    expect(renamedPersistence.layouts.get(`${PROJECT_ID}:GLOBAL`)).toMatchObject({
+      revisionNo: 1,
+      positions: {
+        [COLUMN_KEY]: { x: 30, y: 40 },
+        [RENAMED_COLUMN_KEY]: { x: 30, y: 40 },
+      },
+      hiddenElementKeys: [COLUMN_KEY, RENAMED_COLUMN_KEY].sort(compare),
+    });
+
+    const attributePersistence = new FakeVisualCommandPersistence();
+    attributePersistence.layouts.set(`${PROJECT_ID}:GLOBAL`, {
+      ...baseLayout,
+      positions: { [COLUMN_KEY]: { x: 30, y: 40 } },
+    });
+    const attributeOnlyCommand: VisualCommand = {
+      commandId: SECOND_COMMAND_ID,
+      expectedSchemaRevisionNo: 1,
+      kind: "ALTER_COLUMN",
+      targetTableKey: TABLE_KEY,
+      targetColumnKey: COLUMN_KEY,
+      changes: { type: "bigint", notNull: true },
+    };
+    const attributeOnly = success(
+      await createApplication(attributePersistence, async () =>
+        alteredColumnTransform(false),
+      ).apply({ projectId: PROJECT_ID, command: attributeOnlyCommand }),
+    );
+    expect(attributeOnly).toMatchObject({
+      revisionCreated: true,
+      layoutMigrated: false,
+      appliedLayoutRevisionNo: 0,
+    });
+    expect(attributePersistence.layouts.get(`${PROJECT_ID}:GLOBAL`)).toEqual({
+      ...baseLayout,
+      positions: { [COLUMN_KEY]: { x: 30, y: 40 } },
+    });
+  });
+
+  it("preserves a legacy column receipt as evidence and rejects reuse by ALTER_COLUMN", async () => {
+    const persistence = new FakeVisualCommandPersistence();
+    persistence.receipts.set(`${PROJECT_ID}:${COMMAND_ID.toLowerCase()}`, {
+      projectId: PROJECT_ID,
+      commandId: COMMAND_ID.toLowerCase(),
+      commandKind: "RENAME_COLUMN",
+      commandHash: "f".repeat(64),
+      expectedSchemaRevisionNo: 1,
+      appliedSchemaRevisionNo: 2,
+      appliedLayoutRevisionNo: 0,
+      revisionCreated: true,
+      layoutMigrated: false,
+      createdAt: "2026-08-30T00:00:01.000Z",
+    });
+    let transformCalls = 0;
+    const result = await createApplication(persistence, async () => {
+      transformCalls += 1;
+      return alteredColumnTransform(true);
+    }).apply({ projectId: PROJECT_ID, command: alterColumnCommand() });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "VISUAL_COMMAND_IDEMPOTENCY_CONFLICT",
+        commandId: COMMAND_ID.toLowerCase(),
+      },
+    });
+    expect(transformCalls).toBe(0);
+    expect(persistence.receipts.size).toBe(1);
   });
 
   it("rolls back revision, layout, project, and receipt on migration collision or storage failure", async () => {

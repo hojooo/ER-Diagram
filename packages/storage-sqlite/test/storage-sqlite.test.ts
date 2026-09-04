@@ -174,7 +174,7 @@ afterEach(() => {
 });
 
 describe("SQLite migration and connection", () => {
-  it("migrates the six strict product tables and records both schema migrations once", () => {
+  it("migrates the six strict product tables and records every schema migration once", () => {
     const filename = temporaryDatabasePath();
     const first = trackedOpen(filename);
 
@@ -222,7 +222,7 @@ describe("SQLite migration and connection", () => {
     expect(
       first.database.get<{ count: number }>("SELECT count(*) AS count FROM __drizzle_migrations")
         .count,
-    ).toBe(2);
+    ).toBe(3);
     const migrationsFolder = path.resolve(import.meta.dirname, "../drizzle");
     const expectedMigrations = readMigrationFiles({ migrationsFolder });
     expect(
@@ -248,7 +248,7 @@ describe("SQLite migration and connection", () => {
     expect(
       reopened.database.get<{ count: number }>("SELECT count(*) AS count FROM __drizzle_migrations")
         .count,
-    ).toBe(2);
+    ).toBe(3);
   });
 
   it("sets and reads back foreign keys, WAL, busy timeout, and database integrity", () => {
@@ -267,7 +267,7 @@ describe("SQLite migration and connection", () => {
     expect(storage.database.all("PRAGMA foreign_key_check")).toEqual([]);
   });
 
-  it("upgrades a version 1 database without changing existing product data", () => {
+  it("upgrades a version 1 database to version 3 without changing existing product data", () => {
     const filename = temporaryDatabasePath();
     const storage = trackedOpen(filename);
     const projectId = fixtureUuid(40);
@@ -331,7 +331,7 @@ describe("SQLite migration and connection", () => {
       .prepare("UPDATE app_metadata SET value = '1' WHERE key = ?")
       .run(APP_METADATA_STORAGE_SCHEMA_VERSION_KEY);
     versionOne.exec(
-      "DELETE FROM __drizzle_migrations WHERE created_at = (SELECT max(created_at) FROM __drizzle_migrations)",
+      "DELETE FROM __drizzle_migrations WHERE created_at > (SELECT min(created_at) FROM __drizzle_migrations)",
     );
     versionOne.close();
 
@@ -342,7 +342,7 @@ describe("SQLite migration and connection", () => {
         .from(appMetadata)
         .where(eq(appMetadata.key, APP_METADATA_STORAGE_SCHEMA_VERSION_KEY))
         .get()?.value,
-    ).toBe("2");
+    ).toBe("3");
     expect(upgraded.database.select().from(projects).all()).toHaveLength(1);
     expect(upgraded.database.select().from(schemaRevisions).all()).toHaveLength(1);
     expect(upgraded.database.select().from(diagramLayouts).all()).toHaveLength(1);
@@ -351,7 +351,57 @@ describe("SQLite migration and connection", () => {
     expect(
       upgraded.database.get<{ count: number }>("SELECT count(*) AS count FROM __drizzle_migrations")
         .count,
-    ).toBe(2);
+    ).toBe(3);
+  });
+
+  it("upgrades a version 2 database while preserving legacy column command receipts", () => {
+    const filename = temporaryDatabasePath();
+    const storage = trackedOpen(filename);
+    const projectId = fixtureUuid(43);
+    const commandId = fixtureUuid(44);
+    insertProject(storage, projectId, { schemaRevisionNo: 1 });
+    storage.database
+      .insert(visualCommandReceipts)
+      .values({
+        projectId,
+        commandId,
+        commandKind: "RENAME_COLUMN",
+        commandHash: HASH,
+        expectedSchemaRevisionNo: 1,
+        appliedSchemaRevisionNo: 1,
+        appliedLayoutRevisionNo: 0,
+        revisionCreated: false,
+        layoutMigrated: false,
+        createdAt: FIXED_NOW,
+      })
+      .run();
+    trackedClose(storage);
+
+    const versionTwo = new BetterSqlite3(filename);
+    versionTwo
+      .prepare("UPDATE app_metadata SET value = '2' WHERE key = ?")
+      .run(APP_METADATA_STORAGE_SCHEMA_VERSION_KEY);
+    versionTwo.exec(
+      "DELETE FROM __drizzle_migrations WHERE created_at = (SELECT max(created_at) FROM __drizzle_migrations)",
+    );
+    versionTwo.close();
+
+    const upgraded = trackedOpen(filename);
+    expect(upgraded.database.select().from(visualCommandReceipts).all()).toEqual([
+      expect.objectContaining({
+        projectId,
+        commandId,
+        commandKind: "RENAME_COLUMN",
+        commandHash: HASH,
+      }),
+    ]);
+    expect(
+      upgraded.database
+        .select()
+        .from(appMetadata)
+        .where(eq(appMetadata.key, APP_METADATA_STORAGE_SCHEMA_VERSION_KEY))
+        .get()?.value,
+    ).toBe("3");
   });
 
   it.each(["", "   ", ":memory:", "file::memory:", "file:memory?mode=memory"])(

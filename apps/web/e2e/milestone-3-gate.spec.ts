@@ -81,9 +81,9 @@ test("M3-GATE applies representative source-preserving visual commands", async (
   await page.getByLabel("DBML column type", { exact: true }).fill("varchar(120)");
   await applyCommandAndWait(page, api, "CREATE_COLUMN");
 
-  await page.getByRole("button", { name: "Rename column" }).click();
-  await page.getByLabel("New column name").fill("event_type");
-  await applyCommandAndWait(page, api, "RENAME_COLUMN");
+  await page.getByRole("button", { name: "Edit column" }).click();
+  await page.getByLabel("Column name", { exact: true }).fill("event_type");
+  await applyCommandAndWait(page, api, "ALTER_COLUMN");
 
   await page.getByRole("button", { name: "Create relationship from column" }).click();
   await page.getByLabel("Reference name").fill("audit_owner");
@@ -121,7 +121,7 @@ test("M3-GATE applies representative source-preserving visual commands", async (
   expect(api.visualCommands.map((command) => command.kind)).toEqual([
     "CREATE_TABLE",
     "CREATE_COLUMN",
-    "RENAME_COLUMN",
+    "ALTER_COLUMN",
     "CREATE_REFERENCE",
     "CREATE_INDEX",
     "CREATE_CHECK",

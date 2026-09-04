@@ -316,7 +316,7 @@ function renameColumnCommand(sequence: number, expectedSchemaRevisionNo: number)
   return {
     commandId: commandId(sequence),
     expectedSchemaRevisionNo,
-    kind: "RENAME_COLUMN",
+    kind: "ALTER_COLUMN",
     targetTableKey: USERS_KEY,
     targetColumnKey: USERS_ID_KEY,
     newName: "user_id",
