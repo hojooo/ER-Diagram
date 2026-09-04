@@ -1,8 +1,4 @@
-import {
-  type VisualCommand,
-  visualCommandKindSchema,
-  visualCommandSchema,
-} from "@er-diagram/contracts";
+import { type VisualCommand, visualCommandSchema } from "@er-diagram/contracts";
 import { sha256Utf8 } from "../hash.js";
 import { DBML_PARSER_VERSION } from "../schema-graph.js";
 import { canonicalStringify } from "../schema-semantics.js";
@@ -32,6 +28,29 @@ import {
 
 const SHA_256_HEX = /^[0-9a-f]{64}$/u;
 const VISUAL_COMMAND_FILEPATH = "/main.dbml";
+const RECEIPT_COMMAND_KINDS = new Set([
+  "CREATE_TABLE",
+  "UPDATE_TABLE",
+  "RENAME_TABLE",
+  "DELETE_TABLE",
+  "CREATE_COLUMN",
+  "ALTER_COLUMN",
+  "DELETE_COLUMN",
+  "CREATE_REFERENCE",
+  "UPDATE_REFERENCE",
+  "DELETE_REFERENCE",
+  "CREATE_INDEX",
+  "UPDATE_INDEX",
+  "DELETE_INDEX",
+  "CREATE_CHECK",
+  "UPDATE_CHECK",
+  "DELETE_CHECK",
+  "UPDATE_GROUP_MEMBERSHIP",
+  "UPDATE_DIAGRAM_VIEW",
+  "UPDATE_COLUMN",
+  "RENAME_COLUMN",
+  "REORDER_COLUMN",
+] as const);
 
 class ExpectedVisualCommandFailure extends Error {
   constructor(readonly applicationError: VisualCommandApplicationError) {
@@ -286,17 +305,19 @@ function transformInvariantReason(
     return "Transformer changed result did not change source and semantics together.";
   }
 
-  const expectedRenameKind =
-    command.kind === "RENAME_TABLE" ? "table" : command.kind === "RENAME_COLUMN" ? "column" : null;
-  if (!expectedRenameKind) {
+  const expectedRenameKind = command.kind === "RENAME_TABLE" ? "table" : null;
+  const permitsColumnRename = command.kind === "ALTER_COLUMN";
+  if (!expectedRenameKind && !permitsColumnRename) {
     return transform.semanticDiff.renameCandidates.length === 0
       ? null
       : "Only explicit rename commands may return rename candidates.";
   }
+  if (permitsColumnRename && transform.semanticDiff.renameCandidates.length === 0) return null;
   const [candidate] = transform.semanticDiff.renameCandidates;
   if (
     transform.semanticDiff.renameCandidates.length !== 1 ||
-    candidate?.elementKind !== expectedRenameKind ||
+    candidate?.elementKind !== (expectedRenameKind ?? "column") ||
+    (permitsColumnRename && candidate.beforeKey !== command.targetColumnKey) ||
     candidate.confidence !== "HIGH" ||
     candidate.reason !== "UNIQUE_EXACT_STRUCTURE"
   ) {
@@ -319,10 +340,13 @@ function prepareLayoutMigration(
   command: VisualCommand,
   transform: Extract<VisualCommandTransformResult, { readonly ok: true }>,
 ): LayoutMigration {
-  if (command.kind !== "RENAME_TABLE" && command.kind !== "RENAME_COLUMN") {
+  if (command.kind !== "RENAME_TABLE" && command.kind !== "ALTER_COLUMN") {
     return { layouts: [], nextLayoutRevisionNo: project.layoutRevisionNo, migrated: false };
   }
   const candidate = transform.semanticDiff.renameCandidates[0];
+  if (command.kind === "ALTER_COLUMN" && !candidate) {
+    return { layouts: [], nextLayoutRevisionNo: project.layoutRevisionNo, migrated: false };
+  }
   if (!candidate) {
     throw new ExpectedVisualCommandFailure(
       invariant(project.id, "Explicit rename is missing its semantic rename candidate."),
@@ -423,7 +447,7 @@ function readReceipt(
     receipt.projectId !== projectId ||
     receipt.commandId !== commandId ||
     !isCanonicalUuid(receipt.commandId) ||
-    !visualCommandKindSchema.safeParse(receipt.commandKind).success ||
+    !RECEIPT_COMMAND_KINDS.has(receipt.commandKind) ||
     !SHA_256_HEX.test(receipt.commandHash) ||
     !Number.isSafeInteger(receipt.expectedSchemaRevisionNo) ||
     receipt.expectedSchemaRevisionNo < 1 ||
