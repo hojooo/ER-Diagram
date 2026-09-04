@@ -30,6 +30,12 @@ interface VerifiedVisualTransformHooks<Command extends VisualCommand> {
   preflight(graph: SchemaGraph, command: Command): EditPlan;
   isSemanticNoOp(graph: SchemaGraph, command: Command): boolean;
   planEdits(source: string, graph: SchemaGraph, command: Command): EditPlan;
+  completeSemanticDiff?(
+    before: SchemaGraph,
+    after: SchemaGraph,
+    command: Command,
+    diff: SchemaGraphDiff,
+  ): SchemaGraphDiff;
   verifySemantics(
     before: SchemaGraph,
     after: SchemaGraph,
@@ -115,7 +121,10 @@ export async function runVerifiedVisualTransform<Command extends VisualCommand>(
     );
   }
 
-  const semanticDiff = diffSchemaGraphs(before.graph, after.graph);
+  const baseSemanticDiff = diffSchemaGraphs(before.graph, after.graph);
+  const semanticDiff = hooks.completeSemanticDiff
+    ? hooks.completeSemanticDiff(before.graph, after.graph, typedCommand, baseSemanticDiff)
+    : baseSemanticDiff;
   if (!hooks.verifySemantics(before.graph, after.graph, typedCommand, semanticDiff)) {
     return failure(
       source,
