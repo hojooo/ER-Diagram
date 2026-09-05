@@ -142,7 +142,12 @@ export function positionInlineColumnEditor(
     readonly height: number;
     readonly insets: DiagramViewportInsets;
   },
-): { readonly left: number; readonly top: number; readonly width: number; readonly height: number } {
+): {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+} {
   const insetLeft = Math.max(0, viewport.insets.left) + INLINE_EDITOR_MARGIN_PX;
   const insetRight = Math.max(
     insetLeft,

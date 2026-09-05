@@ -122,10 +122,9 @@ test("opens the atomic column editor from the canvas above the workspace tools",
   const api = await installVisualCommandApi(page);
 
   await page.goto(`/projects/${PROJECT_ID}`);
-  await expect(page.getByTestId("base-diagram-layout-status")).toHaveText(
-    "Diagram layout ready",
-    { timeout: 20_000 },
-  );
+  await expect(page.getByTestId("base-diagram-layout-status")).toHaveText("Diagram layout ready", {
+    timeout: 20_000,
+  });
 
   const users = page.getByRole("article", { name: "Table public.users" });
   await users.getByRole("button", { name: /id, bigint, PK/ }).dblclick();
@@ -274,10 +273,7 @@ function applyControlledCommand(source: string, command: Record<string, unknown>
   if (command.kind === "ALTER_COLUMN") {
     const newName = typeof command.newName === "string" ? command.newName : "id";
     const changes = command.changes as { type?: string } | undefined;
-    return source.replace(
-      "  id bigint [pk]",
-      `  ${newName} ${changes?.type ?? "bigint"} [pk]`,
-    );
+    return source.replace("  id bigint [pk]", `  ${newName} ${changes?.type ?? "bigint"} [pk]`);
   }
   throw new Error(`Unsupported controlled visual command ${String(command.kind)}.`);
 }
