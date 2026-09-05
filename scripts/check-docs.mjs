@@ -106,8 +106,14 @@ console.log("Documentation checks passed.");
 
 function markdownFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    if ([".git", "node_modules", "dist", "coverage"].includes(entry.name)) return [];
+    if (
+      [".git", "node_modules", "dist", "coverage", "test-results", "playwright-report"].includes(
+        entry.name,
+      )
+    )
+      return [];
     const absolutePath = join(directory, entry.name);
+    if (relative(repositoryRoot, absolutePath) === ".agents/skills") return [];
     if (entry.isDirectory()) return markdownFiles(absolutePath);
     return extname(entry.name) === ".md" ? [absolutePath] : [];
   });

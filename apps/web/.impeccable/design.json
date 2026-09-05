@@ -1,0 +1,324 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-05T01:38:24.315672+00:00",
+  "title": "DBML·SQL ERD Studio",
+  "extensions": {
+    "motion": [
+      {
+        "name": "control-feedback",
+        "value": "120ms ease-out",
+        "purpose": "색과 테두리 상태 변화. reduced-motion에서는 중단."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "workspace-dock",
+        "value": "1280px"
+      }
+    ],
+    "colorMeta": {
+      "primary": {
+        "displayName": "primary",
+        "canonical": "#67e8f9",
+        "tonalRamp": [
+          "oklch(15.00% 0.1153 207.08)",
+          "oklch(26.43% 0.1153 207.08)",
+          "oklch(37.86% 0.1153 207.08)",
+          "oklch(49.29% 0.1153 207.08)",
+          "oklch(60.71% 0.1153 207.08)",
+          "oklch(72.14% 0.1153 207.08)",
+          "oklch(83.57% 0.1153 207.08)",
+          "oklch(95.00% 0.1153 207.08)"
+        ]
+      },
+      "primary-hover": {
+        "displayName": "primary-hover",
+        "canonical": "#a5f3fc",
+        "tonalRamp": [
+          "oklch(15.00% 0.0772 205.04)",
+          "oklch(26.43% 0.0772 205.04)",
+          "oklch(37.86% 0.0772 205.04)",
+          "oklch(49.29% 0.0772 205.04)",
+          "oklch(60.71% 0.0772 205.04)",
+          "oklch(72.14% 0.0772 205.04)",
+          "oklch(83.57% 0.0772 205.04)",
+          "oklch(95.00% 0.0772 205.04)"
+        ]
+      },
+      "on-primary": {
+        "displayName": "on-primary",
+        "canonical": "#082f49",
+        "tonalRamp": [
+          "oklch(15.00% 0.0632 243.16)",
+          "oklch(26.43% 0.0632 243.16)",
+          "oklch(37.86% 0.0632 243.16)",
+          "oklch(49.29% 0.0632 243.16)",
+          "oklch(60.71% 0.0632 243.16)",
+          "oklch(72.14% 0.0632 243.16)",
+          "oklch(83.57% 0.0632 243.16)",
+          "oklch(95.00% 0.0632 243.16)"
+        ]
+      },
+      "page": {
+        "displayName": "page",
+        "canonical": "#07101f",
+        "tonalRamp": [
+          "oklch(15.00% 0.0344 259.54)",
+          "oklch(26.43% 0.0344 259.54)",
+          "oklch(37.86% 0.0344 259.54)",
+          "oklch(49.29% 0.0344 259.54)",
+          "oklch(60.71% 0.0344 259.54)",
+          "oklch(72.14% 0.0344 259.54)",
+          "oklch(83.57% 0.0344 259.54)",
+          "oklch(95.00% 0.0344 259.54)"
+        ]
+      },
+      "surface": {
+        "displayName": "surface",
+        "canonical": "#0f172a",
+        "tonalRamp": [
+          "oklch(15.00% 0.0398 265.75)",
+          "oklch(26.43% 0.0398 265.75)",
+          "oklch(37.86% 0.0398 265.75)",
+          "oklch(49.29% 0.0398 265.75)",
+          "oklch(60.71% 0.0398 265.75)",
+          "oklch(72.14% 0.0398 265.75)",
+          "oklch(83.57% 0.0398 265.75)",
+          "oklch(95.00% 0.0398 265.75)"
+        ]
+      },
+      "raised": {
+        "displayName": "raised",
+        "canonical": "#17243a",
+        "tonalRamp": [
+          "oklch(15.00% 0.0454 260.49)",
+          "oklch(26.43% 0.0454 260.49)",
+          "oklch(37.86% 0.0454 260.49)",
+          "oklch(49.29% 0.0454 260.49)",
+          "oklch(60.71% 0.0454 260.49)",
+          "oklch(72.14% 0.0454 260.49)",
+          "oklch(83.57% 0.0454 260.49)",
+          "oklch(95.00% 0.0454 260.49)"
+        ]
+      },
+      "border": {
+        "displayName": "border",
+        "canonical": "#475569",
+        "tonalRamp": [
+          "oklch(15.00% 0.0374 257.28)",
+          "oklch(26.43% 0.0374 257.28)",
+          "oklch(37.86% 0.0374 257.28)",
+          "oklch(49.29% 0.0374 257.28)",
+          "oklch(60.71% 0.0374 257.28)",
+          "oklch(72.14% 0.0374 257.28)",
+          "oklch(83.57% 0.0374 257.28)",
+          "oklch(95.00% 0.0374 257.28)"
+        ]
+      },
+      "divider": {
+        "displayName": "divider",
+        "canonical": "#29364d",
+        "tonalRamp": [
+          "oklch(15.00% 0.0445 261.50)",
+          "oklch(26.43% 0.0445 261.50)",
+          "oklch(37.86% 0.0445 261.50)",
+          "oklch(49.29% 0.0445 261.50)",
+          "oklch(60.71% 0.0445 261.50)",
+          "oklch(72.14% 0.0445 261.50)",
+          "oklch(83.57% 0.0445 261.50)",
+          "oklch(95.00% 0.0445 261.50)"
+        ]
+      },
+      "text": {
+        "displayName": "text",
+        "canonical": "#e2e8f0",
+        "tonalRamp": [
+          "oklch(15.00% 0.0126 255.51)",
+          "oklch(26.43% 0.0126 255.51)",
+          "oklch(37.86% 0.0126 255.51)",
+          "oklch(49.29% 0.0126 255.51)",
+          "oklch(60.71% 0.0126 255.51)",
+          "oklch(72.14% 0.0126 255.51)",
+          "oklch(83.57% 0.0126 255.51)",
+          "oklch(95.00% 0.0126 255.51)"
+        ]
+      },
+      "muted": {
+        "displayName": "muted",
+        "canonical": "#a8b8cc",
+        "tonalRamp": [
+          "oklch(15.00% 0.0337 254.04)",
+          "oklch(26.43% 0.0337 254.04)",
+          "oklch(37.86% 0.0337 254.04)",
+          "oklch(49.29% 0.0337 254.04)",
+          "oklch(60.71% 0.0337 254.04)",
+          "oklch(72.14% 0.0337 254.04)",
+          "oklch(83.57% 0.0337 254.04)",
+          "oklch(95.00% 0.0337 254.04)"
+        ]
+      },
+      "selected": {
+        "displayName": "selected",
+        "canonical": "#12374a",
+        "tonalRamp": [
+          "oklch(15.00% 0.0536 234.44)",
+          "oklch(26.43% 0.0536 234.44)",
+          "oklch(37.86% 0.0536 234.44)",
+          "oklch(49.29% 0.0536 234.44)",
+          "oklch(60.71% 0.0536 234.44)",
+          "oklch(72.14% 0.0536 234.44)",
+          "oklch(83.57% 0.0536 234.44)",
+          "oklch(95.00% 0.0536 234.44)"
+        ]
+      },
+      "danger": {
+        "displayName": "danger",
+        "canonical": "#fecaca",
+        "tonalRamp": [
+          "oklch(15.00% 0.0593 18.33)",
+          "oklch(26.43% 0.0593 18.33)",
+          "oklch(37.86% 0.0593 18.33)",
+          "oklch(49.29% 0.0593 18.33)",
+          "oklch(60.71% 0.0593 18.33)",
+          "oklch(72.14% 0.0593 18.33)",
+          "oklch(83.57% 0.0593 18.33)",
+          "oklch(95.00% 0.0593 18.33)"
+        ]
+      },
+      "danger-surface": {
+        "displayName": "danger-surface",
+        "canonical": "#3f1726",
+        "tonalRamp": [
+          "oklch(15.00% 0.0652 358.83)",
+          "oklch(26.43% 0.0652 358.83)",
+          "oklch(37.86% 0.0652 358.83)",
+          "oklch(49.29% 0.0652 358.83)",
+          "oklch(60.71% 0.0652 358.83)",
+          "oklch(72.14% 0.0652 358.83)",
+          "oklch(83.57% 0.0652 358.83)",
+          "oklch(95.00% 0.0652 358.83)"
+        ]
+      },
+      "danger-border": {
+        "displayName": "danger-border",
+        "canonical": "#a65366",
+        "tonalRamp": [
+          "oklch(15.00% 0.1106 6.91)",
+          "oklch(26.43% 0.1106 6.91)",
+          "oklch(37.86% 0.1106 6.91)",
+          "oklch(49.29% 0.1106 6.91)",
+          "oklch(60.71% 0.1106 6.91)",
+          "oklch(72.14% 0.1106 6.91)",
+          "oklch(83.57% 0.1106 6.91)",
+          "oklch(95.00% 0.1106 6.91)"
+        ]
+      },
+      "danger-hover": {
+        "displayName": "danger-hover",
+        "canonical": "#572235",
+        "tonalRamp": [
+          "oklch(15.00% 0.0814 359.96)",
+          "oklch(26.43% 0.0814 359.96)",
+          "oklch(37.86% 0.0814 359.96)",
+          "oklch(49.29% 0.0814 359.96)",
+          "oklch(60.71% 0.0814 359.96)",
+          "oklch(72.14% 0.0814 359.96)",
+          "oklch(83.57% 0.0814 359.96)",
+          "oklch(95.00% 0.0814 359.96)"
+        ]
+      },
+      "warning": {
+        "displayName": "warning",
+        "canonical": "#fde68a",
+        "tonalRamp": [
+          "oklch(15.00% 0.1151 95.75)",
+          "oklch(26.43% 0.1151 95.75)",
+          "oklch(37.86% 0.1151 95.75)",
+          "oklch(49.29% 0.1151 95.75)",
+          "oklch(60.71% 0.1151 95.75)",
+          "oklch(72.14% 0.1151 95.75)",
+          "oklch(83.57% 0.1151 95.75)",
+          "oklch(95.00% 0.1151 95.75)"
+        ]
+      },
+      "success": {
+        "displayName": "success",
+        "canonical": "#a7f3d0",
+        "tonalRamp": [
+          "oklch(15.00% 0.0895 164.15)",
+          "oklch(26.43% 0.0895 164.15)",
+          "oklch(37.86% 0.0895 164.15)",
+          "oklch(49.29% 0.0895 164.15)",
+          "oklch(60.71% 0.0895 164.15)",
+          "oklch(72.14% 0.0895 164.15)",
+          "oklch(83.57% 0.0895 164.15)",
+          "oklch(95.00% 0.0895 164.15)"
+        ]
+      }
+    }
+  },
+  "components": [
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "description": "공통 크기와 focus/disabled 동작을 공유한다.",
+      "html": "<button class=\"ds-button ds-button--primary\">프로젝트 만들기</button>",
+      "css": ".ds-button {\n    display: inline-flex;\n    align-items: center;\n    justify-content: center;\n    gap: 6px;\n    min-height: var(--ui-control-height, 44px);\n    max-width: 100%;\n    border: 1px solid var(--ui-border, #475569);\n    border-radius: var(--ui-control-radius, 8px);\n    padding: 8px 12px;\n    background: var(--ui-surface, #0f172a);\n    color: var(--ui-text, #e2e8f0);\n    font-size: 14px;\n    font-weight: 600;\n    line-height: 1.4;\n    text-align: center;\n    text-decoration: none;\n    white-space: normal;\n    overflow-wrap: anywhere;\n    cursor: pointer;\n    transition:\n      background-color 120ms ease-out,\n      border-color 120ms ease-out,\n      color 120ms ease-out;\n  }\n.ds-button:hover:not(:disabled) {\n    border-color: var(--ui-muted, #a8b8cc);\n    background: var(--ui-raised, #17243a);\n  }\n.ds-button:focus-visible {\n    outline: var(--ui-focus, 2px solid #67e8f9);\n    outline-offset: 3px;\n  }\n.ds-button:disabled {\n    opacity: 0.5;\n    cursor: not-allowed;\n  }\n.ds-button--primary {\n    border-color: transparent;\n    background: var(--ui-accent, #67e8f9);\n    color: var(--ui-on-accent, #082f49);\n  }\n.ds-button--primary:hover:not(:disabled) {\n    border-color: transparent;\n    background: var(--ui-accent-hover, #a5f3fc);\n  }",
+      "refersTo": "button-primary"
+    },
+    {
+      "name": "Secondary button",
+      "kind": "button",
+      "description": "공통 크기와 focus/disabled 동작을 공유한다.",
+      "html": "<button class=\"ds-button\">취소</button>",
+      "css": ".ds-button {\n    display: inline-flex;\n    align-items: center;\n    justify-content: center;\n    gap: 6px;\n    min-height: var(--ui-control-height, 44px);\n    max-width: 100%;\n    border: 1px solid var(--ui-border, #475569);\n    border-radius: var(--ui-control-radius, 8px);\n    padding: 8px 12px;\n    background: var(--ui-surface, #0f172a);\n    color: var(--ui-text, #e2e8f0);\n    font-size: 14px;\n    font-weight: 600;\n    line-height: 1.4;\n    text-align: center;\n    text-decoration: none;\n    white-space: normal;\n    overflow-wrap: anywhere;\n    cursor: pointer;\n    transition:\n      background-color 120ms ease-out,\n      border-color 120ms ease-out,\n      color 120ms ease-out;\n  }\n.ds-button:hover:not(:disabled) {\n    border-color: var(--ui-muted, #a8b8cc);\n    background: var(--ui-raised, #17243a);\n  }\n.ds-button:focus-visible {\n    outline: var(--ui-focus, 2px solid #67e8f9);\n    outline-offset: 3px;\n  }\n.ds-button:disabled {\n    opacity: 0.5;\n    cursor: not-allowed;\n  }",
+      "refersTo": "button-secondary"
+    },
+    {
+      "name": "Danger button",
+      "kind": "button",
+      "description": "공통 크기와 focus/disabled 동작을 공유한다.",
+      "html": "<button class=\"ds-button ds-button--danger\">프로젝트 삭제</button>",
+      "css": ".ds-button {\n    display: inline-flex;\n    align-items: center;\n    justify-content: center;\n    gap: 6px;\n    min-height: var(--ui-control-height, 44px);\n    max-width: 100%;\n    border: 1px solid var(--ui-border, #475569);\n    border-radius: var(--ui-control-radius, 8px);\n    padding: 8px 12px;\n    background: var(--ui-surface, #0f172a);\n    color: var(--ui-text, #e2e8f0);\n    font-size: 14px;\n    font-weight: 600;\n    line-height: 1.4;\n    text-align: center;\n    text-decoration: none;\n    white-space: normal;\n    overflow-wrap: anywhere;\n    cursor: pointer;\n    transition:\n      background-color 120ms ease-out,\n      border-color 120ms ease-out,\n      color 120ms ease-out;\n  }\n.ds-button:hover:not(:disabled) {\n    border-color: var(--ui-muted, #a8b8cc);\n    background: var(--ui-raised, #17243a);\n  }\n.ds-button:focus-visible {\n    outline: var(--ui-focus, 2px solid #67e8f9);\n    outline-offset: 3px;\n  }\n.ds-button:disabled {\n    opacity: 0.5;\n    cursor: not-allowed;\n  }\n.ds-button--danger {\n    border-color: #a65366;\n    background: var(--ui-danger-surface, #3f1726);\n    color: var(--ui-danger, #fecaca);\n  }\n.ds-button--danger:hover:not(:disabled) {\n    border-color: var(--ui-danger, #fecaca);\n    background: #572235;\n  }"
+    },
+    {
+      "name": "Schema action",
+      "kind": "button",
+      "description": "공통 크기와 focus/disabled 동작을 공유한다.",
+      "html": "<button class=\"ds-button ds-button--action\">테이블 수정</button>",
+      "css": ".ds-button {\n    display: inline-flex;\n    align-items: center;\n    justify-content: center;\n    gap: 6px;\n    min-height: var(--ui-control-height, 44px);\n    max-width: 100%;\n    border: 1px solid var(--ui-border, #475569);\n    border-radius: var(--ui-control-radius, 8px);\n    padding: 8px 12px;\n    background: var(--ui-surface, #0f172a);\n    color: var(--ui-text, #e2e8f0);\n    font-size: 14px;\n    font-weight: 600;\n    line-height: 1.4;\n    text-align: center;\n    text-decoration: none;\n    white-space: normal;\n    overflow-wrap: anywhere;\n    cursor: pointer;\n    transition:\n      background-color 120ms ease-out,\n      border-color 120ms ease-out,\n      color 120ms ease-out;\n  }\n.ds-button:hover:not(:disabled) {\n    border-color: var(--ui-muted, #a8b8cc);\n    background: var(--ui-raised, #17243a);\n  }\n.ds-button:focus-visible {\n    outline: var(--ui-focus, 2px solid #67e8f9);\n    outline-offset: 3px;\n  }\n.ds-button:disabled {\n    opacity: 0.5;\n    cursor: not-allowed;\n  }\n.ds-button--action {\n    color: var(--ui-accent-hover, #a5f3fc);\n  }\n.ds-button--action[aria-pressed=\"true\"] {\n    border-color: var(--ui-accent, #67e8f9);\n    background: var(--ui-selected, #12374a);\n  }"
+    },
+    {
+      "name": "Text input",
+      "kind": "input",
+      "description": "네이티브 입력과 연결된 레이블을 유지한다.",
+      "html": "<label>프로젝트 이름<input class=\"ds-input\" placeholder=\"주문 관리\" /></label>",
+      "css": ".ds-input {\n    width: 100%;\n    min-width: 0;\n    max-width: 100%;\n    min-height: var(--ui-control-height, 44px);\n    border: 1px solid var(--ui-border, #475569);\n    border-radius: var(--ui-control-radius, 8px);\n    padding: 10px 12px;\n    background: var(--ui-page, #07101f);\n    color: var(--ui-text, #e2e8f0);\n    font-size: 14px;\n    line-height: 1.5;\n  }\n.ds-input::placeholder {\n    color: var(--ui-muted, #a8b8cc);\n    opacity: 1;\n  }\n.ds-input:focus-visible {\n    outline: var(--ui-focus, 2px solid #67e8f9);\n    outline-offset: 2px;\n  }\n.ds-input[aria-invalid=\"true\"] {\n    border-color: var(--ui-danger, #fecaca);\n  }\n.ds-input:disabled {\n    opacity: 0.6;\n  }"
+    },
+    {
+      "name": "Document surface",
+      "kind": "card",
+      "description": "관련 입력과 결과를 하나의 표면에 묶는다.",
+      "html": "<section class=\"ds-surface\">소스 리비전</section>",
+      "css": ".ds-surface {\n    border: 1px solid var(--ui-divider, #29364d);\n    border-radius: var(--ui-surface-radius, 12px);\n    background: var(--ui-surface, #0f172a);\n  }"
+    },
+    {
+      "name": "SQL workflow status",
+      "kind": "custom",
+      "description": "실제 처리 단계에 aria-current를 연결한다.",
+      "html": "<ol class=\"ds-workflow-steps\"><li><span>1.</span>SQL source</li><li aria-current=\"step\"><span>2.</span>Import preview</li><li><span>3.</span>Import apply</li></ol>",
+      "css": ".ds-workflow-steps {\n    display: flex;\n    flex-wrap: wrap;\n    gap: 8px 24px;\n    margin: 0;\n    border-bottom: 1px solid var(--ui-divider, #29364d);\n    padding: 0 0 16px;\n    list-style: none;\n    color: var(--ui-muted, #a8b8cc);\n    font-size: 12px;\n  }\n.ds-workflow-steps li {\n    display: flex;\n    align-items: baseline;\n    gap: 8px;\n    min-width: 0;\n    overflow-wrap: anywhere;\n  }\n.ds-workflow-steps [aria-current=\"step\"] {\n    color: var(--ui-accent-hover, #a5f3fc);\n    font-weight: 700;\n  }\n.ds-workflow-steps span {\n    font-variant-numeric: tabular-nums;\n  }"
+    }
+  ],
+  "narrative": {
+    "overview": "현재 구현의 디자인 기준이다. 제품 동작은 [PRD](../../docs/product/PRD.md)가 정본이며 이 문서는\n그 범위나 계약을 변경하지 않는다. 개인 개발자·설계자의 반복 작업을 위해 기존 다크 톤과 청록색 강조를\n유지한다. 새 로고, 외부 폰트, 장식 이미지나 테마 전환을 도입하지 않는다.",
+    "dos": [
+      "일반 문서 폭은 320px에서도 가로 넘침이 없어야 한다. 본질적인 2D 캔버스와 코드 원문의 스크롤은 예외다."
+    ],
+    "donts": [
+      "패널 열기·닫기·resize로 source/form draft, viewport나 schema revision을 바꾸지 않는다.",
+      "invalid draft·충돌·SQL 손실 확인을 단순한 성공 상태로 표시하지 않는다.",
+      "원문·진단·다운로드 바이트는 표시 개선을 이유로 변경하지 않는다."
+    ]
+  }
+}
