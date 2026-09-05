@@ -150,8 +150,8 @@ profile version 1은 source hash
    - heuristic regex 삭제·치환으로 parse를 통과시키지 않는다.
 5. **visual mutation은 DBML에 검증 가능한 최소 변경으로 반영한다.**
    - 전체 normalized model을 DBML로 재생성해 원문을 덮어쓰지 않는다.
-6. **dragging은 schema를 바꾸지 않는다.**
-   - node 위치·collapse·hide는 layout sidecar이며 DBML source를 수정하지 않는다.
+6. **dragging과 resizing은 schema를 바꾸지 않는다.**
+   - node 위치·table 크기·collapse·hide는 layout sidecar이며 DBML source를 수정하지 않는다.
    - camera viewport는 browser session에서만 유지하고 durable layout에 저장하거나 복원하지 않는다.
 7. **하나의 project는 하나의 primary dialect를 갖는다.**
    - PostgreSQL project와 MySQL project의 type·export validation을 혼합하지 않는다.
@@ -647,7 +647,7 @@ candidate의 SQL과 versioned ConversionReport JSON은 별도 파일로 제공�
 | `DGM-002` | P0 | `TableGroup`을 compound group으로 표현한다. | group color·name·membership이 source와 일치한다. |
 | `DGM-003` | P0 | group collapse 시 외부 relationship를 group summary edge로 집계한다. | 숨겨진 child edge 때문에 관계가 사라진 것으로 오인되지 않는다. |
 | `DGM-004` | P0 | `DiagramView` selector를 제공하고 source-defined view는 `TableGroups` 범위로 집중한다. | 7개 view fixture를 재파싱 없이 전환하고 canvas group·table이 source의 `visibleGroupKeys`와 해당 membership에 정확히 일치한다. `Global`은 전체 schema를 유지한다. |
-| `DGM-005` | P0 | global view와 view별 layout을 분리한다. | 한 view의 node 이동이 다른 view 위치를 덮어쓰지 않으며 모든 view write는 project-global layout revision으로 직렬화된다. |
+| `DGM-005` | P0 | global view와 view별 layout을 분리한다. | 한 view의 node 이동·table 크기가 다른 view를 덮어쓰지 않으며 모든 view write는 project-global layout revision으로 직렬화된다. |
 | `DGM-006` | P0 | table·column·group·schema 검색과 focus를 제공한다. | 검색 결과 선택 시 해당 node가 viewport 중앙에 표시된다. |
 | `DGM-007` | P0 | `NAME_ONLY`, `KEYS_ONLY`, `FULL` detail level을 제공한다. | 큰 graph에서 detail을 낮춰도 node identity와 edge가 유지된다. |
 | `DGM-008` | P0 | auto layout preview·apply·cancel·reset을 제공한다. | cancel은 기존 layout을 변경하지 않고 reset은 현재 view의 위치·collapse·LOD를 초기화한 뒤 session viewport를 fit한다. |
@@ -658,7 +658,11 @@ candidate의 SQL과 versioned ConversionReport JSON은 별도 파일로 제공�
 cursor가 현재 view에서 숨겨진 symbol을 가리키더라도 view를 자동으로 변경하지 않으며, 사용자가
 `Show in Global`을 명시적으로 선택한 경우에만 Global view로 전환해 해당 symbol을 선택·focus한다.
 
-각 view의 node 위치, collapse, hidden state와 detail level은 같은 view key의 layout sidecar에 저장한다.
+각 view의 node 위치, 사용자 지정 table 너비·높이, collapse, hidden state와 detail level은 같은 view key의
+layout sidecar에 저장한다. Table 크기는 선택된 node의 right·bottom·corner handle 또는 Inspector 숫자 입력으로
+바꾸며 pointer release나 명시적 Apply에서 한 번만 저장한다. 저장 height가 현재 LOD의 visible column content보다
+작으면 화면에서는 content minimum을 적용하되 이 보정만으로 layout write를 만들지 않는다. Group bounds는 child
+table의 위치와 실제 크기에서 파생하며 group 자체 크기는 저장하지 않는다.
 사용자가 pan·zoom한 camera viewport는 browser session에서만 유지하며 layout API를 호출하거나 reload 후
 복원하지 않는다. Version 1 layout contract의 `viewport`는 호환을 위해 neutral `{ x: 0, y: 0, zoom: 1 }`
 placeholder로 유지한다. Canvas 위의 일반 wheel·trackpad scroll은 camera를 pan하고, pinch gesture와 명시적
@@ -670,14 +674,15 @@ locking하며 다른 view에서 먼저 발생한 write도 stale request를 `409`
 일반 진입과 view·LOD·collapse 변경은 ELK를 호출하지 않고 deterministic Derived layout을 사용한다. Target
 view의 durable position, current stable projection의 absolute position 순으로 재사용하고 parent group이 바뀐
 table은 target group 상대 좌표로 변환한다. 위치가 없는 node는 stable-key 순 collision-free grid에 배치하며
-visible child 기준으로 group bounds를 다시 계산한다. 이 파생 배치는 자동 저장하지 않는다.
+visible child의 위치·크기 기준으로 group bounds를 다시 계산한다. 이 파생 배치는 자동 저장하지 않는다.
 
 저장된 `baseSchemaHash`가 current graph와 다르면 matching stable key만 복구한다. Exact HIGH rename 후보는 새
 key로 위치와 hidden state를 복사하되 old key는 recovery를 위해 보존한다. Layout conflict에서는 자동
 overwrite하지 않고 사용자가 최신 global revision으로 local layout을 재시도하거나 확인 후 충돌 view의 server
 layout을 불러온다. ELK worker는 명시적 Auto-layout Preview와 Reset에서만 사용한다. Preview는 durable
 baseline과 격리하며 Cancel은 추가 write 없이 이전 상태를 복구한다. Reset은 current view만 `FULL`, 모든 group
-expanded, hidden empty와 fresh ELK 위치로 저장하고, 계산된 fit viewport는 현재 session에만 적용한다. 다른
+expanded, hidden empty, 사용자 지정 table 크기가 없는 fresh ELK 위치로 저장하고, 계산된 fit viewport는 현재
+session에만 적용한다. Preview Auto-layout은 현재 view의 사용자 table 크기를 input geometry로 사용한다. 다른
 view는 변경하지 않는다.
 
 ### 11.6 Visual schema editing
@@ -1105,7 +1110,7 @@ checkpoint는 자동 pruning 대상에서 제외한다. 현재 `lastValidRevisio
 | --- | --- |
 | `projectId` | project reference |
 | `viewKey` | `GLOBAL` 또는 `DiagramView` qualified name |
-| `positions` | element key별 x/y |
+| `positions` | element key별 x/y와 table key에만 허용되는 optional width/height pair |
 | `collapsedGroupKeys` | 접힌 group 목록 |
 | `hiddenElementKeys` | 사용자가 추가로 숨긴 element 목록 |
 | `viewport` | Version 1 호환용 neutral `{ x: 0, y: 0, zoom: 1 }`; 실제 camera는 session-only |
@@ -1116,7 +1121,8 @@ checkpoint는 자동 pruning 대상에서 제외한다. 현재 `lastValidRevisio
 Layout row가 아직 없는 view의 조회는 오류가 아니라 current project layout revision과 `layout: null`을
 반환한다. 각 실제 write는 row upsert와 project-global revision 증가를 하나의 transaction으로 처리하고,
 순서만 다른 key collection과 동일 payload는 no-op으로 취급한다. Layout write는 project `updatedAt`을
-갱신하지 않는다.
+갱신하지 않는다. 기존 `{ x, y }` placement는 계속 유효하며 `width`와 `height`는 함께 존재하는 positive safe
+integer다. Rename recovery는 position과 table dimension을 old key에 보존한 채 new key로 함께 복사한다.
 
 ### 14.4 `ImportArtifact`
 

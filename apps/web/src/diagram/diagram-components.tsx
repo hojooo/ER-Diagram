@@ -5,12 +5,15 @@ import {
   getSmoothStepPath,
   getStraightPath,
   Handle,
+  NodeResizeControl,
   type NodeProps,
   Position,
 } from "@xyflow/react";
 import { type CSSProperties, createContext, memo, useContext } from "react";
 import { useUiLocale } from "../localization/ui-locale.js";
 import type { DiagramColumnEditRequest } from "./base-schema-diagram-contract.js";
+import type { DiagramTableResizeRequest } from "./base-schema-diagram-contract.js";
+import { MINIMUM_TABLE_WIDTH, tableNodeMinimumHeight } from "./projection.js";
 import type { DiagramSelection } from "./source-navigation.js";
 import type { GroupDiagramNode, SchemaDiagramEdge, TableDiagramNode } from "./types.js";
 
@@ -18,6 +21,7 @@ export interface DiagramInteractions {
   toggleGroup(groupKey: string): void;
   activateElement(selection: DiagramSelection): void;
   editColumn(request: DiagramColumnEditRequest): void;
+  resizeTable?(request: DiagramTableResizeRequest): void;
   showEdgeLabels: boolean;
 }
 
@@ -25,6 +29,7 @@ export const DiagramInteractionContext = createContext<DiagramInteractions>({
   toggleGroup: () => undefined,
   activateElement: () => undefined,
   editColumn: () => undefined,
+  resizeTable: () => undefined,
   showEdgeLabels: true,
 });
 
@@ -86,7 +91,7 @@ export const GroupDiagramNodeComponent = memo(function GroupDiagramNodeComponent
 export const TableDiagramNodeComponent = memo(function TableDiagramNodeComponent({
   data,
 }: NodeProps<TableDiagramNode>) {
-  const { activateElement, editColumn } = useContext(DiagramInteractionContext);
+  const { activateElement, editColumn, resizeTable } = useContext(DiagramInteractionContext);
   const { messages } = useUiLocale();
   const displayedColumns =
     data.lod === "FULL"
@@ -94,12 +99,55 @@ export const TableDiagramNodeComponent = memo(function TableDiagramNodeComponent
       : data.lod === "KEYS_ONLY"
         ? data.columns.filter((column) => column.primaryKey || column.foreignKey)
         : [];
+  const resizeVisible = data.selectedElementKey === data.tableKey;
+  const minimumHeight = tableNodeMinimumHeight({ data });
+  const commitResize = (
+    _event: unknown,
+    params: { x: number; y: number; width: number; height: number },
+  ) => {
+    resizeTable?.({
+      tableKey: data.tableKey,
+      x: Math.round(params.x),
+      y: Math.round(params.y),
+      width: Math.round(params.width),
+      height: Math.round(params.height),
+    });
+  };
 
   return (
     <article
       className={`diagram-table ${data.selectedElementKey ? "is-selected" : ""}`}
       aria-label={messages["diagram.tableAccessibleName"](`${data.schemaName}.${data.name}`)}
     >
+      {resizeVisible ? (
+        <>
+          <NodeResizeControl
+            position="right"
+            resizeDirection="horizontal"
+            minWidth={MINIMUM_TABLE_WIDTH}
+            minHeight={minimumHeight}
+            className="nodrag nopan nowheel diagram-table__resize-line diagram-table__resize-line--right"
+            onResizeEnd={commitResize}
+          />
+          <NodeResizeControl
+            position="bottom"
+            resizeDirection="vertical"
+            minWidth={MINIMUM_TABLE_WIDTH}
+            minHeight={minimumHeight}
+            className="nodrag nopan nowheel diagram-table__resize-line diagram-table__resize-line--bottom"
+            onResizeEnd={commitResize}
+          />
+          <NodeResizeControl
+            position="bottom-right"
+            minWidth={MINIMUM_TABLE_WIDTH}
+            minHeight={minimumHeight}
+            className="nodrag nopan nowheel diagram-table__resize-handle"
+            onResizeEnd={commitResize}
+          >
+            <span aria-hidden="true" />
+          </NodeResizeControl>
+        </>
+      ) : null}
       <Handle type="target" position={Position.Left} />
       <header className="diagram-table__header">
         <span className="diagram-table__drag-handle" aria-hidden="true">

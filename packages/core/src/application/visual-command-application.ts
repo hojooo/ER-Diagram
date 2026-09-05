@@ -608,10 +608,25 @@ function failure<T = never>(
 }
 
 function samePosition(
-  left: { readonly x: number; readonly y: number },
-  right: { readonly x: number; readonly y: number },
+  left: {
+    readonly x: number;
+    readonly y: number;
+    readonly width?: number | undefined;
+    readonly height?: number | undefined;
+  },
+  right: {
+    readonly x: number;
+    readonly y: number;
+    readonly width?: number | undefined;
+    readonly height?: number | undefined;
+  },
 ): boolean {
-  return Object.is(left.x, right.x) && Object.is(left.y, right.y);
+  return (
+    Object.is(left.x, right.x) &&
+    Object.is(left.y, right.y) &&
+    Object.is(left.width, right.width) &&
+    Object.is(left.height, right.height)
+  );
 }
 
 function compareStrings(left: string, right: string): number {

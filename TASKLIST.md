@@ -371,7 +371,13 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - Canvas column row의 double-click editor는 explicit Apply 또는 Cancel만 허용하고 Inspector와 같은 authoritative
     source adoption, stale review, safe replay와 partial fallback을 사용한다.
   - 검증: `pnpm --filter @er-diagram/source-transform test test/table-column.test.ts && pnpm --filter @er-diagram/web test test/visual-editor.test.tsx`
-- [ ] `P0-RELEASE` M4-012~M4-016 디자인·언어·편집 재정비, `pnpm ci:verify`, Release Gate A~F, OrbStack restore drill,
+- [x] `M4-017` view별 table 크기 layout persistence
+  - 기존 layout `positions`를 table-only optional width/height pair로 하위 호환 확장하고 global·DiagramView마다
+    사용자 크기를 독립 저장한다. TableGroup bounds와 explicit Auto-layout은 사용자 table geometry를 사용한다.
+  - Canvas pointer resize는 release에서 한 번만 layout을 저장하며 Inspector width/height Apply·Reset을 keyboard
+    대체 경로로 제공한다. Resize는 DBML, viewport, schema revision, receipt, history와 project `updatedAt`을 바꾸지 않는다.
+  - 검증: `pnpm --filter @er-diagram/web test test/layout-persistence.test.tsx test/diagram-base.test.tsx`
+- [ ] `P0-RELEASE` M4-012~M4-017 디자인·언어·편집 재정비, `pnpm ci:verify`, Release Gate A~F, OrbStack restore drill,
       source/image mapping과 exact candidate approval 통과 후에만 `v0.1.0` tag 생성
   - preparation gate는 `P0_RELEASE_EVIDENCE_VERSION = 1` profile과 `pnpm test:p0-release`로 online backup,
     source volume 제거, plan-hash Apply와 replacement restart를 검증한다.

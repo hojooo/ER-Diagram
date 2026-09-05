@@ -10,6 +10,23 @@ vi.mock("@xyflow/react", () => ({
   BaseEdge: () => null,
   EdgeLabelRenderer: ({ children }: { children: ReactNode }) => children,
   Handle: () => null,
+  NodeResizeControl: (props: Record<string, unknown>) => {
+    const onResize = props.onResize as
+      | ((event: unknown, params: { x: number; y: number; width: number; height: number }) => void)
+      | undefined;
+    const onResizeEnd = props.onResizeEnd as
+      | ((event: unknown, params: { x: number; y: number; width: number; height: number }) => void)
+      | undefined;
+    const params = { x: 30, y: 40, width: 420, height: 240 };
+    return (
+      <button
+        type="button"
+        aria-label={`Resize ${String(props.position)}`}
+        onMouseDown={() => onResize?.({}, params)}
+        onMouseUp={() => onResizeEnd?.({}, params)}
+      />
+    );
+  },
   Position: { Left: "left", Right: "right" },
   getSmoothStepPath: () => ["", 0, 0],
   getStraightPath: () => ["", 0, 0],
@@ -46,7 +63,7 @@ describe("diagram column inline edit trigger", () => {
         ],
         lod: "FULL",
       },
-    } as ComponentProps<typeof TableDiagramNodeComponent>;
+    } as unknown as ComponentProps<typeof TableDiagramNodeComponent>;
 
     render(
       <DiagramInteractionContext.Provider
@@ -74,5 +91,52 @@ describe("diagram column inline edit trigger", () => {
       anchor: { top: 0, right: 0, bottom: 0, left: 0 },
     });
     expect(row).toHaveAttribute("data-diagram-column-key", 'column:["public","users","id"]');
+  });
+
+  it("shows three handles for the selected table and commits only on resize end", () => {
+    const resizeTable = vi.fn();
+    const tableKey = 'table:["public","users"]';
+    const props = {
+      id: tableKey,
+      type: "table",
+      data: {
+        kind: "table",
+        tableKey,
+        schemaName: "public",
+        name: "users",
+        columns: [],
+        lod: "FULL",
+        selectedElementKey: tableKey,
+      },
+    } as unknown as ComponentProps<typeof TableDiagramNodeComponent>;
+
+    render(
+      <DiagramInteractionContext.Provider
+        value={{
+          toggleGroup: vi.fn(),
+          activateElement: vi.fn(),
+          editColumn: vi.fn(),
+          resizeTable,
+          showEdgeLabels: true,
+        }}
+      >
+        <TableDiagramNodeComponent {...props} />
+      </DiagramInteractionContext.Provider>,
+    );
+
+    expect(screen.getByRole("button", { name: "Resize right" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Resize bottom" })).toBeVisible();
+    const corner = screen.getByRole("button", { name: "Resize bottom-right" });
+    fireEvent.mouseDown(corner);
+    expect(resizeTable).not.toHaveBeenCalled();
+    fireEvent.mouseUp(corner);
+    expect(resizeTable).toHaveBeenCalledOnce();
+    expect(resizeTable).toHaveBeenCalledWith({
+      tableKey,
+      x: 30,
+      y: 40,
+      width: 420,
+      height: 240,
+    });
   });
 });

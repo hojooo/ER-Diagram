@@ -1,6 +1,6 @@
 import {
   type DiagramLayout,
-  type DiagramPosition,
+  type DiagramNodePlacement,
   type DiagramViewport,
   LayoutPersistenceInvariantError,
   type LayoutPersistencePort,
@@ -128,22 +128,43 @@ export function toStoredLayout(layout: DiagramLayout): typeof diagramLayouts.$in
 function parsePositions(
   value: unknown,
   projectId: string,
-): Readonly<Record<string, DiagramPosition>> {
+): Readonly<Record<string, DiagramNodePlacement>> {
   if (!isRecord(value)) return invalid(projectId, "positions");
-  const positions: Array<readonly [string, DiagramPosition]> = [];
+  const positions: Array<readonly [string, DiagramNodePlacement]> = [];
   for (const key of Object.keys(value).sort(compareStrings)) {
     const position = value[key];
+    if (!isRecord(position)) return invalid(projectId, "positions");
+    const keys = Object.keys(position).sort(compareStrings);
+    const hasDimensions = keys.join(",") === "height,width,x,y";
     if (
       key.trim().length === 0 ||
-      !isExactRecord(position, ["x", "y"]) ||
+      (!isExactRecord(position, ["x", "y"]) && !hasDimensions) ||
       !isFiniteNumber(position.x) ||
-      !isFiniteNumber(position.y)
+      !isFiniteNumber(position.y) ||
+      (hasDimensions &&
+        (!key.startsWith("table:[") ||
+          !isPositiveSafeInteger(position.width) ||
+          !isPositiveSafeInteger(position.height)))
     ) {
       return invalid(projectId, "positions");
     }
-    positions.push([key, { x: position.x, y: position.y }]);
+    positions.push([
+      key,
+      hasDimensions
+        ? {
+            x: position.x,
+            y: position.y,
+            width: position.width as number,
+            height: position.height as number,
+          }
+        : { x: position.x, y: position.y },
+    ]);
   }
   return Object.fromEntries(positions);
+}
+
+function isPositiveSafeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
 function parseKeyList(value: unknown, projectId: string): readonly string[] {

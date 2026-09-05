@@ -65,7 +65,7 @@ describe("workspace layout persistence", () => {
     api.layouts.set(
       "GLOBAL",
       storedLayout("GLOBAL", 1, parsed.schemaHash, {
-        positions: { [tableKey]: { x: 11, y: 12 } },
+        positions: { [tableKey]: { x: 11, y: 12, width: 300, height: 180 } },
         collapsedGroupKeys: [groupKey],
         detailLevel: "KEYS_ONLY",
       }),
@@ -73,7 +73,7 @@ describe("workspace layout persistence", () => {
     api.layouts.set(
       viewKey,
       storedLayout(viewKey, 2, parsed.schemaHash, {
-        positions: { [tableKey]: { x: 91, y: 92 } },
+        positions: { [tableKey]: { x: 91, y: 92, width: 360, height: 220 } },
         viewport: { x: 45, y: 67, zoom: 0.6 },
         detailLevel: "NAME_ONLY",
       }),
@@ -83,11 +83,13 @@ describe("workspace layout persistence", () => {
     await waitFor(() => expect(screen.getByTestId("layout-position")).toHaveTextContent("11,12"));
     expect(screen.getByTestId("layout-detail")).toHaveTextContent("KEYS_ONLY");
     expect(screen.getByTestId("layout-collapse-count")).toHaveTextContent("1");
+    expect(screen.getByTestId("layout-size")).toHaveTextContent("300,180");
 
     const viewSelector = screen.getByRole("combobox", { name: "Diagram view" });
     fireEvent.change(viewSelector, { target: { value: viewKey } });
     await waitFor(() => expect(screen.getByTestId("layout-position")).toHaveTextContent("91,92"));
     expect(screen.getByTestId("layout-detail")).toHaveTextContent("NAME_ONLY");
+    expect(screen.getByTestId("layout-size")).toHaveTextContent("360,220");
 
     vi.useFakeTimers();
     fireEvent.click(screen.getByRole("button", { name: "Pan diagram" }));
@@ -105,7 +107,7 @@ describe("workspace layout persistence", () => {
       viewKey,
       expectedLayoutRevisionNo: 2,
       layout: {
-        positions: { [tableKey]: { x: 120, y: 140 } },
+        positions: { [tableKey]: { x: 120, y: 140, width: 360, height: 220 } },
         viewport: { x: 0, y: 0, zoom: 1 },
       },
     });
@@ -115,6 +117,32 @@ describe("workspace layout persistence", () => {
     vi.useRealTimers();
     fireEvent.change(viewSelector, { target: { value: "GLOBAL" } });
     await waitFor(() => expect(screen.getByTestId("layout-position")).toHaveTextContent("11,12"));
+    expect(screen.getByTestId("layout-size")).toHaveTextContent("300,180");
+  });
+
+  it("persists a table resize once after release without creating a schema write", async () => {
+    const parsed = await graph();
+    const tableKey = parsed.tables[0]?.key;
+    if (!tableKey) throw new Error("Missing table key.");
+    const api = new LayoutProjectApi(projectState(0));
+    const { parserClient } = renderWorkspace(api);
+    await screen.findByTestId("layout-position");
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "Resize first node" }));
+    expect(api.saveLayoutInputs).toHaveLength(0);
+    await act(() => vi.advanceTimersByTimeAsync(500));
+    await settleReact();
+
+    expect(api.saveLayoutInputs).toHaveLength(1);
+    expect(api.saveLayoutInputs[0]).toMatchObject({
+      viewKey: "GLOBAL",
+      layout: {
+        positions: { [tableKey]: { x: 10, y: 20, width: 380, height: 240 } },
+      },
+    });
+    expect(api.saveDraftInputs).toHaveLength(0);
+    expect(parserClient.parseCalls).toBe(1);
   });
 
   it("persists a preview baseline, cancels without another write, applies, and resets only the current view", async () => {
@@ -209,6 +237,9 @@ function FakeLayoutDiagram(props: BaseSchemaDiagramProps) {
         {position ? `${position.x},${position.y}` : "auto"}
       </output>
       <output data-testid="layout-detail">{props.detailLevel}</output>
+      <output data-testid="layout-size">
+        {position?.width === undefined ? "auto" : `${position.width},${position.height}`}
+      </output>
       <output data-testid="layout-collapse-count">{props.collapsedGroupKeys.size}</output>
       <button
         type="button"
@@ -217,6 +248,19 @@ function FakeLayoutDiagram(props: BaseSchemaDiagramProps) {
         Drag first node
       </button>
       <button type="button">Pan diagram</button>
+      <button
+        type="button"
+        onClick={() =>
+          props.onTableResizeCommit?.(tableKey, {
+            x: position?.x ?? 10,
+            y: position?.y ?? 20,
+            width: 380,
+            height: 240,
+          })
+        }
+      >
+        Resize first node
+      </button>
     </div>
   );
 }

@@ -19,9 +19,10 @@ import type {
 
 export const GLOBAL_VIEW_KEY = "GLOBAL" as const;
 
-const TABLE_WIDTH = 260;
-const TABLE_HEADER_HEIGHT = 48;
-const TABLE_ROW_HEIGHT = 28;
+export const DEFAULT_TABLE_WIDTH = 260;
+export const MINIMUM_TABLE_WIDTH = 220;
+export const TABLE_HEADER_HEIGHT = 48;
+export const TABLE_ROW_HEIGHT = 28;
 const GROUP_WIDTH = 340;
 const GROUP_HEADER_HEIGHT = 56;
 const GROUP_PADDING = 24;
@@ -270,8 +271,8 @@ function createTableNodes(
       focusable: false,
       position,
       style: {
-        width: TABLE_WIDTH,
-        height: TABLE_HEADER_HEIGHT + visibleRowCount * TABLE_ROW_HEIGHT,
+        width: DEFAULT_TABLE_WIDTH,
+        height: tableContentMinimumHeight(visibleRowCount),
       },
       data: {
         kind: "table",
@@ -285,6 +286,37 @@ function createTableNodes(
     };
     return [node];
   });
+}
+
+export function tableContentMinimumHeight(visibleRowCount: number): number {
+  return TABLE_HEADER_HEIGHT + Math.max(0, visibleRowCount) * TABLE_ROW_HEIGHT;
+}
+
+export function tableNodeMinimumHeight(node: Pick<TableDiagramNode, "data">): number {
+  const visibleRowCount =
+    node.data.lod === "FULL"
+      ? node.data.columns.length
+      : node.data.lod === "KEYS_ONLY"
+        ? node.data.columns.filter((column) => column.primaryKey || column.foreignKey).length
+        : 0;
+  return tableContentMinimumHeight(visibleRowCount);
+}
+
+export function tableMinimumHeightInGraph(
+  graph: SchemaGraph,
+  tableKey: string,
+  lod: DiagramLod,
+): number {
+  const table = graph.tables.find((candidate) => candidate.key === tableKey);
+  if (!table || lod === "NAME_ONLY") return TABLE_HEADER_HEIGHT;
+  if (lod === "FULL") return tableContentMinimumHeight(table.columns.length);
+  const keyColumns = new Set([
+    ...collectPrimaryColumnKeys(table),
+    ...collectForeignColumnKeys(graph.references),
+  ]);
+  return tableContentMinimumHeight(
+    table.columns.filter((column) => keyColumns.has(column.key)).length,
+  );
 }
 
 function collectPrimaryColumnKeys(table: TableNode): ReadonlySet<string> {

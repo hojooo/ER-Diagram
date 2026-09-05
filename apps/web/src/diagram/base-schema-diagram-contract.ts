@@ -1,4 +1,4 @@
-import type { DiagramPosition, DiagramViewport } from "@er-diagram/contracts";
+import type { DiagramNodePlacement, DiagramPosition, DiagramViewport } from "@er-diagram/contracts";
 import type { SchemaElementKey, SchemaGraph } from "@er-diagram/core";
 import type { ComponentType } from "react";
 
@@ -26,12 +26,16 @@ export interface BaseSchemaDiagramProps {
   readonly viewportInsets?: DiagramViewportInsets;
   readonly fillContainer?: boolean;
   readonly requestLayout?: (projection: DiagramProjection) => Promise<DiagramProjection>;
-  readonly layoutPositions?: Readonly<Record<SchemaElementKey, DiagramPosition>>;
+  readonly layoutPositions?: Readonly<Record<SchemaElementKey, DiagramNodePlacement>>;
   readonly layoutPending?: boolean;
   readonly layoutRequest?: DiagramLayoutRequest | null;
   readonly interactionDisabled?: boolean;
   readonly onPositionsCommit?: (
     positions: Readonly<Record<SchemaElementKey, DiagramPosition>>,
+  ) => void;
+  readonly onTableResizeCommit?: (
+    tableKey: SchemaElementKey,
+    placement: Required<DiagramNodePlacement>,
   ) => void;
   readonly onLayoutRequestReady?: (result: DiagramLayoutRequestResult) => void;
   readonly onRenderedLayoutReady?: (
@@ -48,6 +52,14 @@ export interface DiagramColumnEditRequest {
     readonly bottom: number;
     readonly left: number;
   };
+}
+
+export interface DiagramTableResizeRequest {
+  readonly tableKey: SchemaElementKey;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
 }
 
 export interface DiagramViewportInsets {
