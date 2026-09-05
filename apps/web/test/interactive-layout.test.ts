@@ -45,6 +45,31 @@ describe("deterministic interactive diagram layout", () => {
     expect(collectAbsolutePositions(result).get(child.id)).toEqual({ x: 130, y: 290 });
   });
 
+  it("applies per-view table dimensions before recalculating compound group bounds", () => {
+    const group = groupNode('group:["public","resizable"]');
+    const child = table('table:["public","wide member"]', group.id, 120);
+    const global = deriveInteractiveLayout(diagram([group, child]), {
+      savedPositions: {
+        [group.id]: { x: 100, y: 200 },
+        [child.id]: { x: 30, y: 90, width: 420, height: 260 },
+      },
+    });
+    const focused = deriveInteractiveLayout(
+      diagram([groupNode(group.id), table(child.id, group.id)]),
+      {
+        savedPositions: {
+          [group.id]: { x: 100, y: 200 },
+          [child.id]: { x: 30, y: 90, width: 280, height: 140 },
+        },
+      },
+    );
+
+    expect(nodeSize(global, child.id)).toEqual({ width: 420, height: 260 });
+    expect(groupSize(global, group.id)).toEqual({ width: 474, height: 374 });
+    expect(nodeSize(focused, child.id)).toEqual({ width: 280, height: 140 });
+    expect(groupSize(focused, group.id)).toEqual({ width: 340, height: 254 });
+  });
+
   it("preserves a table absolute position when its visible parent group changes", () => {
     const oldGroup = groupNode('group:["public","old"]');
     const childId = 'table:["public","member"]';
@@ -200,6 +225,12 @@ function position(projection: DiagramProjection, id: string): { x: number; y: nu
 function groupSize(projection: DiagramProjection, id: string): { width: unknown; height: unknown } {
   const node = projection.nodes.find((candidate) => candidate.id === id);
   if (!node) throw new Error(`Missing group ${id}`);
+  return { width: node.style?.width, height: node.style?.height };
+}
+
+function nodeSize(projection: DiagramProjection, id: string): { width: unknown; height: unknown } {
+  const node = projection.nodes.find((candidate) => candidate.id === id);
+  if (!node) throw new Error(`Missing node ${id}`);
   return { width: node.style?.width, height: node.style?.height };
 }
 

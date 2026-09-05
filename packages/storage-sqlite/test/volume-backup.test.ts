@@ -285,7 +285,14 @@ describe("SQLite whole-volume restore and migration", () => {
         .values({
           projectId,
           viewKey: "GLOBAL",
-          positions: { 'table:["public","retained_secret"]': { x: 10, y: 20 } },
+          positions: {
+            'table:["public","retained_secret"]': {
+              x: 10,
+              y: 20,
+              width: 360,
+              height: 224,
+            },
+          },
           collapsedGroupKeys: [],
           hiddenElementKeys: [],
           viewport: { x: 1, y: 2, zoom: 0.75 },
@@ -335,6 +342,9 @@ describe("SQLite whole-volume restore and migration", () => {
     expect(createSqliteLayoutRepository(restored).getLayout(projectId, "GLOBAL")).toMatchObject({
       revisionNo: 1,
       viewport: { x: 1, y: 2, zoom: 0.75 },
+      positions: {
+        'table:["public","retained_secret"]': { x: 10, y: 20, width: 360, height: 224 },
+      },
     });
     expect(
       createSqliteVisualCommandRepository(restored).getVisualCommandReceipt(projectId, commandId),
