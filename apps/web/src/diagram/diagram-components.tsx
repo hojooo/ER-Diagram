@@ -107,6 +107,7 @@ export const TableDiagramNodeComponent = memo(function TableDiagramNodeComponent
         </span>
         <button
           className="nodrag nopan diagram-table__table-action"
+          title={`${data.schemaName}.${data.name}`}
           type="button"
           tabIndex={-1}
           aria-pressed={data.selectedElementKey === data.tableKey}
@@ -138,6 +139,7 @@ export const TableDiagramNodeComponent = memo(function TableDiagramNodeComponent
                   type="button"
                   tabIndex={-1}
                   data-diagram-column-key={column.key}
+                  title={`${column.name}, ${column.type}${badges.length > 0 ? `, ${badges.join(", ")}` : ""}`}
                   aria-pressed={data.selectedElementKey === column.key}
                   aria-label={`${column.name}, ${column.type}${badges.length > 0 ? `, ${badges.join(", ")}` : ""}`}
                   onClick={(event) => {

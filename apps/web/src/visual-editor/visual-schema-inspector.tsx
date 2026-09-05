@@ -602,11 +602,7 @@ function diagnosticIdentity(diagnostic: Diagnostic): string {
   return `${diagnostic.code}:${diagnostic.message}:${range?.filepath ?? "none"}:${range?.startOffset ?? "none"}:${range?.endOffset ?? "none"}`;
 }
 
-const actionButtonClass =
-  "min-h-10 max-w-full whitespace-normal break-words rounded-lg border border-cyan-400/40 px-3 text-center text-sm font-semibold text-cyan-100 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50 aria-pressed:bg-cyan-950";
-const dangerButtonClass =
-  "min-h-10 max-w-full whitespace-normal break-words rounded-lg border border-red-400/50 px-3 text-center text-sm font-semibold text-red-100 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-300 disabled:cursor-not-allowed disabled:opacity-50";
-const primaryButtonClass =
-  "min-h-10 max-w-full whitespace-normal break-words rounded-lg bg-cyan-300 px-4 text-center text-sm font-bold text-slate-950 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300";
-const secondaryButtonClass =
-  "min-h-10 max-w-full whitespace-normal break-words rounded-lg border border-slate-600 px-3 text-center text-sm font-semibold text-slate-100 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50";
+const actionButtonClass = "ui-button ui-button--action";
+const dangerButtonClass = "ui-button ui-button--danger";
+const primaryButtonClass = "ui-button ui-button--primary";
+const secondaryButtonClass = "ui-button";

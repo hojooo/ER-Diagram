@@ -72,7 +72,7 @@ export function CanvasColumnInlineEditor({
   return (
     <section
       ref={editorRef}
-      className="nodrag nopan nowheel pointer-events-auto fixed z-50 flex h-[min(36rem,calc(100vh-2rem))] w-96 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-cyan-400/40 bg-slate-950/95 shadow-2xl backdrop-blur-md"
+      className="nodrag nopan nowheel pointer-events-auto fixed z-50 flex h-[min(36rem,calc(100vh-2rem))] w-96 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-cyan-400/40 bg-slate-950 shadow-2xl"
       style={{ left: position.left, top: position.top }}
       role="dialog"
       aria-modal="false"
@@ -87,7 +87,7 @@ export function CanvasColumnInlineEditor({
         onCancel();
       }}
     >
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <p className="text-xs text-slate-400">{messages["visual.inlineEditorShortcut"]}</p>
         {state.switchBlocked ? (
           <p

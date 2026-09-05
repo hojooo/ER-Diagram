@@ -1203,7 +1203,7 @@ export function ProjectSourceWorkspace({
               {messages["workspace.backToProjects"]}
             </Link>
             <div className="min-w-0 max-w-full basis-48 px-1 sm:px-2">
-              <p className="min-w-0 whitespace-normal break-words text-[0.65rem] font-bold uppercase tracking-[0.14em] text-cyan-300 [overflow-wrap:anywhere]">
+              <p className="min-w-0 whitespace-normal break-words text-xs font-bold uppercase tracking-[0.14em] text-cyan-300 [overflow-wrap:anywhere]">
                 {messages["workspace.revisionSummary"](
                   dialectLabel(serverState.project.primaryDialect),
                   serverState.project.schemaRevisionNo,
@@ -2677,9 +2677,6 @@ function isSchemaHistoryShortcutTarget(target: EventTarget | null): boolean {
   return target.closest("[data-schema-history-scope]") !== null;
 }
 
-const secondaryButtonClass =
-  "min-h-10 max-w-full whitespace-normal break-words rounded-lg border border-slate-600 px-3 text-center text-sm font-semibold text-slate-100 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:opacity-50";
-const primaryButtonClass =
-  "min-h-10 max-w-full whitespace-normal break-words rounded-lg bg-cyan-300 px-3 text-center text-sm font-semibold text-slate-950 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:opacity-50";
-const commandBarButtonClass =
-  "inline-flex min-h-10 max-w-full items-center whitespace-normal break-words rounded-lg border border-slate-600 px-3 text-center text-xs font-semibold text-slate-100 no-underline [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:opacity-50";
+const secondaryButtonClass = "ui-button";
+const primaryButtonClass = "ui-button ui-button--primary";
+const commandBarButtonClass = "ui-button ui-button--compact";

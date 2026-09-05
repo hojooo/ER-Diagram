@@ -75,7 +75,7 @@ export function SchemaHistoryControls({
       aria-label={messages["history.label"]}
       className={compact ? "contents" : "rounded-xl border border-slate-700 bg-slate-900/70 p-3"}
     >
-      <div className={`flex items-center gap-2 ${compact ? "shrink-0" : "flex-wrap"}`}>
+      <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
         <button
           aria-label={messages["history.undoAvailable"](
             messages["history.steps"](snapshot.past.length),
@@ -423,7 +423,5 @@ function historyStatusMessage(
   }
 }
 
-const secondaryButtonClass =
-  "min-h-10 rounded-lg border border-slate-600 px-3 text-sm font-semibold text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:opacity-50";
-const primaryButtonClass =
-  "min-h-10 rounded-lg bg-cyan-300 px-3 text-sm font-semibold text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:opacity-50";
+const secondaryButtonClass = "ui-button";
+const primaryButtonClass = "ui-button ui-button--primary";

@@ -1489,15 +1489,10 @@ function compareCodeUnits(left: string, right: string): number {
 }
 
 const labelClass = "grid gap-1.5 text-sm font-semibold text-slate-200";
-const inputClass =
-  "min-h-10 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-60";
+const inputClass = "ui-input";
 const fieldsetClass = "space-y-3 rounded-xl border border-slate-700 p-3";
 const legendClass = "px-1 text-sm font-semibold text-cyan-100";
-const primaryButtonClass =
-  "min-h-10 rounded-lg bg-cyan-300 px-4 text-sm font-bold text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50";
-const secondaryButtonClass =
-  "min-h-10 rounded-lg border border-slate-600 px-3 text-sm font-semibold text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50";
-const dangerButtonClass =
-  "min-h-10 rounded-lg border border-red-400/60 px-3 text-sm font-semibold text-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-300 disabled:cursor-not-allowed disabled:opacity-50";
-const smallButtonClass =
-  "min-h-9 rounded-md border border-slate-600 px-2 text-xs font-semibold text-slate-200 disabled:opacity-40";
+const primaryButtonClass = "ui-button ui-button--primary";
+const secondaryButtonClass = "ui-button";
+const dangerButtonClass = "ui-button ui-button--danger";
+const smallButtonClass = "ui-button ui-button--compact";

@@ -9,10 +9,8 @@ import { useProjectApi } from "../projects/project-api-context.js";
 import { projectQueryKeys } from "../projects/project-queries.js";
 import { useRuntimeResourceLimits } from "../runtime-config.js";
 
-const primaryButton =
-  "inline-flex min-h-11 items-center justify-center rounded-lg bg-cyan-300 px-4 font-semibold text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50";
-const secondaryButton =
-  "inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-700 px-4 font-semibold text-slate-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50";
+const primaryButton = "ui-button ui-button--primary";
+const secondaryButton = "ui-button";
 
 export interface ProjectBundlePageAdapters {
   readonly download: (file: ProjectBundleDownload) => void;
@@ -76,7 +74,7 @@ export function ProjectBundleImportPage() {
   };
 
   return (
-    <section aria-labelledby="bundle-import-heading" className="space-y-6">
+    <section aria-labelledby="bundle-import-heading" className="ui-document space-y-6">
       <div>
         <Link className={secondaryButton} to="/">
           {messages["route.backToProjects"]}
@@ -92,13 +90,13 @@ export function ProjectBundleImportPage() {
         </p>
       </div>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+      <section className="ui-surface p-5">
         <label className="block text-sm font-semibold text-slate-200" htmlFor="project-bundle-file">
           {messages["bundle.zipLabel"]}
         </label>
         <input
           id="project-bundle-file"
-          className="mt-3 block min-h-11 w-full rounded-lg border border-slate-700 bg-slate-950 p-2 text-sm text-slate-200"
+          className="ui-input mt-3"
           type="file"
           accept=".zip,application/zip"
           disabled={busy}
@@ -243,7 +241,7 @@ function ProjectBundleExportWorkflow({
   };
 
   return (
-    <section aria-labelledby="bundle-export-heading" className="space-y-6">
+    <section aria-labelledby="bundle-export-heading" className="ui-document space-y-6">
       <div>
         <Link className={secondaryButton} to={`/projects/${state.project.id}`}>
           {messages["workspace.back"]}
@@ -272,13 +270,13 @@ function ProjectBundleExportWorkflow({
         </p>
       </div>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+      <section className="ui-surface p-5">
         <label className="block text-sm font-semibold text-slate-200" htmlFor="bundle-report-mode">
           {messages["bundle.sqlReports"]}
         </label>
         <select
           id="bundle-report-mode"
-          className="mt-3 min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 text-slate-100"
+          className="ui-input mt-3"
           value={reportMode}
           disabled={busy}
           onChange={(event) => {
