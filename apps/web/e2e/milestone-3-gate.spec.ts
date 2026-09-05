@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { type Diagnostic, type VisualCommand, visualCommandSchema } from "@er-diagram/contracts";
 import { parseDbmlV2 } from "@er-diagram/core";
 import { transformVisualCommand } from "@er-diagram/source-transform";
-import { expect, type Page, type Route, test } from "./test-fixture.js";
-
 import { createControlledLayoutApi } from "./controlled-layout-api.js";
+import { expect, type Page, type Route, test } from "./test-fixture.js";
+import { openWorkspaceTab } from "./workspace-panels.js";
 
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-9123456789ab";
 const CREATED_AT = "2026-08-30T03:04:05.006Z";
@@ -85,7 +85,11 @@ test("M3-GATE applies representative source-preserving visual commands", async (
   await page.getByLabel("Column name", { exact: true }).fill("event_type");
   await applyCommandAndWait(page, api, "ALTER_COLUMN");
 
-  await page.getByRole("button", { name: "Create relationship from column" }).click();
+  await page
+    .getByRole("toolbar", { name: "Visual schema actions" })
+    .getByRole("button", { name: "Create relationship", exact: true })
+    .last()
+    .click();
   await page.getByLabel("Reference name").fill("audit_owner");
   await expect(page.getByRole("group", { name: "Endpoint 2" })).toContainText("public.users");
   await applyCommandAndWait(page, api, "CREATE_REFERENCE");
@@ -101,6 +105,7 @@ test("M3-GATE applies representative source-preserving visual commands", async (
   await page.getByLabel("Check expression", { exact: true }).fill("id > 0");
   await applyCommandAndWait(page, api, "CREATE_CHECK");
 
+  await openWorkspaceTab(page, "Outline");
   const outline = page.getByRole("region", { name: "Schema outline" });
   const groupFocus = outline.getByRole("button", {
     name: "Focus group public.Identity in diagram",
@@ -734,11 +739,12 @@ async function waitForWorkspace(page: Page): Promise<void> {
   await expect(page.getByTestId("base-diagram-layout-status")).toHaveText("Diagram layout ready", {
     timeout: 20_000,
   });
-  await expect(page.getByRole("complementary", { name: "Visual schema inspector" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Schema history", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Visual schema inspector" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Schema history", exact: true })).toBeAttached();
 }
 
 async function replaceEditorSource(page: Page, source: string): Promise<void> {
+  await openWorkspaceTab(page, "Source");
   const modifier = process.platform === "darwin" ? "Meta" : "Control";
   const editor = page.getByRole("textbox", { name: "DBML source editor" });
   await editor.focus();
@@ -754,6 +760,7 @@ async function replaceEditorSource(page: Page, source: string): Promise<void> {
 }
 
 async function selectTableInOutline(page: Page, qualifiedName: string): Promise<void> {
+  await openWorkspaceTab(page, "Outline");
   const outline = page.getByRole("region", { name: "Schema outline" });
   const summary = outline.locator("summary").filter({ hasText: qualifiedName }).first();
   await expect(summary).toBeVisible({ timeout: 20_000 });
@@ -771,6 +778,7 @@ async function selectColumnInOutline(
   qualifiedTableName: string,
   columnName: string,
 ): Promise<void> {
+  await openWorkspaceTab(page, "Outline");
   const outline = page.getByRole("region", { name: "Schema outline" });
   const summary = outline.locator("summary").filter({ hasText: qualifiedTableName }).first();
   await expect(summary).toBeVisible({ timeout: 20_000 });

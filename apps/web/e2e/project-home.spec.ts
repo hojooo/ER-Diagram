@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { expect, type Page, test } from "./test-fixture.js";
-
 import { createControlledLayoutApi } from "./controlled-layout-api.js";
+import { expect, type Page, test } from "./test-fixture.js";
+import { openWorkspaceTab } from "./workspace-panels.js";
 
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-0123456789ab";
 const COPY_ID = "019d3f4e-7b6c-7def-9abc-0123456789ab";
@@ -193,7 +193,8 @@ test("creates, opens, renames, duplicates, and confirms deletion", async ({ page
 
   await expect(page).toHaveURL(`/projects/${PROJECT_ID}`);
   await expect(page.getByRole("heading", { name: "Orders", level: 1 })).toBeVisible();
-  await expect(page.getByText("MySQL project")).toBeVisible();
+  await expect(page.getByTestId("workspace-command-bar")).toContainText("MySQL");
+  await openWorkspaceTab(page, "Source");
   await expect(page.getByText("Canonical DBML source")).toBeVisible();
   await expect(page.getByTestId("persistence-status")).toHaveText(/Saved/);
   await expect(
@@ -201,7 +202,7 @@ test("creates, opens, renames, duplicates, and confirms deletion", async ({ page
   ).toBeVisible();
   await expect(page.getByTestId("erd-canvas")).toHaveCount(0);
 
-  await page.getByRole("link", { name: "Back to projects" }).click();
+  await page.getByRole("link", { name: "Back", exact: true }).click();
   const ordersCard = page.getByRole("article", { name: "Orders" });
   await ordersCard.getByRole("button", { name: "Rename Orders" }).click();
   const renameDialog = page.getByRole("dialog", { name: "Rename project" });
@@ -218,7 +219,7 @@ test("creates, opens, renames, duplicates, and confirms deletion", async ({ page
   await expect(page).toHaveURL(`/projects/${COPY_ID}`);
   await expect(page.getByRole("heading", { name: "Orders schema copy", level: 1 })).toBeVisible();
 
-  await page.getByRole("link", { name: "Back to projects" }).click();
+  await page.getByRole("link", { name: "Back", exact: true }).click();
   const copyCard = page.getByRole("article", { name: "Orders schema copy" });
   const deleteTrigger = copyCard.getByRole("button", { name: "Delete Orders schema copy" });
   await deleteTrigger.click();

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { expect, type Page, test } from "./test-fixture.js";
-
 import { createControlledLayoutApi } from "./controlled-layout-api.js";
+import { expect, type Page, test } from "./test-fixture.js";
+import { openWorkspaceInspector, openWorkspaceTab } from "./workspace-panels.js";
 
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-7123456789ab";
 const CREATED_AT = "2026-08-30T01:02:03.004Z";
@@ -55,8 +55,8 @@ test("applies inspector commands through authoritative state without a draft PUT
   await expect(page.getByTestId("base-diagram-layout-status")).toHaveText("Diagram layout ready", {
     timeout: 20_000,
   });
-  await page.getByRole("button", { name: "Inspector", exact: true }).click();
-  await expect(page.locator("#workspace-inspector-surface")).toHaveCSS("opacity", "1");
+  await openWorkspaceInspector(page);
+  await expect(page.getByTestId("workspace-inspector-scroll")).toBeVisible();
 
   await page.getByRole("button", { name: "Create table" }).click();
   await page.getByLabel("Table name").fill("audit_log");
@@ -70,13 +70,13 @@ test("applies inspector commands through authoritative state without a draft PUT
     expectedSchemaRevisionNo: 1,
   });
   await expect(page.getByText("Selected table public.audit_log")).toBeVisible({ timeout: 20_000 });
-  await page.getByRole("button", { name: "Outline", exact: true }).click();
+  await openWorkspaceTab(page, "Outline");
   await expect(
     page.locator("#workspace-outline-surface").getByRole("button", {
       name: "Focus public.audit_log in diagram",
     }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Source", exact: true }).click();
+  await openWorkspaceTab(page, "Source");
   await expectEditorContains(page, "Table public.audit_log");
 
   await page.getByRole("button", { name: "Create column" }).click();
@@ -89,7 +89,7 @@ test("applies inspector commands through authoritative state without a draft PUT
     expectedSchemaRevisionNo: 2,
     column: { name: "event_name", type: "varchar(120)" },
   });
-  await page.getByRole("button", { name: "Outline", exact: true }).click();
+  await openWorkspaceTab(page, "Outline");
   await expect(
     page.locator("#workspace-outline-surface").getByRole("button", {
       name: "Focus column event_name in diagram",

@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
-import { expect, type Page, test } from "./test-fixture.js";
-
 import { createControlledLayoutApi } from "./controlled-layout-api.js";
+import { expect, type Page, test } from "./test-fixture.js";
 
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-0123456789ab";
 const REVISION_1_ID = "019d3f4e-7b6c-7def-9abc-0123456789ab";
@@ -33,6 +32,9 @@ test("previews a PostgreSQL file and atomically creates revision 1 only on apply
   await page.getByRole("button", { name: "Preview import" }).click();
 
   await expect(page.getByRole("heading", { name: "Review SQL import" })).toBeVisible();
+  await expect(page.locator(".ui-workflow-steps [aria-current=step]")).toContainText(
+    "Preview import",
+  );
   expect(api.createCalls()).toBe(0);
   await page.getByLabel("Status filter").selectOption("PARTIAL");
   await expect(page.getByRole("button", { name: /SQL_PARTIAL_CREATE_TABLE/ })).toBeVisible();
@@ -53,7 +55,7 @@ test("previews a PostgreSQL file and atomically creates revision 1 only on apply
 
   await expect(page).toHaveURL(`/projects/${PROJECT_ID}`);
   await expect(page.getByRole("heading", { name: "Imported schema", level: 1 })).toBeVisible();
-  await expect(page.getByText("Revision 1 · Parser 9.1.1")).toBeVisible();
+  await expect(page.getByTestId("workspace-command-bar").getByText(/revision 1$/)).toBeVisible();
   expect(api.createCalls()).toBe(1);
   expect(api.currentState()?.currentRevision.origin).toBe("SQL_IMPORT");
   expect(browserErrors).toEqual([]);
@@ -73,6 +75,9 @@ test("cancels a MySQL replace without mutation, then repreviews and applies", as
   await page.getByLabel("SQL source").fill(MYSQL_SQL);
   await page.getByRole("button", { name: "Preview import" }).click();
   await expect(page.getByRole("heading", { name: "Review SQL import" })).toBeVisible();
+  await expect(page.locator(".ui-workflow-steps [aria-current=step]")).toContainText(
+    "Preview import",
+  );
   await page.getByRole("button", { name: "Cancel import" }).click();
 
   await expect(page).toHaveURL(`/projects/${PROJECT_ID}`);
@@ -87,7 +92,7 @@ test("cancels a MySQL replace without mutation, then repreviews and applies", as
   await page.getByRole("button", { name: "Apply import" }).click();
 
   await expect(page).toHaveURL(`/projects/${PROJECT_ID}`);
-  await expect(page.getByText("Revision 2 · Parser 9.1.1")).toBeVisible();
+  await expect(page.getByTestId("workspace-command-bar").getByText(/revision 2$/)).toBeVisible();
   expect(api.applyCalls()).toBe(1);
   expect(api.currentState()?.project.draftSource).toBe(REPLACEMENT_DBML);
   expect(browserErrors).toEqual([]);

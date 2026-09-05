@@ -370,7 +370,7 @@ describe("canvas workspace shell", () => {
       if (this instanceof HTMLElement && this.classList.contains("top-3")) {
         return testRect(12, 70, 1_120);
       }
-      if (this instanceof HTMLElement && this.classList.contains("bottom-3")) {
+      if (this instanceof HTMLElement && this.dataset.testid === "workspace-status-region") {
         return testRect(660, 708, 460);
       }
       return testRect(0, 0, 0);

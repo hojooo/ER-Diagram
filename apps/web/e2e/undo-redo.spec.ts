@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { expect, type Page, test } from "./test-fixture.js";
-
 import { createControlledLayoutApi } from "./controlled-layout-api.js";
+import { expect, type Page, test } from "./test-fixture.js";
+import { openWorkspaceTab } from "./workspace-panels.js";
 
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-8123456789ab";
 const CREATED_AT = "2026-08-30T01:02:03.004Z";
@@ -117,6 +117,7 @@ test("unifies source and visual revisions while keeping restore durable", async 
   expect(api.layouts.currentRevisionNo).toBe(layoutRevisionBeforeRename + 1);
 
   const layoutWritesBeforeFirstUndo = api.layouts.writes.length;
+  await openWorkspaceTab(page, "Source");
   await editor.focus();
   await editor.press(`${modifier}+z`);
   await expect.poll(() => api.currentSource()).toBe(SOURCE_WITH_EMAIL);
@@ -145,6 +146,7 @@ test("unifies source and visual revisions while keeping restore durable", async 
   await expect.poll(() => api.currentSource()).toContain("Table public.accounts");
   await expect(redo).toBeDisabled();
 
+  await openWorkspaceTab(page, "Source");
   await editor.focus();
   await editor.press(`${modifier}+z`);
   await expect.poll(() => api.currentSource()).toBe(SOURCE_WITH_EMAIL);
@@ -157,6 +159,7 @@ test("unifies source and visual revisions while keeping restore durable", async 
   await expect(page.getByText(/Showing last-valid revision/)).toBeVisible({ timeout: 20_000 });
   expect(api.lastValidSource()).toBe(SOURCE_WITH_PHONE);
   await openTableInOutline(page, "public.users");
+  await openWorkspaceTab(page, "Outline");
   await expect(page.getByRole("region", { name: "Schema outline" })).toContainText("phone");
   const invalidRevisionNo = api.revisions[0]?.revisionNo;
   if (!invalidRevisionNo) throw new Error("Missing invalid revision.");
@@ -187,6 +190,7 @@ test("unifies source and visual revisions while keeping restore durable", async 
   await expect(page.getByText(/Showing last-valid revision/)).toBeVisible({ timeout: 20_000 });
   await history.getByRole("button", { name: "Close history" }).click();
   await openTableInOutline(page, "public.users");
+  await openWorkspaceTab(page, "Outline");
   await expect(page.getByRole("region", { name: "Schema outline" })).toContainText("phone");
   expect(api.revisions[0]?.origin).toBe("RESTORE");
   await undo.click();
@@ -426,7 +430,7 @@ async function waitForWorkspace(page: Page): Promise<void> {
   );
   const status = page.getByTestId("base-diagram-layout-status");
   await expect(status).toHaveText("Diagram layout ready", { timeout: 20_000 });
-  await expect(page.getByRole("region", { name: "Schema history", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Schema history", exact: true })).toBeAttached();
 }
 
 async function replaceEditorSource(
@@ -434,6 +438,7 @@ async function replaceEditorSource(
   source: string,
   waitForAutosave = true,
 ): Promise<void> {
+  await openWorkspaceTab(page, "Source");
   const modifier = process.platform === "darwin" ? "Meta" : "Control";
   const input = page.getByRole("textbox", { name: "DBML source editor" });
   await input.focus();
@@ -454,6 +459,7 @@ async function selectTableInOutline(page: Page, name: string): Promise<void> {
 }
 
 async function openTableInOutline(page: Page, name: string) {
+  await openWorkspaceTab(page, "Outline");
   const outline = page.getByRole("region", { name: "Schema outline" });
   const details = outline.locator("details").filter({ hasText: name }).first();
   if (!(await details.getAttribute("open"))) await details.locator("summary").click();
