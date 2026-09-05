@@ -1,4 +1,4 @@
-import type { DiagramPosition, DiagramViewport } from "@er-diagram/contracts";
+import type { DiagramNodePlacement, DiagramPosition, DiagramViewport } from "@er-diagram/contracts";
 
 import type { DiagramViewportInsets } from "./base-schema-diagram-contract.js";
 import type {
@@ -7,6 +7,7 @@ import type {
   SchemaDiagramNode,
   TableDiagramNode,
 } from "./types.js";
+import { MINIMUM_TABLE_WIDTH, tableNodeMinimumHeight } from "./projection.js";
 
 const GROUP_HEADER_HEIGHT = 56;
 const GROUP_PADDING = 24;
@@ -32,7 +33,7 @@ interface GroupPlacement {
 }
 
 export interface InteractiveLayoutOptions {
-  readonly savedPositions?: Readonly<Record<string, DiagramPosition>>;
+  readonly savedPositions?: Readonly<Record<string, DiagramNodePlacement>>;
   readonly previousProjection?: DiagramProjection | null;
 }
 
@@ -61,14 +62,15 @@ export function deriveInteractiveLayout(
   if (projection.nodes.length === 0) return cloneProjection(projection);
 
   const savedPositions = options.savedPositions ?? {};
+  const sizeAwareProjection = applySavedTableDimensions(projection, savedPositions);
   const previousAbsolute = collectAbsolutePositions(options.previousProjection ?? null);
-  const nodeById = new Map(projection.nodes.map((node) => [node.id, node]));
-  const childrenByParent = collectChildren(projection.nodes, nodeById);
+  const nodeById = new Map(sizeAwareProjection.nodes.map((node) => [node.id, node]));
+  const childrenByParent = collectChildren(sizeAwareProjection.nodes, nodeById);
   const groupPlacements = new Map<string, GroupPlacement>();
   const rootPositions = new Map<string, MutablePoint>();
   const rootSizes = new Map<string, NodeSize>();
 
-  for (const node of projection.nodes) {
+  for (const node of sizeAwareProjection.nodes) {
     if (node.type !== "group") continue;
     const children = childrenByParent.get(node.id) ?? [];
     const placement = placeGroup(node, children, savedPositions, previousAbsolute);
@@ -77,7 +79,7 @@ export function deriveInteractiveLayout(
     if (placement.position) rootPositions.set(node.id, placement.position);
   }
 
-  for (const node of projection.nodes) {
+  for (const node of sizeAwareProjection.nodes) {
     if (node.parentId && nodeById.has(node.parentId)) continue;
     if (node.type === "group") continue;
     rootSizes.set(node.id, nodeSize(node));
@@ -85,12 +87,12 @@ export function deriveInteractiveLayout(
     if (seed) rootPositions.set(node.id, { ...seed });
   }
 
-  placeMissingRoots(projection.nodes, nodeById, rootPositions, rootSizes);
+  placeMissingRoots(sizeAwareProjection.nodes, nodeById, rootPositions, rootSizes);
 
   return reuseStableProjectionElements(
     {
-      ...projection,
-      nodes: projection.nodes.map((node) => {
+      ...sizeAwareProjection,
+      nodes: sizeAwareProjection.nodes.map((node) => {
         if (node.type === "group") {
           const placement = groupPlacements.get(node.id);
           const position = rootPositions.get(node.id);
@@ -117,10 +119,31 @@ export function deriveInteractiveLayout(
         if (!position) throw new Error(`Missing interactive root layout: ${node.id}`);
         return { ...node, position: { ...position } };
       }),
-      edges: projection.edges.map((edge) => ({ ...edge, data: { ...edge.data } })),
+      edges: sizeAwareProjection.edges.map((edge) => ({ ...edge, data: { ...edge.data } })),
     },
     options.previousProjection ?? null,
   );
+}
+
+export function applySavedTableDimensions(
+  projection: DiagramProjection,
+  savedPositions: Readonly<Record<string, DiagramNodePlacement>>,
+): DiagramProjection {
+  let changed = false;
+  const nodes = projection.nodes.map((node) => {
+    if (node.type !== "table") return node;
+    const placement = savedPositions[node.id];
+    if (placement?.width === undefined || placement.height === undefined) return node;
+    const width = Math.max(MINIMUM_TABLE_WIDTH, placement.width);
+    const height = Math.max(tableNodeMinimumHeight(node), placement.height);
+    if (node.style?.width === width && node.style?.height === height) return node;
+    changed = true;
+    return {
+      ...node,
+      style: { ...node.style, width, height },
+    } satisfies TableDiagramNode;
+  });
+  return changed ? { ...projection, nodes } : projection;
 }
 
 function reuseStableProjectionElements(
@@ -342,7 +365,7 @@ function validViewportInsets(insets: DiagramViewportInsets): boolean {
 function placeGroup(
   group: SchemaDiagramNode,
   children: readonly SchemaDiagramNode[],
-  savedPositions: Readonly<Record<string, DiagramPosition>>,
+  savedPositions: Readonly<Record<string, DiagramNodePlacement>>,
   previousAbsolute: ReadonlyMap<string, DiagramPosition>,
 ): GroupPlacement {
   const baseSize = nodeSize(group);

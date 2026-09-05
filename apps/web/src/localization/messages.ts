@@ -537,6 +537,14 @@ export const englishMessages = {
   "navigation.leaveWorkspace": "Leave workspace",
   "visual.inspectorDescription":
     "Select a diagram element, review a typed form, then apply one source-preserving command.",
+  "visual.tableSizeTitle": "Table size in this view",
+  "visual.tableSizeDescription":
+    "Width and height are layout-only and are saved independently for each DiagramView.",
+  "visual.tableWidth": "Width (px)",
+  "visual.tableHeight": "Height (px)",
+  "visual.applyTableSize": "Apply size",
+  "visual.resetTableSize": "Reset size",
+  "visual.tableSizeInvalid": "Enter whole-number dimensions within the allowed range.",
   "visual.actions": "Visual schema actions",
   "visual.targetUnavailable": "The selected schema target is no longer available.",
   "visual.selectedTable": (name: string) => `Selected table ${name}`,
@@ -1269,6 +1277,14 @@ export const koreanMessages = {
   "navigation.leaveWorkspace": "작업 공간 나가기",
   "visual.inspectorDescription":
     "Diagram element를 선택하고 typed form을 검토한 뒤 source를 보존하는 command를 한 번 적용합니다.",
+  "visual.tableSizeTitle": "현재 View의 테이블 크기",
+  "visual.tableSizeDescription":
+    "너비와 높이는 layout에만 저장되며 DiagramView마다 독립적으로 유지됩니다.",
+  "visual.tableWidth": "너비(px)",
+  "visual.tableHeight": "높이(px)",
+  "visual.applyTableSize": "크기 적용",
+  "visual.resetTableSize": "크기 초기화",
+  "visual.tableSizeInvalid": "허용 범위의 정수 너비와 높이를 입력하세요.",
   "visual.actions": "Visual schema action",
   "visual.targetUnavailable": "선택한 schema target을 더 이상 사용할 수 없습니다.",
   "visual.selectedTable": (name: string) => `테이블 ${name} 선택됨`,
