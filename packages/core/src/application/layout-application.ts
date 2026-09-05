@@ -140,7 +140,12 @@ function normalizeInput(command: SaveLayoutCommand): LayoutApplicationResult<Dia
 function normalizeLayoutValue(
   layout: DiagramLayoutValue,
 ): LayoutApplicationResult<DiagramLayoutValue> {
-  const positions: Array<readonly [string, { readonly x: number; readonly y: number }]> = [];
+  const positions: Array<
+    readonly [
+      string,
+      { readonly x: number; readonly y: number; readonly width?: number; readonly height?: number },
+    ]
+  > = [];
   if (!isRecord(layout.positions)) return failure(invalid("Layout positions must be an object."));
   for (const key of Object.keys(layout.positions).sort(compareStrings)) {
     const position = layout.positions[key];
@@ -148,11 +153,22 @@ function normalizeLayoutValue(
       !isNonBlank(key) ||
       !position ||
       !isFiniteNumber(position.x) ||
-      !isFiniteNumber(position.y)
+      !isFiniteNumber(position.y) ||
+      !validPlacementDimensions(key, position.width, position.height)
     ) {
       return failure(invalid("Layout positions contain an invalid key or coordinate."));
     }
-    positions.push([key, { x: position.x, y: position.y }]);
+    positions.push([
+      key,
+      position.width === undefined
+        ? { x: position.x, y: position.y }
+        : {
+            x: position.x,
+            y: position.y,
+            width: position.width,
+            height: position.height as number,
+          },
+    ]);
   }
   const collapsed = normalizeKeyList(layout.collapsedGroupKeys, "collapsed group keys");
   if (!collapsed.ok) return collapsed;
@@ -181,6 +197,21 @@ function normalizeLayoutValue(
     detailLevel: layout.detailLevel,
     baseSchemaHash: layout.baseSchemaHash,
   });
+}
+
+function validPlacementDimensions(
+  key: string,
+  width: number | undefined,
+  height: number | undefined,
+): boolean {
+  if (width === undefined && height === undefined) return true;
+  return (
+    key.startsWith("table:[") &&
+    Number.isSafeInteger(width) &&
+    Number.isSafeInteger(height) &&
+    (width ?? 0) > 0 &&
+    (height ?? 0) > 0
+  );
 }
 
 function normalizeKeyList(
