@@ -2,7 +2,10 @@ import type { PrimaryDialect, SourceRange } from "@er-diagram/contracts";
 import type { SchemaGraph } from "@er-diagram/core";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 
-import type { DiagramColumnEditRequest } from "../diagram/base-schema-diagram-contract.js";
+import type {
+  DiagramColumnEditRequest,
+  DiagramViewportInsets,
+} from "../diagram/base-schema-diagram-contract.js";
 import { useUiLocale } from "../localization/ui-locale.js";
 import { VisualCommandForm } from "./visual-command-form.js";
 import type {
@@ -15,6 +18,8 @@ const INLINE_EDITOR_WIDTH_PX = 384;
 const INLINE_EDITOR_HEIGHT_PX = 576;
 const INLINE_EDITOR_GAP_PX = 8;
 const INLINE_EDITOR_MARGIN_PX = 16;
+const INLINE_EDITOR_MIN_SAFE_WIDTH_PX = 280;
+const INLINE_EDITOR_MIN_SAFE_HEIGHT_PX = 320;
 
 export interface CanvasColumnInlineEditorState {
   readonly request: DiagramColumnEditRequest;
@@ -30,6 +35,7 @@ export function CanvasColumnInlineEditor({
   commandSession,
   interactionDisabled,
   sourceNavigationEnabled,
+  viewportInsets,
   onCancel,
   onOpenSource,
   onReloadLayouts,
@@ -41,6 +47,7 @@ export function CanvasColumnInlineEditor({
   readonly commandSession: VisualCommandSessionController;
   readonly interactionDisabled: boolean;
   readonly sourceNavigationEnabled: boolean;
+  readonly viewportInsets: DiagramViewportInsets;
   readonly onCancel: () => void;
   readonly onOpenSource: (range: SourceRange | null) => void;
   readonly onReloadLayouts: () => void;
@@ -56,6 +63,7 @@ export function CanvasColumnInlineEditor({
   const position = positionInlineColumnEditor(state.request.anchor, {
     width: window.innerWidth,
     height: window.innerHeight,
+    insets: viewportInsets,
   });
   const columnName = state.initialDraft.newName ?? state.request.selection.elementKey;
   const action = {
@@ -72,8 +80,8 @@ export function CanvasColumnInlineEditor({
   return (
     <section
       ref={editorRef}
-      className="nodrag nopan nowheel pointer-events-auto fixed z-50 flex h-[min(36rem,calc(100vh-2rem))] w-96 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-cyan-400/40 bg-slate-950 shadow-2xl"
-      style={{ left: position.left, top: position.top }}
+      className="nodrag nopan nowheel pointer-events-auto fixed z-50 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-cyan-400/40 bg-slate-950 shadow-2xl"
+      style={position}
       role="dialog"
       aria-modal="false"
       aria-label={messages["visual.inlineEditorTitle"](columnName)}
@@ -129,22 +137,45 @@ export function CanvasColumnInlineEditor({
 
 export function positionInlineColumnEditor(
   anchor: DiagramColumnEditRequest["anchor"],
-  viewport: { readonly width: number; readonly height: number },
-): { readonly left: number; readonly top: number } {
+  viewport: {
+    readonly width: number;
+    readonly height: number;
+    readonly insets: DiagramViewportInsets;
+  },
+): { readonly left: number; readonly top: number; readonly width: number; readonly height: number } {
+  const insetLeft = Math.max(0, viewport.insets.left) + INLINE_EDITOR_MARGIN_PX;
+  const insetRight = Math.max(
+    insetLeft,
+    viewport.width - Math.max(0, viewport.insets.right) - INLINE_EDITOR_MARGIN_PX,
+  );
+  const insetTop = Math.max(0, viewport.insets.top) + INLINE_EDITOR_MARGIN_PX;
+  const insetBottom = Math.max(
+    insetTop,
+    viewport.height - Math.max(0, viewport.insets.bottom) - INLINE_EDITOR_MARGIN_PX,
+  );
+  const useViewportSheet =
+    insetRight - insetLeft < INLINE_EDITOR_MIN_SAFE_WIDTH_PX ||
+    insetBottom - insetTop < INLINE_EDITOR_MIN_SAFE_HEIGHT_PX;
+  const safeLeft = useViewportSheet ? INLINE_EDITOR_MARGIN_PX : insetLeft;
+  const safeRight = useViewportSheet
+    ? Math.max(safeLeft, viewport.width - INLINE_EDITOR_MARGIN_PX)
+    : insetRight;
+  const safeTop = useViewportSheet ? INLINE_EDITOR_MARGIN_PX : insetTop;
+  const safeBottom = useViewportSheet
+    ? Math.max(safeTop, viewport.height - INLINE_EDITOR_MARGIN_PX)
+    : insetBottom;
+  const width = Math.min(INLINE_EDITOR_WIDTH_PX, Math.max(0, safeRight - safeLeft));
+  const height = Math.min(INLINE_EDITOR_HEIGHT_PX, Math.max(0, safeBottom - safeTop));
   const rightCandidate = anchor.right + INLINE_EDITOR_GAP_PX;
-  const leftCandidate = anchor.left - INLINE_EDITOR_WIDTH_PX - INLINE_EDITOR_GAP_PX;
-  const maxLeft = Math.max(
-    INLINE_EDITOR_MARGIN_PX,
-    viewport.width - INLINE_EDITOR_WIDTH_PX - INLINE_EDITOR_MARGIN_PX,
-  );
+  const leftCandidate = anchor.left - width - INLINE_EDITOR_GAP_PX;
+  const maxLeft = Math.max(safeLeft, safeRight - width);
   const left =
-    rightCandidate + INLINE_EDITOR_WIDTH_PX + INLINE_EDITOR_MARGIN_PX <= viewport.width
+    rightCandidate + width <= safeRight
       ? rightCandidate
-      : Math.max(INLINE_EDITOR_MARGIN_PX, Math.min(leftCandidate, maxLeft));
-  const maxTop = Math.max(
-    INLINE_EDITOR_MARGIN_PX,
-    viewport.height - INLINE_EDITOR_HEIGHT_PX - INLINE_EDITOR_MARGIN_PX,
-  );
-  const top = Math.max(INLINE_EDITOR_MARGIN_PX, Math.min(anchor.top, maxTop));
-  return { left, top };
+      : leftCandidate >= safeLeft
+        ? leftCandidate
+        : Math.max(safeLeft, Math.min(anchor.left, maxLeft));
+  const maxTop = Math.max(safeTop, safeBottom - height);
+  const top = Math.max(safeTop, Math.min(anchor.top, maxTop));
+  return { left, top, width, height };
 }

@@ -116,6 +116,7 @@ const LazyBaseSchemaDiagram = lazy(async () => {
 });
 
 const NO_COLLAPSED_GROUP_KEYS: ReadonlySet<string> = new Set();
+const EMPTY_VIEWPORT_INSETS: DiagramViewportInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 
 export interface ProjectWorkspaceAdapters {
   readonly createParserClient?: () => DbmlParserWorkerClient;
@@ -188,6 +189,7 @@ export function ProjectSourceWorkspace({
     readonly name: string;
     readonly range: SourceRange | null;
   } | null>(null);
+  const [inlineEditUnavailableNotice, setInlineEditUnavailableNotice] = useState(false);
   const surfaces = useCanvasWorkspaceSurfaces({
     initialRightPanelOpen:
       initialState.currentRevision.validity === "VALID" || initialState.lastValidRevision !== null,
@@ -309,8 +311,12 @@ export function ProjectSourceWorkspace({
       selectionStore.getState().setSelection(request.selection);
       if (inlineColumnEditor) return;
       const resolved = findColumn(activeGraph, request.selection.elementKey);
-      if (!resolved) return;
+      if (!resolved) {
+        setInlineEditUnavailableNotice(true);
+        return;
+      }
       if (resolved.column.injectedFrom) {
+        setInlineEditUnavailableNotice(false);
         setInlinePartialNotice({
           name: resolved.column.name,
           range:
@@ -319,7 +325,14 @@ export function ProjectSourceWorkspace({
         });
         return;
       }
-      if (!visualCommandSession) return;
+      if (
+        !visualCommandSession ||
+        layoutInteractionLocked ||
+        sessionSnapshot?.canUseValidSchema !== true
+      ) {
+        setInlineEditUnavailableNotice(true);
+        return;
+      }
       const action = {
         id: `ALTER_COLUMN:${resolved.column.key}:canvas`,
         kind: "ALTER_COLUMN" as const,
@@ -327,9 +340,13 @@ export function ProjectSourceWorkspace({
         targetElementKey: resolved.column.key,
       };
       const draft = createInitialVisualDraft(activeGraph, request.selection, action);
-      if (draft?.kind !== "ALTER_COLUMN") return;
+      if (draft?.kind !== "ALTER_COLUMN") {
+        setInlineEditUnavailableNotice(true);
+        return;
+      }
       visualCommandSession.reset();
       setInlinePartialNotice(null);
+      setInlineEditUnavailableNotice(false);
       setInlineColumnEditor({
         request,
         initialDraft: draft,
@@ -337,7 +354,14 @@ export function ProjectSourceWorkspace({
         switchBlocked: false,
       });
     },
-    [activeGraph, inlineColumnEditor, selectionStore, visualCommandSession],
+    [
+      activeGraph,
+      inlineColumnEditor,
+      layoutInteractionLocked,
+      selectionStore,
+      sessionSnapshot?.canUseValidSchema,
+      visualCommandSession,
+    ],
   );
 
   const cancelInlineColumnEdit = useCallback(() => {
@@ -1454,6 +1478,7 @@ export function ProjectSourceWorkspace({
               commandSession={visualCommandSession}
               interactionDisabled={visualInteractionDisabled}
               sourceNavigationEnabled={sourceNavigationEnabled}
+              viewportInsets={viewportInsets ?? EMPTY_VIEWPORT_INSETS}
               onCancel={cancelInlineColumnEdit}
               onOpenSource={openSourceSurface}
               onReloadLayouts={() => void handleReloadLayout()}
@@ -1553,6 +1578,17 @@ export function ProjectSourceWorkspace({
                 >
                   {messages["visual.openPartialDefinition"]}
                 </button>
+              </section>
+            ) : null}
+            {inlineEditUnavailableNotice ? (
+              <section
+                className="rounded-2xl border border-amber-300/50 bg-amber-950/90 p-4 text-sm text-amber-100"
+                role="status"
+              >
+                <p className="font-semibold">{messages["visual.inlineUnavailableTitle"]}</p>
+                <p className="mt-1 min-w-0 break-words [overflow-wrap:anywhere]">
+                  {messages["visual.inlineUnavailableDescription"]}
+                </p>
               </section>
             ) : null}
           </div>

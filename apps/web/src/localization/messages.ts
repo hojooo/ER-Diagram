@@ -581,6 +581,9 @@ export const englishMessages = {
   "visual.inlinePartialTitle": "This column comes from a TablePartial",
   "visual.inlinePartialDescription":
     "Inline editing is unavailable. Open the canonical partial definition in Source instead.",
+  "visual.inlineUnavailableTitle": "Inline column editing is not ready",
+  "visual.inlineUnavailableDescription":
+    "Wait for source and layout validation to finish, then double-click the column again.",
   "visual.reviewFields": "Review the visual command fields.",
   "visual.changeAtLeastOne": "Change at least one field before applying the command.",
   "visual.elementMissing": "The selected schema element no longer exists.",
@@ -1309,6 +1312,9 @@ export const koreanMessages = {
   "visual.inlinePartialTitle": "TablePartial에서 주입된 컬럼입니다",
   "visual.inlinePartialDescription":
     "Canvas inline 편집은 지원하지 않습니다. Source에서 canonical partial 정의를 여세요.",
+  "visual.inlineUnavailableTitle": "Canvas 컬럼 편집을 아직 사용할 수 없습니다",
+  "visual.inlineUnavailableDescription":
+    "Source와 layout 검증이 끝난 뒤 컬럼을 다시 더블클릭하세요.",
   "visual.reviewFields": "Visual command 필드를 검토하세요.",
   "visual.changeAtLeastOne": "Command를 적용하기 전에 하나 이상의 필드를 변경하세요.",
   "visual.elementMissing": "선택한 schema element가 더 이상 존재하지 않습니다.",

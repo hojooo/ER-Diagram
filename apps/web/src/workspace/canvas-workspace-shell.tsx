@@ -310,14 +310,6 @@ export function CanvasWorkspaceShell({
       data-testid="canvas-workspace-shell"
     >
       <div className="absolute inset-0 z-0">{diagram}</div>
-      {canvasOverlay ? (
-        <div
-          className="pointer-events-none absolute inset-0 z-30"
-          data-testid="workspace-canvas-overlay"
-        >
-          {canvasOverlay}
-        </div>
-      ) : null}
       <div
         ref={commandBarRef}
         data-testid="workspace-command-bar"
@@ -583,6 +575,15 @@ export function CanvasWorkspaceShell({
           </div>
         </div>
       </RightToolDock>
+
+      {canvasOverlay ? (
+        <div
+          className="pointer-events-none absolute inset-0 z-[60]"
+          data-testid="workspace-canvas-overlay"
+        >
+          {canvasOverlay}
+        </div>
+      ) : null}
 
       <div
         className={`pointer-events-none absolute bottom-3 z-30 flex flex-col items-center gap-3 ${
