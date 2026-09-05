@@ -15,11 +15,10 @@ import { ProjectApiError } from "../projects/project-api.js";
 import { useProjectApi } from "../projects/project-api-context.js";
 import { dialectLabel } from "../projects/project-home-page.js";
 import { projectQueryKeys } from "../projects/project-queries.js";
+import { WorkflowSteps } from "../workflow-steps.js";
 
-const buttonPrimary =
-  "inline-flex min-h-11 items-center justify-center rounded-lg bg-cyan-300 px-4 font-semibold text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50";
-const buttonSecondary =
-  "inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-700 px-4 font-semibold text-slate-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50";
+const buttonPrimary = "ui-button ui-button--primary";
+const buttonSecondary = "ui-button";
 
 type ReportFilter = "ALL" | "NORMALIZED" | "PARTIAL" | "UNSUPPORTED" | "ERROR";
 
@@ -141,7 +140,7 @@ function SqlExportWorkflow({
     : "er-diagram";
 
   return (
-    <section aria-labelledby="sql-export-heading" className="space-y-6">
+    <section aria-labelledby="sql-export-heading" className="ui-document space-y-6">
       <div>
         <Link className={buttonSecondary} to={`/projects/${state.project.id}`}>
           {messages["workspace.back"]}
@@ -157,7 +156,22 @@ function SqlExportWorkflow({
         </p>
       </div>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+      <WorkflowSteps
+        steps={[
+          messages["sqlExport.sourceRevision"],
+          messages["sqlExport.result"],
+          messages["sqlExport.downloads"],
+        ]}
+        current={
+          !result
+            ? 0
+            : result.candidate && (!result.report.acknowledgementRequired || acknowledged)
+              ? 2
+              : 1
+        }
+      />
+
+      <section className="ui-surface p-5">
         <h2 className="text-lg font-semibold text-white">{messages["sqlExport.sourceRevision"]}</h2>
         {state.currentRevision.validity === "VALID" ? (
           <p className="mt-3 text-sm text-slate-300">
@@ -212,7 +226,7 @@ function SqlExportWorkflow({
       {result ? (
         <>
           <ExportSummary result={result} />
-          <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+          <section className="ui-surface p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-white">
                 {messages["sqlExport.conversionReport"]}
@@ -256,7 +270,7 @@ function SqlExportWorkflow({
             <SqlPanel sql={result.candidate?.sql ?? null} />
           </div>
 
-          <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+          <section className="ui-surface p-5">
             <h2 className="text-lg font-semibold text-white">{messages["sqlExport.downloads"]}</h2>
             {result.report.acknowledgementRequired ? (
               <label className="mt-4 flex items-start gap-3 text-sm text-slate-200">
@@ -314,7 +328,7 @@ function SqlExportWorkflow({
 function ExportSummary({ result }: { readonly result: SqlExportResponse }) {
   const { messages } = useUiLocale();
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+    <section className="ui-surface p-5">
       <h2 className="text-lg font-semibold text-white">{messages["sqlExport.result"]}</h2>
       <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-4">
         <div>
@@ -386,14 +400,14 @@ const SourcePanel = forwardRef<HTMLTextAreaElement, { readonly source: string }>
   function SourcePanel({ source }, ref) {
     const { messages } = useUiLocale();
     return (
-      <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+      <section className="ui-surface p-5">
         <h2 className="text-lg font-semibold text-white">
           {messages["sqlExport.selectedRevision"]}
         </h2>
         <textarea
           ref={ref}
           aria-label={messages["sqlExport.selectedSource"]}
-          className="mt-4 h-80 w-full resize-y rounded-lg border border-slate-700 bg-slate-950 p-3 font-mono text-xs text-slate-200"
+          className="mt-4 h-80 w-full resize-y rounded-lg border border-slate-700 bg-slate-950 p-3 font-mono text-sm text-slate-200"
           readOnly
           value={source}
         />
@@ -405,14 +419,14 @@ const SourcePanel = forwardRef<HTMLTextAreaElement, { readonly source: string }>
 function SqlPanel({ sql }: { readonly sql: string | null }) {
   const { messages } = useUiLocale();
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+    <section className="ui-surface p-5">
       <h2 className="text-lg font-semibold text-white">{messages["sqlExport.generatedSql"]}</h2>
       {sql === null ? (
         <p className="mt-4 text-sm text-red-200">{messages["sqlExport.noCandidate"]}</p>
       ) : (
         <textarea
           aria-label={messages["sqlExport.generatedSql"]}
-          className="mt-4 h-80 w-full resize-y rounded-lg border border-slate-700 bg-slate-950 p-3 font-mono text-xs text-slate-200"
+          className="mt-4 h-80 w-full resize-y rounded-lg border border-slate-700 bg-slate-950 p-3 font-mono text-sm text-slate-200"
           readOnly
           value={sql}
         />

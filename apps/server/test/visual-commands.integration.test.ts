@@ -445,6 +445,24 @@ describe("visual command Fastify API", () => {
     expect(malformed.statusCode).toBe(400);
     expect(JSON.stringify(malformed.json())).not.toContain("SHOULD_NOT_BE_REFLECTED");
 
+    for (const legacyKind of ["UPDATE_COLUMN", "RENAME_COLUMN", "REORDER_COLUMN"] as const) {
+      const legacy = await fixture.server.inject({
+        method: "POST",
+        url: `/api/v1/projects/${MISSING_PROJECT_ID}/visual-commands`,
+        payload: {
+          commandId: COMMAND_ID,
+          expectedSchemaRevisionNo: 1,
+          kind: legacyKind,
+          targetTableKey: USERS_KEY,
+          targetColumnKey: 'column:["public","users","id"]',
+          changes: { type: "bigint" },
+          newName: "user_id",
+          beforeColumnKey: null,
+        },
+      });
+      expect(legacy.statusCode, legacyKind).toBe(400);
+    }
+
     const missing = await fixture.server.inject({
       method: "POST",
       url: `/api/v1/projects/${MISSING_PROJECT_ID}/visual-commands`,

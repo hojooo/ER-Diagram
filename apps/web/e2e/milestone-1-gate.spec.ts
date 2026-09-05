@@ -1,11 +1,11 @@
-import { expect, type Locator, type Page, test } from "./test-fixture.js";
 import {
   fixtureInventory,
   generateFidelityFixture,
   sha256FixtureSource,
 } from "@er-diagram/test-fixtures";
-
 import { createControlledLayoutApi } from "./controlled-layout-api.js";
+import { expect, type Locator, type Page, test } from "./test-fixture.js";
+import { openWorkspaceTab } from "./workspace-panels.js";
 
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-4123456789ab";
 const CREATED_AT = "2026-08-28T01:02:03.004Z";
@@ -36,6 +36,7 @@ test("M1-GATE explores the fidelity workspace without source loss and recovers a
   );
   await expect(sourcePanel.getByTestId("source-validation-status")).toHaveText(/Draft valid/);
   await waitForLayoutReady(page);
+  await openWorkspaceTab(page, "Outline");
   await expect(outline.getByText(GLOBAL_INVENTORY, { exact: true })).toBeVisible();
 
   const viewSelector = page.getByRole("combobox", { name: "Diagram view" });
@@ -56,6 +57,7 @@ test("M1-GATE explores the fidelity workspace without source loss and recovers a
 
   await viewSelector.selectOption({ label: "full_schema" });
   await waitForLayoutReady(page);
+  await openWorkspaceTab(page, "Outline");
   await expect(outline.getByText(GLOBAL_INVENTORY, { exact: true })).toBeVisible();
   await viewSelector.selectOption({ label: "focus_01" });
   await waitForLayoutReady(page);
@@ -133,6 +135,7 @@ test("M1-GATE explores the fidelity workspace without source loss and recovers a
   });
   await expect(sourcePanel.getByTestId("source-validation-status")).toHaveText(/Draft invalid/);
   await expect(page.getByText(/Showing last-valid revision 1/)).toBeVisible();
+  await openWorkspaceTab(page, "Outline");
   await expect(outline.getByText(GLOBAL_INVENTORY, { exact: true })).toBeVisible();
 
   await page.reload();
@@ -144,6 +147,7 @@ test("M1-GATE explores the fidelity workspace without source loss and recovers a
   await expect(sourcePanel.getByTestId("source-validation-status")).toHaveText(/Draft invalid/);
   await expect(page.getByText(/Showing last-valid revision 1/)).toBeVisible();
   await waitForLayoutReady(page);
+  await openWorkspaceTab(page, "Outline");
   await expect(outline.getByText(GLOBAL_INVENTORY, { exact: true })).toBeVisible();
   const firstTable = outline.locator("details").first();
   await firstTable.locator("summary").click();
@@ -153,6 +157,7 @@ test("M1-GATE explores the fidelity workspace without source loss and recovers a
   expect(api.state.project.draftSource).toBe(INVALID_SOURCE);
   expect(api.state.project.draftHash).toBe(sha256FixtureSource(INVALID_SOURCE));
 
+  await openWorkspaceTab(page, "Source");
   await replaceEditorSource(editor, SOURCE);
   await expect.poll(() => api.draftWrites.length).toBe(2);
   expect(api.draftWrites[1]).toMatchObject({

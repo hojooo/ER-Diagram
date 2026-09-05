@@ -10,14 +10,10 @@ import { useProjectApi } from "./project-api-context.js";
 import { projectQueryKeys } from "./project-queries.js";
 import { useRuntimeConfig, useRuntimeResourceLimits } from "../runtime-config.js";
 
-const primaryButtonClass =
-  "inline-flex min-h-11 items-center justify-center rounded-lg bg-cyan-300 px-4 font-semibold text-slate-950 transition hover:bg-cyan-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-55";
-const secondaryButtonClass =
-  "inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 px-3 font-semibold text-slate-200 transition hover:border-slate-500 hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-55";
-const dangerButtonClass =
-  "inline-flex min-h-10 items-center justify-center rounded-lg border border-red-400/60 bg-red-950/40 px-3 font-semibold text-red-100 transition hover:bg-red-900/60 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-red-300 disabled:cursor-not-allowed disabled:opacity-55";
-const inputClass =
-  "min-h-11 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-slate-100 placeholder:text-slate-400 focus:border-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-300";
+const primaryButtonClass = "ui-button ui-button--primary";
+const secondaryButtonClass = "ui-button";
+const dangerButtonClass = "ui-button ui-button--danger";
+const inputClass = "ui-input";
 
 export function ProjectHomePage() {
   const api = useProjectApi();
@@ -29,7 +25,7 @@ export function ProjectHomePage() {
   });
 
   return (
-    <section aria-labelledby="projects-heading">
+    <section className="ui-document" aria-labelledby="projects-heading">
       <div className="flex flex-col gap-5 border-b border-slate-800 pb-7 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">
@@ -49,7 +45,6 @@ export function ProjectHomePage() {
       </div>
 
       <ImportAvailability />
-      <RuntimeReleaseDetails />
 
       {projectsQuery.isPending ? (
         <p
@@ -89,6 +84,7 @@ export function ProjectHomePage() {
           ))}
         </ul>
       )}
+      <RuntimeReleaseDetails />
     </section>
   );
 }
@@ -98,14 +94,14 @@ export function RuntimeReleaseDetails() {
   const { messages } = useUiLocale();
   return (
     <section
-      className="mt-6 rounded-xl border border-slate-800 bg-slate-950/50 p-4"
+      className="mt-10 border-t border-slate-800 pt-5"
       aria-labelledby="runtime-release-heading"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="runtime-release-heading" className="font-semibold text-slate-100">
           {messages["runtime.title"]}
         </h2>
-        <span className="text-xs font-semibold uppercase tracking-[0.12em] text-cyan-300">
+        <span className="text-xs font-semibold text-slate-400">
           {release.channel === "RELEASE"
             ? messages["runtime.published"]
             : messages["runtime.development"]}
@@ -216,15 +212,15 @@ function ProjectCard({
   const { formatDate, locale, messages } = useUiLocale();
   return (
     <article
-      className="h-full rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl shadow-black/10"
+      className="h-full rounded-xl border border-slate-700 bg-slate-900 p-5"
       aria-label={project.name}
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1 basis-40">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
             {dialectLabel(project.primaryDialect)}
           </p>
-          <h2 className="mt-2 truncate text-xl font-semibold text-white">{project.name}</h2>
+          <h2 className="mt-2 break-words text-xl font-semibold text-white">{project.name}</h2>
         </div>
         <ValidityBadge validity={project.draftValidity} />
       </div>
@@ -263,7 +259,7 @@ function ProjectCard({
 
 function Metadata({ label, value }: { readonly label: string; readonly value: string }) {
   return (
-    <div className="rounded-lg bg-slate-950/70 p-3">
+    <div className="min-w-0 flex-1 basis-40">
       <dt className="text-xs text-slate-400">{label}</dt>
       <dd className="mt-1 font-semibold text-slate-200">
         {label} {value}
@@ -279,8 +275,8 @@ export function ValidityBadge({ validity }: { readonly validity: "VALID" | "INVA
     <span
       className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${
         valid
-          ? "border-emerald-400/40 bg-emerald-950/50 text-emerald-200"
-          : "border-amber-400/50 bg-amber-950/50 text-amber-100"
+          ? "border-emerald-400/40 bg-emerald-950/50 ui-status--success"
+          : "border-amber-400/50 bg-amber-950/50 ui-status--warning"
       }`}
     >
       <span aria-hidden="true">{valid ? "✓" : "!"}</span>

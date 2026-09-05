@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { expect, type Locator, type Page, test } from "./test-fixture.js";
-
 import { createControlledLayoutApi } from "./controlled-layout-api.js";
+import { expect, type Locator, type Page, test } from "./test-fixture.js";
+import { openWorkspaceTab } from "./workspace-panels.js";
 
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-1123456789ab";
 const CREATED_AT = "2026-08-28T01:02:03.004Z";
@@ -61,7 +61,9 @@ test("collapses TableGroups without mutating source and preserves last-valid nav
   await expect(page.locator(".react-flow__node-group")).toHaveCount(2);
   await expect(page.locator(".react-flow__node-table")).toHaveCount(3);
   await expect(page.locator(".react-flow__edge")).toHaveCount(3);
-  await expect(page.getByText("Color #778899", { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: /Table group public.Identity, .*Color #778899/ }),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "Collapse public.Identity", exact: true }).click();
   await expect(page.locator(".react-flow__node-table")).toHaveCount(1);
@@ -80,6 +82,7 @@ test("collapses TableGroups without mutating source and preserves last-valid nav
   expect(api.writes).toHaveLength(0);
   const layoutWritesBeforeInvalid = api.layouts.writes.length;
 
+  await openWorkspaceTab(page, "Outline");
   await page.getByRole("button", { name: "Focus relationship post_account in diagram" }).click();
   await expect(page.locator(".react-flow__edge.selected")).toHaveCount(1);
   await expect(
@@ -92,6 +95,7 @@ test("collapses TableGroups without mutating source and preserves last-valid nav
   await replaceEditorSource(editor, INVALID_SOURCE);
   await expect.poll(() => api.writes.length).toBe(1);
   await expect(page.getByText(/Showing last-valid revision 1/)).toBeVisible();
+  await openWorkspaceTab(page, "Outline");
   const identityOutlineToggle = page.getByRole("button", {
     name: "Expand public.Identity in diagram",
     exact: true,

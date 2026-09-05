@@ -177,6 +177,7 @@ export function CanvasWorkspaceShell({
   source,
   outline,
   inspector,
+  canvasOverlay,
   status,
   alerts,
   onViewportInsetsChange,
@@ -188,6 +189,7 @@ export function CanvasWorkspaceShell({
   readonly source: ReactNode;
   readonly outline: ReactNode;
   readonly inspector: ReactNode;
+  readonly canvasOverlay?: ReactNode;
   readonly status: ReactNode;
   readonly alerts?: ReactNode;
   readonly onViewportInsetsChange?: (insets: DiagramViewportInsets) => void;
@@ -317,7 +319,7 @@ export function CanvasWorkspaceShell({
         style={{ left: reservedLeftWidth, right: reservedRightWidth }}
       >
         <div
-          className="pointer-events-auto min-w-0 max-w-full break-words rounded-2xl border border-slate-700/90 bg-slate-950/90 shadow-2xl backdrop-blur-md [overflow-wrap:anywhere]"
+          className="pointer-events-auto min-w-0 max-w-full break-words rounded-2xl border border-slate-700/90 bg-slate-950 shadow-2xl [overflow-wrap:anywhere]"
           data-testid="workspace-command-surface"
         >
           {commandBar}
@@ -332,7 +334,7 @@ export function CanvasWorkspaceShell({
         onKeyDown={(event) =>
           handleLeftPanelKeyDown(event, surfaces, leftDockRef.current, leftPanelToggleRef.current)
         }
-        className={`absolute inset-y-0 left-0 overflow-visible border-r border-slate-700/90 bg-slate-950/90 shadow-2xl backdrop-blur-md ${resizingPanel === "LEFT" ? "transition-none" : "transition-[width] duration-200"} ${
+        className={`absolute inset-y-0 left-0 overflow-visible border-r border-slate-700/90 bg-slate-950 shadow-2xl ${resizingPanel === "LEFT" ? "transition-none" : "transition-[width] duration-200"} ${
           surfaces.isNarrow && surfaces.leftPanelOpen ? "z-50" : "z-40"
         }`}
         style={{ width: leftDockWidth }}
@@ -479,7 +481,7 @@ export function CanvasWorkspaceShell({
             rightPanelToggleRef.current,
           )
         }
-        className={`absolute inset-y-0 right-0 z-40 overflow-visible border-l border-slate-700/90 bg-slate-950/90 shadow-2xl backdrop-blur-md ${resizingPanel === "RIGHT" ? "transition-none" : "transition-[width] duration-200"}`}
+        className={`absolute inset-y-0 right-0 z-40 overflow-visible border-l border-slate-700/90 bg-slate-950 shadow-2xl ${resizingPanel === "RIGHT" ? "transition-none" : "transition-[width] duration-200"}`}
         style={{ width: dockWidth }}
       >
         <button
@@ -574,34 +576,42 @@ export function CanvasWorkspaceShell({
         </div>
       </RightToolDock>
 
-      {alerts ? (
+      {canvasOverlay ? (
         <div
-          ref={alertsRef}
-          className={`pointer-events-none absolute bottom-16 z-30 flex justify-center ${
-            resizingPanel ? "transition-none" : "transition-[left,right] duration-200"
-          }`}
-          style={{ left: reservedLeftWidth, right: reservedRightWidth }}
+          className="pointer-events-none absolute inset-0 z-[60]"
+          data-testid="workspace-canvas-overlay"
         >
-          <div
-            className="pointer-events-auto min-w-0 max-w-2xl break-words [overflow-wrap:anywhere]"
-            data-testid="workspace-alert-surface"
-          >
-            {alerts}
-          </div>
+          {canvasOverlay}
         </div>
       ) : null}
+
       <div
-        ref={statusRef}
-        className={`pointer-events-none absolute bottom-3 z-30 flex justify-center ${
+        className={`pointer-events-none absolute bottom-3 z-30 flex flex-col items-center gap-3 ${
           resizingPanel ? "transition-none" : "transition-[left,right] duration-200"
         }`}
         style={{ left: reservedLeftWidth, right: reservedRightWidth }}
       >
+        {alerts ? (
+          <div ref={alertsRef} className="flex w-full min-w-0 justify-center">
+            <div
+              className="pointer-events-auto min-w-0 max-w-2xl break-words [overflow-wrap:anywhere]"
+              data-testid="workspace-alert-surface"
+            >
+              {alerts}
+            </div>
+          </div>
+        ) : null}
         <div
-          className="pointer-events-auto min-w-0 max-w-full break-words rounded-xl border border-slate-700/90 bg-slate-950/90 shadow-xl backdrop-blur-md [overflow-wrap:anywhere]"
-          data-testid="workspace-status-surface"
+          ref={statusRef}
+          data-testid="workspace-status-region"
+          className="flex w-full min-w-0 justify-center"
         >
-          {status}
+          <div
+            className="pointer-events-auto min-w-0 max-w-full break-words rounded-xl border border-slate-700/90 bg-slate-950 shadow-xl [overflow-wrap:anywhere]"
+            data-testid="workspace-status-surface"
+          >
+            {status}
+          </div>
         </div>
       </div>
     </div>

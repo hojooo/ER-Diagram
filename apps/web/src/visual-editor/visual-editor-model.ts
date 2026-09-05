@@ -82,9 +82,7 @@ export function listVisualEditorActions(
     const { table, column } = resolved;
     if (!column.injectedFrom) {
       actions.push(
-        action("UPDATE_COLUMN", "Update column", column.key),
-        action("RENAME_COLUMN", "Rename column", column.key),
-        action("REORDER_COLUMN", "Reorder column", column.key),
+        action("ALTER_COLUMN", "Edit column", column.key),
         action("DELETE_COLUMN", "Delete column", column.key),
         action("CREATE_CHECK", "Create column check", table.key, column.key),
         action("CREATE_REFERENCE", "Create relationship from column", column.key),
@@ -157,38 +155,18 @@ export function createInitialVisualDraft(
         ? { kind: "CREATE_COLUMN", targetTableKey: table.key, column: defaultColumn("new_column") }
         : null;
     }
-    case "UPDATE_COLUMN": {
-      const resolved = findColumn(graph, action.targetElementKey);
-      return resolved
-        ? {
-            kind: "UPDATE_COLUMN",
-            targetTableKey: resolved.table.key,
-            targetColumnKey: resolved.column.key,
-            changes: columnEditableValue(resolved.column),
-          }
-        : null;
-    }
-    case "RENAME_COLUMN": {
-      const resolved = findColumn(graph, action.targetElementKey);
-      return resolved
-        ? {
-            kind: "RENAME_COLUMN",
-            targetTableKey: resolved.table.key,
-            targetColumnKey: resolved.column.key,
-            newName: resolved.column.name,
-          }
-        : null;
-    }
-    case "REORDER_COLUMN": {
+    case "ALTER_COLUMN": {
       const resolved = findColumn(graph, action.targetElementKey);
       if (!resolved) return null;
       const currentIndex = resolved.table.columns.findIndex(
         (column) => column.key === resolved.column.key,
       );
       return {
-        kind: "REORDER_COLUMN",
+        kind: "ALTER_COLUMN",
         targetTableKey: resolved.table.key,
         targetColumnKey: resolved.column.key,
+        newName: resolved.column.name,
+        changes: columnEditableValue(resolved.column),
         beforeColumnKey: resolved.table.columns[currentIndex + 1]?.key ?? null,
       };
     }
@@ -364,32 +342,34 @@ export function normalizeVisualDraft(
       const table = findTable(graph, draft.targetTableKey);
       return table && draft.newName === table.name ? unchanged() : ok(draft);
     }
-    case "UPDATE_COLUMN": {
+    case "ALTER_COLUMN": {
       const resolved = findColumn(graph, draft.targetColumnKey);
       if (!resolved) return missingTarget();
       const current = columnEditableValue(resolved.column);
       const changes = compactChanges(
         Object.fromEntries(
-          Object.entries(draft.changes).map(([key, value]) => [
+          Object.entries(draft.changes ?? {}).map(([key, value]) => [
             key,
             same(value, current[key as keyof typeof current]) ? undefined : value,
           ]),
         ),
       );
-      return updateResult(changes, { ...draft, changes });
-    }
-    case "RENAME_COLUMN": {
-      const resolved = findColumn(graph, draft.targetColumnKey);
-      return resolved && draft.newName === resolved.column.name ? unchanged() : ok(draft);
-    }
-    case "REORDER_COLUMN": {
-      const resolved = findColumn(graph, draft.targetColumnKey);
-      if (!resolved) return missingTarget();
       const currentIndex = resolved.table.columns.findIndex(
         (column) => column.key === resolved.column.key,
       );
       const currentBefore = resolved.table.columns[currentIndex + 1]?.key ?? null;
-      return draft.beforeColumnKey === currentBefore ? unchanged() : ok(draft);
+      const normalized = {
+        ...draft,
+        newName: draft.newName === resolved.column.name ? undefined : draft.newName,
+        changes: Object.keys(changes).length === 0 ? undefined : changes,
+        beforeColumnKey:
+          draft.beforeColumnKey === currentBefore ? undefined : draft.beforeColumnKey,
+      };
+      return normalized.newName === undefined &&
+        normalized.changes === undefined &&
+        normalized.beforeColumnKey === undefined
+        ? unchanged()
+        : ok(normalized);
     }
     case "UPDATE_REFERENCE": {
       const reference = findReference(graph, draft.targetReferenceKey);

@@ -1,5 +1,6 @@
 @import "@xyflow/react/dist/style.css";
 @import "tailwindcss";
+@import "./ui.css";
 
 html,
 body,
@@ -9,15 +10,17 @@ body,
 }
 
 body {
-  background: #07101f;
-  color: #e2e8f0;
+  background: var(--ui-page);
+  color: var(--ui-text);
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
-button,
-input,
-select {
-  font: inherit;
+@layer base {
+  button,
+  input,
+  select {
+    font: inherit;
+  }
 }
 
 .app-shell {
@@ -43,7 +46,7 @@ select {
 
 .app-header p {
   margin: 0;
-  color: #94a3b8;
+  color: var(--ui-muted);
 }
 
 .app-header .app-eyebrow {
@@ -76,7 +79,7 @@ select {
 .app-controls label {
   display: grid;
   gap: 5px;
-  color: #94a3b8;
+  color: var(--ui-muted);
   font-size: 0.75rem;
   font-weight: 700;
 }
@@ -86,8 +89,8 @@ select {
   min-height: 38px;
   border: 1px solid #334155;
   border-radius: 9px;
-  background: #0f172a;
-  color: #e2e8f0;
+  background: var(--ui-surface);
+  color: var(--ui-text);
   padding: 8px 10px;
 }
 
@@ -95,7 +98,7 @@ select {
   display: grid;
   place-items: center;
   min-width: 110px;
-  color: #67e8f9;
+  color: var(--ui-accent);
   font-size: 0.8rem;
 }
 
@@ -131,8 +134,9 @@ select {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 56px;
-  padding: 10px 14px;
+  height: 56px;
+  min-width: 0;
+  padding: 4px 14px;
 }
 
 .diagram-group__header h2,
@@ -142,8 +146,8 @@ select {
 
 .diagram-group__schema {
   margin: 0;
-  color: #94a3b8;
-  font-size: 0.62rem;
+  color: var(--ui-muted);
+  font-size: 0.75rem;
 }
 
 .diagram-group__header h2 {
@@ -151,8 +155,8 @@ select {
 }
 
 .diagram-kicker {
-  color: #67e8f9;
-  font-size: 0.62rem;
+  color: var(--ui-accent);
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -161,16 +165,16 @@ select {
 .diagram-group__toggle {
   width: 30px;
   height: 30px;
-  border: 1px solid #475569;
+  border: 1px solid var(--ui-border);
   border-radius: 8px;
-  background: #17243a;
-  color: #e2e8f0;
+  background: var(--ui-raised);
+  color: var(--ui-text);
   cursor: pointer;
 }
 
 .diagram-group__summary {
   margin: -4px 14px 0;
-  color: #94a3b8;
+  color: var(--ui-muted);
   font-size: 0.72rem;
 }
 
@@ -193,16 +197,18 @@ select {
 
 .diagram-table__header {
   display: flex;
-  align-items: baseline;
   gap: 7px;
-  min-height: 48px;
-  padding: 13px 14px;
+  height: 48px;
+  min-width: 0;
+  padding: 0 12px;
+  align-items: center;
   border-bottom: 1px solid #29364d;
 }
 
 .diagram-table__table-action {
   display: flex;
   width: 100%;
+  min-width: 0;
   align-items: baseline;
   gap: 7px;
   border: 0;
@@ -230,12 +236,12 @@ select {
 
 .diagram-table__table-action:focus-visible,
 .diagram-table__column-action:focus-visible {
-  outline: 2px solid #67e8f9;
+  outline: var(--ui-focus);
   outline-offset: -2px;
 }
 
 .diagram-table__header span {
-  color: #94a3b8;
+  color: var(--ui-muted);
   font-size: 0.7rem;
 }
 
@@ -254,14 +260,15 @@ select {
   min-height: 28px;
   padding: 0;
   color: #cbd5e1;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
 }
 
 .diagram-table__column-action {
   display: grid;
   width: 100%;
-  min-height: 28px;
-  grid-template-columns: minmax(32px, auto) minmax(0, 1fr) auto;
+  height: 28px;
+  line-height: 1;
+  grid-template-columns: 32px minmax(0, 1fr) minmax(0, 40%);
   align-items: center;
   gap: 6px;
   border: 0;
@@ -274,17 +281,18 @@ select {
 
 .diagram-table__column-action[aria-pressed="true"],
 .diagram-table__table-action[aria-pressed="true"] {
-  background: rgb(8 145 178 / 22%);
+  background: var(--ui-selected);
 }
 
 .diagram-table__columns code {
   color: #7dd3fc;
-  font-size: 0.62rem;
+  font-size: 0.75rem;
+  text-align: right;
 }
 
 .diagram-table__key {
   color: #fbbf24;
-  font-size: 0.58rem;
+  font-size: 0.6875rem;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -299,12 +307,12 @@ select {
 
 .diagram-edge-label {
   position: absolute;
-  border: 1px solid #475569;
+  border: 1px solid var(--ui-border);
   border-radius: 999px;
-  background: #0f172a;
-  color: #67e8f9;
+  background: var(--ui-surface);
+  color: var(--ui-accent);
   padding: 2px 6px;
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-weight: 800;
 }
 
@@ -329,4 +337,45 @@ select {
   .app-controls {
     flex-wrap: wrap;
   }
+}
+
+/* Keep label ink within the fixed geometry used by projection and saved layouts. */
+.diagram-table__table-action > span,
+.diagram-table__table-action > strong,
+.diagram-table__column-action > span,
+.diagram-table__column-action > code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diagram-table__table-action > span {
+  max-width: 35%;
+  flex-shrink: 1;
+}
+
+.diagram-table__column-action:hover,
+.diagram-table__table-action:hover {
+  background: var(--ui-raised);
+}
+
+.diagram-table__column-action[aria-pressed="true"]:hover,
+.diagram-table__table-action[aria-pressed="true"]:hover {
+  background: var(--ui-selected);
+}
+
+.diagram-group__header > div {
+  min-width: 0;
+}
+
+.diagram-group__header h2,
+.diagram-group__schema {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diagram-group__toggle {
+  flex-shrink: 0;
 }

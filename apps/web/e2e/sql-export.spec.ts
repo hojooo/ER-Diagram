@@ -18,9 +18,15 @@ test("downloads PostgreSQL DDL only after loss acknowledgement and always downlo
   await installExportApi(page, "POSTGRESQL", false);
   await page.goto(`/projects/${PROJECT_ID}/sql-export`);
 
+  await expect(page.locator(".ui-workflow-steps [aria-current=step]")).toContainText(
+    "Source revision",
+  );
   await page.getByRole("button", { name: "Generate SQL export" }).click();
   await expect(page.getByText("Export report ready: PARTIAL.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Download SQL" })).toBeDisabled();
+  await expect(page.locator(".ui-workflow-steps [aria-current=step]")).toContainText(
+    "Export result",
+  );
 
   const reportDownloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download report JSON" }).click();
@@ -36,6 +42,7 @@ test("downloads PostgreSQL DDL only after loss acknowledgement and always downlo
   });
 
   await page.getByLabel(/I reviewed the partial/).check();
+  await expect(page.locator(".ui-workflow-steps [aria-current=step]")).toContainText("Downloads");
   const sqlDownloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download SQL" }).click();
   const sqlDownload = await sqlDownloadPromise;
@@ -51,6 +58,9 @@ test("requires explicit last-valid selection for an invalid MySQL project", asyn
 
   await expect(page.getByRole("button", { name: "Generate SQL export" })).toBeDisabled();
   await page.getByLabel("Export last-valid revision 1 explicitly").check();
+  await expect(page.locator(".ui-workflow-steps [aria-current=step]")).toContainText(
+    "Source revision",
+  );
   await page.getByRole("button", { name: "Generate SQL export" }).click();
   await expect(page.getByText("Export report ready: PARTIAL.")).toBeVisible();
   expect(calls()).toEqual([{ expectedSchemaRevisionNo: 2, sourceSelection: "LAST_VALID" }]);
