@@ -511,6 +511,7 @@ describe("canvas column inline editor", () => {
         commandSession={commandSession.controller}
         interactionDisabled={false}
         sourceNavigationEnabled
+        viewportInsets={{ top: 80, right: 520, bottom: 72, left: 24 }}
         onCancel={onCancel}
         onOpenSource={vi.fn()}
         onReloadLayouts={vi.fn()}
@@ -533,13 +534,30 @@ describe("canvas column inline editor", () => {
     expect(onCancel).toHaveBeenCalledOnce();
   });
 
-  it("keeps the anchored editor inside the viewport", () => {
+  it("keeps the anchored editor inside the visible diagram safe area", () => {
     expect(
       positionInlineColumnEditor(
         { top: 890, right: 1_420, bottom: 918, left: 1_120 },
-        { width: 1_440, height: 900 },
+        {
+          width: 1_440,
+          height: 900,
+          insets: { top: 80, right: 520, bottom: 72, left: 24 },
+        },
       ),
-    ).toEqual({ left: 728, top: 308 });
+    ).toEqual({ left: 728, top: 236, width: 384, height: 576 });
+  });
+
+  it("uses a responsive viewport sheet when the visible diagram area is too small", () => {
+    expect(
+      positionInlineColumnEditor(
+        { top: 120, right: 220, bottom: 148, left: 40 },
+        {
+          width: 640,
+          height: 480,
+          insets: { top: 80, right: 280, bottom: 64, left: 24 },
+        },
+      ),
+    ).toEqual({ left: 228, top: 16, width: 384, height: 448 });
   });
 });
 
