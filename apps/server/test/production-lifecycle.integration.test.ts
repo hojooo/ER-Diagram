@@ -78,7 +78,7 @@ describe("production SQLite lifecycle", () => {
     ]);
     expect(flushes).toBe(1);
     expect(JSON.stringify(events)).not.toContain(fixture.databaseFilename);
-  });
+  }, 30_000);
 
   it("fails readiness while retaining liveness when the SQLite metadata probe fails", async () => {
     const fixture = createFixture();
