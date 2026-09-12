@@ -39,7 +39,7 @@ import {
 
 afterEach(cleanup);
 
-describe("diagram column inline edit trigger", () => {
+describe("diagram inline edit trigger", () => {
   it("turns a column-row double click into one anchored edit request", () => {
     const editColumn = vi.fn();
     const activateElement = vi.fn();
@@ -70,6 +70,7 @@ describe("diagram column inline edit trigger", () => {
         value={{
           toggleGroup: vi.fn(),
           activateElement,
+          editTable: vi.fn(),
           editColumn,
           showEdgeLabels: true,
         }}
@@ -91,6 +92,116 @@ describe("diagram column inline edit trigger", () => {
       anchor: { top: 0, right: 0, bottom: 0, left: 0 },
     });
     expect(row).toHaveAttribute("data-diagram-column-key", 'column:["public","users","id"]');
+  });
+
+  it("turns a table-header double click into one anchored rename request", () => {
+    const editTable = vi.fn();
+    const tableKey = 'table:["public","users"]';
+    const props = {
+      id: tableKey,
+      type: "table",
+      data: {
+        kind: "table",
+        tableKey,
+        schemaName: "public",
+        name: "users",
+        columns: [],
+        lod: "FULL",
+      },
+    } as unknown as ComponentProps<typeof TableDiagramNodeComponent>;
+
+    render(
+      <DiagramInteractionContext.Provider
+        value={{
+          toggleGroup: vi.fn(),
+          activateElement: vi.fn(),
+          editTable,
+          editColumn: vi.fn(),
+          showEdgeLabels: true,
+        }}
+      >
+        <TableDiagramNodeComponent {...props} />
+      </DiagramInteractionContext.Provider>,
+    );
+
+    const header = screen.getByRole("button", { name: "Table public.users" });
+    fireEvent.doubleClick(header);
+
+    expect(editTable).toHaveBeenCalledOnce();
+    expect(editTable).toHaveBeenCalledWith({
+      selection: {
+        elementKey: tableKey,
+        kind: "table",
+        tableKeys: [tableKey],
+      },
+      anchor: { top: 0, right: 0, bottom: 0, left: 0 },
+    });
+    expect(header).toHaveAttribute("data-diagram-table-key", tableKey);
+  });
+
+  it("edits the table name directly in the header with explicit apply and cancel", () => {
+    const changeTableInlineRename = vi.fn();
+    const submitTableInlineRename = vi.fn();
+    const cancelTableInlineRename = vi.fn();
+    const resizeTable = vi.fn();
+    const tableKey = 'table:["public","users"]';
+    const props = {
+      id: tableKey,
+      type: "table",
+      data: {
+        kind: "table",
+        tableKey,
+        schemaName: "public",
+        name: "users",
+        columns: [],
+        lod: "FULL",
+        selectedElementKey: tableKey,
+      },
+    } as unknown as ComponentProps<typeof TableDiagramNodeComponent>;
+
+    render(
+      <DiagramInteractionContext.Provider
+        value={{
+          toggleGroup: vi.fn(),
+          activateElement: vi.fn(),
+          editTable: vi.fn(),
+          editColumn: vi.fn(),
+          resizeTable,
+          tableInlineRename: {
+            tableKey,
+            value: "users",
+            disabled: false,
+            invalid: false,
+            statusMessage: null,
+          },
+          changeTableInlineRename,
+          submitTableInlineRename,
+          cancelTableInlineRename,
+          showEdgeLabels: true,
+        }}
+      >
+        <TableDiagramNodeComponent {...props} />
+      </DiagramInteractionContext.Provider>,
+    );
+
+    const form = screen.getByRole("form", { name: "Rename table public.users" });
+    const input = screen.getByRole("textbox", { name: "Table name" });
+    expect(screen.getByText("public")).toBeVisible();
+    expect(input).toHaveFocus();
+    expect(form).toHaveClass("nodrag", "nopan", "nowheel");
+    expect(screen.queryByRole("button", { name: /Resize/ })).not.toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: "accounts" } });
+    expect(changeTableInlineRename).toHaveBeenCalledWith("accounts");
+    fireEvent.blur(input);
+    expect(submitTableInlineRename).not.toHaveBeenCalled();
+    expect(cancelTableInlineRename).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply table name" }));
+    expect(submitTableInlineRename).toHaveBeenCalledOnce();
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(cancelTableInlineRename).toHaveBeenCalledOnce();
+    expect(resizeTable).not.toHaveBeenCalled();
   });
 
   it("shows three handles for the selected table and commits only on resize end", () => {
@@ -115,6 +226,7 @@ describe("diagram column inline edit trigger", () => {
         value={{
           toggleGroup: vi.fn(),
           activateElement: vi.fn(),
+          editTable: vi.fn(),
           editColumn: vi.fn(),
           resizeTable,
           showEdgeLabels: true,

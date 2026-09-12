@@ -163,6 +163,22 @@ test("opens the atomic column editor from the canvas above the workspace tools",
       .getByRole("article", { name: "Table public.users" })
       .getByRole("button", { name: /user_id, bigint, PK/ }),
   ).toBeVisible({ timeout: 20_000 });
+
+  const renamedTable = page.getByRole("article", { name: "Table public.users" });
+  await renamedTable.getByRole("button", { name: "Table public.users" }).dblclick();
+  const tableNameInput = renamedTable.getByLabel("Table name");
+  await expect(tableNameInput).toBeFocused();
+  await tableNameInput.fill("accounts");
+  await renamedTable.getByRole("button", { name: "Apply table name" }).click();
+  await expect.poll(() => api.commands.length).toBe(2);
+  expect(api.commands[1]).toMatchObject({
+    kind: "RENAME_TABLE",
+    newName: "accounts",
+    expectedSchemaRevisionNo: 2,
+  });
+  await expect(page.getByRole("article", { name: "Table public.accounts" })).toBeVisible({
+    timeout: 20_000,
+  });
   expect(api.draftWrites).toEqual([]);
   expect(browserErrors).toEqual([]);
 });
