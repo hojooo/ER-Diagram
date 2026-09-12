@@ -200,7 +200,9 @@ describe("DBML source workspace", () => {
     const undo = screen.getByRole("button", { name: /Undo schema change, 1 step/ });
     expect(undo).toBeEnabled();
     vi.useRealTimers();
-    fireEvent.click(screen.getByRole("button", { name: "Create table" }));
+    const createTable = screen.getByRole("button", { name: "Create table" });
+    await waitFor(() => expect(createTable).toBeEnabled());
+    fireEvent.click(createTable);
     const tableName = await screen.findByLabelText("Table name");
     fireEvent.keyDown(tableName, { key: "z", ctrlKey: true });
     expect(api.saveDraftInputs).toHaveLength(1);
