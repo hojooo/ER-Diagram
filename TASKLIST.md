@@ -379,7 +379,14 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
     대체 경로로 제공한다. Table drag 중에는 canvas camera를 auto-pan하지 않는다. Drag·resize는 DBML, viewport,
     schema revision, receipt, history와 project `updatedAt`을 바꾸지 않는다.
   - 검증: `pnpm --filter @er-diagram/web test test/layout-persistence.test.tsx test/diagram-base.test.tsx`
-- [ ] `P0-RELEASE` M4-012~M4-017 디자인·언어·편집 재정비, `pnpm ci:verify`, Release Gate A~F, OrbStack restore drill,
+- [x] `M4-018` obstacle-aware relationship routing
+  - 모든 relationship를 table card, 접힌 group card와 펼친 group header를 피하는 결정론적 직교 경로로 렌더링한다.
+    대규모 overview의 label budget은 유지하되 straight-path fallback은 사용하지 않고, self-reference와 group child의
+    absolute position도 같은 routing 불변식을 적용한다.
+  - 경로는 projection-local 파생 상태이며 node drag·table resize·view·LOD·collapse 변경에 맞춰 다시 계산하되 layout,
+    viewport, schema revision과 `updatedAt`에는 저장하지 않는다.
+  - 검증: `pnpm --filter @er-diagram/web test test/relationship-routing.test.ts test/diagram-base.test.tsx`
+- [ ] `P0-RELEASE` M4-012~M4-018 디자인·언어·편집 재정비, `pnpm ci:verify`, Release Gate A~F, OrbStack restore drill,
       source/image mapping과 exact candidate approval 통과 후에만 `v0.1.0` tag 생성
   - preparation gate는 `P0_RELEASE_EVIDENCE_VERSION = 1` profile과 `pnpm test:p0-release`로 online backup,
     source volume 제거, plan-hash Apply와 replacement restart를 검증한다.
