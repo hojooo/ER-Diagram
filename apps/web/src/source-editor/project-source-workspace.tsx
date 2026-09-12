@@ -30,6 +30,7 @@ import type {
   BaseSchemaDiagramComponent,
   BaseSchemaDiagramProps,
   DiagramColumnEditRequest,
+  DiagramTableEditRequest,
   DiagramLayoutRequest,
   DiagramLayoutRequestResult,
   DiagramViewportInsets,
@@ -84,11 +85,16 @@ import {
 } from "../visual-editor/canvas-column-inline-editor.js";
 import {
   createVisualCommandSession,
+  type VisualCommandDraft,
   type VisualCommandSessionController,
   type VisualCommandSessionSnapshot,
 } from "../visual-editor/visual-command-session.js";
 import { VisualSchemaInspector } from "../visual-editor/visual-schema-inspector.js";
-import { createInitialVisualDraft, findColumn } from "../visual-editor/visual-editor-model.js";
+import {
+  createInitialVisualDraft,
+  findColumn,
+  findTable,
+} from "../visual-editor/visual-editor-model.js";
 import {
   CanvasWorkspaceShell,
   useCanvasWorkspaceSurfaces,
@@ -124,6 +130,17 @@ export interface ProjectWorkspaceAdapters {
   readonly SourceEditor?: SourceEditorComponent;
   readonly SchemaDiagram?: BaseSchemaDiagramComponent;
 }
+
+interface CanvasTableInlineRenameState {
+  readonly editorKind: "TABLE";
+  readonly request: DiagramTableEditRequest;
+  readonly initialDraft: Extract<VisualCommandDraft, { kind: "RENAME_TABLE" }>;
+  readonly openedSchemaHash: string;
+  readonly switchBlocked: boolean;
+  readonly draftName: string;
+}
+
+type CanvasInlineEditorState = CanvasColumnInlineEditorState | CanvasTableInlineRenameState;
 
 export function ProjectSourceWorkspace({
   initialState,
@@ -184,8 +201,7 @@ export function ProjectSourceWorkspace({
     selection: DiagramSelection;
     viewLabel: string;
   } | null>(null);
-  const [inlineColumnEditor, setInlineColumnEditor] =
-    useState<CanvasColumnInlineEditorState | null>(null);
+  const [inlineEditor, setInlineEditor] = useState<CanvasInlineEditorState | null>(null);
   const [inlinePartialNotice, setInlinePartialNotice] = useState<{
     readonly name: string;
     readonly range: SourceRange | null;
@@ -288,29 +304,91 @@ export function ProjectSourceWorkspace({
     [sourceEditorReady, surfaces.openLeft],
   );
 
-  const focusDiagramColumn = useCallback((columnKey: string) => {
+  const focusDiagramElement = useCallback((selection: DiagramSelection) => {
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
-        const row = [...document.querySelectorAll<HTMLElement>("[data-diagram-column-key]")].find(
-          (candidate) => candidate.dataset.diagramColumnKey === columnKey,
+        const attribute =
+          selection.kind === "table" ? "data-diagram-table-key" : "data-diagram-column-key";
+        const element = [...document.querySelectorAll<HTMLElement>(`[${attribute}]`)].find(
+          (candidate) =>
+            (selection.kind === "table"
+              ? candidate.dataset.diagramTableKey
+              : candidate.dataset.diagramColumnKey) === selection.elementKey,
         );
-        row?.focus();
+        element?.focus();
       });
     });
   }, []);
+
+  const handleEditTable = useCallback(
+    (request: DiagramTableEditRequest) => {
+      if (!activeGraph) return;
+      if (inlineEditor) {
+        if (inlineEditor.request.selection.elementKey !== request.selection.elementKey) {
+          setInlineEditor({ ...inlineEditor, switchBlocked: true });
+        }
+        return;
+      }
+      selectionStore.getState().setSelection(request.selection);
+      setInlinePartialNotice(null);
+      setInlineEditUnavailableNotice(false);
+      const table = findTable(activeGraph, request.selection.elementKey);
+      if (
+        !table ||
+        !visualCommandSession ||
+        layoutInteractionLocked ||
+        sessionSnapshot?.canUseValidSchema !== true
+      ) {
+        setInlineEditUnavailableNotice(true);
+        return;
+      }
+      const action = {
+        id: `RENAME_TABLE:${table.key}:canvas`,
+        kind: "RENAME_TABLE" as const,
+        label: messagesRef.current["visual.action.renameTable"],
+        targetElementKey: table.key,
+      };
+      const draft = createInitialVisualDraft(activeGraph, request.selection, action);
+      if (draft?.kind !== "RENAME_TABLE") {
+        setInlineEditUnavailableNotice(true);
+        return;
+      }
+      visualCommandSession.reset();
+      setInlinePartialNotice(null);
+      setInlineEditUnavailableNotice(false);
+      setInlineEditor({
+        editorKind: "TABLE",
+        request,
+        initialDraft: draft,
+        openedSchemaHash: activeGraph.schemaHash,
+        switchBlocked: false,
+        draftName: draft.newName,
+      });
+    },
+    [
+      activeGraph,
+      inlineEditor,
+      layoutInteractionLocked,
+      selectionStore,
+      sessionSnapshot?.canUseValidSchema,
+      visualCommandSession,
+    ],
+  );
 
   const handleEditColumn = useCallback(
     (request: DiagramColumnEditRequest) => {
       if (!activeGraph) return;
       if (
-        inlineColumnEditor &&
-        inlineColumnEditor.request.selection.elementKey !== request.selection.elementKey
+        inlineEditor &&
+        inlineEditor.request.selection.elementKey !== request.selection.elementKey
       ) {
-        setInlineColumnEditor({ ...inlineColumnEditor, switchBlocked: true });
+        setInlineEditor({ ...inlineEditor, switchBlocked: true });
         return;
       }
       selectionStore.getState().setSelection(request.selection);
-      if (inlineColumnEditor) return;
+      setInlinePartialNotice(null);
+      setInlineEditUnavailableNotice(false);
+      if (inlineEditor) return;
       const resolved = findColumn(activeGraph, request.selection.elementKey);
       if (!resolved) {
         setInlineEditUnavailableNotice(true);
@@ -346,9 +424,8 @@ export function ProjectSourceWorkspace({
         return;
       }
       visualCommandSession.reset();
-      setInlinePartialNotice(null);
-      setInlineEditUnavailableNotice(false);
-      setInlineColumnEditor({
+      setInlineEditor({
+        editorKind: "COLUMN",
         request,
         initialDraft: draft,
         openedSchemaHash: activeGraph.schemaHash,
@@ -357,7 +434,7 @@ export function ProjectSourceWorkspace({
     },
     [
       activeGraph,
-      inlineColumnEditor,
+      inlineEditor,
       layoutInteractionLocked,
       selectionStore,
       sessionSnapshot?.canUseValidSchema,
@@ -365,28 +442,57 @@ export function ProjectSourceWorkspace({
     ],
   );
 
-  const cancelInlineColumnEdit = useCallback(() => {
+  const cancelInlineEdit = useCallback(() => {
     if (visualCommandWorkspaceLocked) return;
-    const columnKey = inlineColumnEditor?.request.selection.elementKey;
-    setInlineColumnEditor(null);
+    const selection = inlineEditor?.request.selection;
+    setInlineEditor(null);
     visualCommandSession?.reset();
-    if (columnKey) focusDiagramColumn(columnKey);
-  }, [focusDiagramColumn, inlineColumnEditor, visualCommandSession, visualCommandWorkspaceLocked]);
+    if (selection) focusDiagramElement(selection);
+  }, [focusDiagramElement, inlineEditor, visualCommandSession, visualCommandWorkspaceLocked]);
 
-  const reviewInlineColumnEdit = useCallback(() => {
-    if (!inlineColumnEditor || !activeGraph || !visualCommandSession) return;
-    const column = findColumn(activeGraph, inlineColumnEditor.request.selection.elementKey);
-    if (!column) {
-      setInlineColumnEditor(null);
+  const changeInlineTableName = useCallback((value: string) => {
+    setInlineEditor((current) =>
+      current?.editorKind === "TABLE" ? { ...current, draftName: value } : current,
+    );
+  }, []);
+
+  const submitInlineTableRename = useCallback(() => {
+    if (
+      inlineEditor?.editorKind !== "TABLE" ||
+      !visualCommandSession ||
+      visualCommandWorkspaceLocked ||
+      inlineEditor.draftName.trim().length === 0
+    ) {
       return;
     }
-    setInlineColumnEditor({
-      ...inlineColumnEditor,
+    void visualCommandSession.submit(
+      { ...inlineEditor.initialDraft, newName: inlineEditor.draftName },
+      inlineEditor.openedSchemaHash,
+    );
+  }, [inlineEditor, visualCommandSession, visualCommandWorkspaceLocked]);
+
+  const syncInlineEditToLatestSchema = useCallback(() => {
+    if (!inlineEditor || !activeGraph) return;
+    const targetExists =
+      inlineEditor.editorKind === "TABLE"
+        ? findTable(activeGraph, inlineEditor.request.selection.elementKey) !== null
+        : findColumn(activeGraph, inlineEditor.request.selection.elementKey) !== null;
+    if (!targetExists) {
+      setInlineEditor(null);
+      return;
+    }
+    setInlineEditor({
+      ...inlineEditor,
       openedSchemaHash: activeGraph.schemaHash,
       switchBlocked: false,
     });
+  }, [activeGraph, inlineEditor]);
+
+  const reviewInlineEdit = useCallback(() => {
+    if (!inlineEditor || !visualCommandSession) return;
+    syncInlineEditToLatestSchema();
     visualCommandSession.reviewLatestSchema();
-  }, [activeGraph, inlineColumnEditor, visualCommandSession]);
+  }, [inlineEditor, syncInlineEditToLatestSchema, visualCommandSession]);
 
   useEffect(() => {
     if (!sourceEditorRecoveryRequired) return;
@@ -664,18 +770,20 @@ export function ProjectSourceWorkspace({
 
   useEffect(() => {
     const command = visualCommandSnapshot?.lastCommand;
-    if (
-      !inlineColumnEditor ||
-      visualCommandSnapshot?.status !== "SUCCEEDED" ||
-      command?.kind !== "ALTER_COLUMN" ||
-      command.targetColumnKey !== inlineColumnEditor.request.selection.elementKey
-    ) {
-      return;
-    }
-    const focusKey = selectionStore.getState().selection?.elementKey ?? command.targetColumnKey;
-    setInlineColumnEditor(null);
-    focusDiagramColumn(focusKey);
-  }, [focusDiagramColumn, inlineColumnEditor, selectionStore, visualCommandSnapshot]);
+    if (!inlineEditor || visualCommandSnapshot?.status !== "SUCCEEDED" || !command) return;
+    const targetKey = inlineEditor.request.selection.elementKey;
+    const completed =
+      (inlineEditor.editorKind === "COLUMN" &&
+        command.kind === "ALTER_COLUMN" &&
+        command.targetColumnKey === targetKey) ||
+      (inlineEditor.editorKind === "TABLE" &&
+        command.kind === "RENAME_TABLE" &&
+        command.targetTableKey === targetKey);
+    if (!completed) return;
+    const focusSelection = selectionStore.getState().selection ?? inlineEditor.request.selection;
+    setInlineEditor(null);
+    focusDiagramElement(focusSelection);
+  }, [focusDiagramElement, inlineEditor, selectionStore, visualCommandSnapshot]);
 
   useEffect(() => {
     if (!activeGraph) return;
@@ -1271,6 +1379,18 @@ export function ProjectSourceWorkspace({
   );
   const visualInteractionDisabled =
     layoutInteractionLocked || !sessionSnapshot.canUseValidSchema || visualCommandSession === null;
+  const tableInlineRename =
+    inlineEditor?.editorKind === "TABLE"
+      ? {
+          tableKey: inlineEditor.request.selection.elementKey,
+          value: inlineEditor.draftName,
+          disabled: visualInteractionDisabled || visualCommandSnapshot?.status === "STALE_REVIEW",
+          invalid: inlineEditor.switchBlocked || visualCommandSnapshot?.error != null,
+          statusMessage: inlineEditor.switchBlocked
+            ? messages["visual.inlineEditorSwitchBlocked"]
+            : (visualCommandSnapshot?.error?.message ?? null),
+        }
+      : null;
   return (
     <>
       <CanvasWorkspaceShell
@@ -1351,7 +1471,12 @@ export function ProjectSourceWorkspace({
             layoutRequest={layoutRequest}
             onToggleGroup={handleToggleGroup}
             onNavigateSource={handleNavigateSource}
+            onEditTable={handleEditTable}
             onEditColumn={handleEditColumn}
+            tableInlineRename={tableInlineRename}
+            onTableInlineRenameChange={changeInlineTableName}
+            onTableInlineRenameSubmit={submitInlineTableRename}
+            onTableInlineRenameCancel={cancelInlineEdit}
             onFocusSource={() => openSourceSurface()}
             onPositionsCommit={handlePositionsCommit}
             onTableResizeCommit={handleTableResizeCommit}
@@ -1517,6 +1642,7 @@ export function ProjectSourceWorkspace({
               sourceNavigationEnabled={sourceNavigationEnabled}
               onOpenSource={openSourceSurface}
               onReloadLayouts={() => void handleReloadLayout()}
+              onReviewLatestSchema={syncInlineEditToLatestSchema}
               layoutPositions={activeLayout.positions}
               detailLevel={activeLayout.detailLevel}
               onApplyTableSize={handleApplyTableSize}
@@ -1530,19 +1656,19 @@ export function ProjectSourceWorkspace({
           )
         }
         canvasOverlay={
-          inlineColumnEditor && activeGraph && visualCommandSession ? (
+          inlineEditor?.editorKind === "COLUMN" && activeGraph && visualCommandSession ? (
             <CanvasColumnInlineEditor
-              state={inlineColumnEditor}
+              state={inlineEditor}
               graph={activeGraph}
               primaryDialect={serverState.project.primaryDialect}
               commandSession={visualCommandSession}
               interactionDisabled={visualInteractionDisabled}
               sourceNavigationEnabled={sourceNavigationEnabled}
               viewportInsets={viewportInsets ?? EMPTY_VIEWPORT_INSETS}
-              onCancel={cancelInlineColumnEdit}
+              onCancel={cancelInlineEdit}
               onOpenSource={openSourceSurface}
               onReloadLayouts={() => void handleReloadLayout()}
-              onReviewLatest={reviewInlineColumnEdit}
+              onReviewLatest={reviewInlineEdit}
             />
           ) : null
         }
@@ -1813,7 +1939,12 @@ function DiagramPanel({
   layoutRequest,
   onToggleGroup,
   onNavigateSource,
+  onEditTable,
   onEditColumn,
+  tableInlineRename,
+  onTableInlineRenameChange,
+  onTableInlineRenameSubmit,
+  onTableInlineRenameCancel,
   onFocusSource,
   onPositionsCommit,
   onTableResizeCommit,
@@ -1840,7 +1971,18 @@ function DiagramPanel({
   readonly layoutRequest: DiagramLayoutRequest | null;
   readonly onToggleGroup: (groupKey: string) => void;
   readonly onNavigateSource: (selection: DiagramSelection) => void;
+  readonly onEditTable: NonNullable<BaseSchemaDiagramProps["onEditTable"]>;
   readonly onEditColumn: NonNullable<BaseSchemaDiagramProps["onEditColumn"]>;
+  readonly tableInlineRename: NonNullable<BaseSchemaDiagramProps["tableInlineRename"]> | null;
+  readonly onTableInlineRenameChange: NonNullable<
+    BaseSchemaDiagramProps["onTableInlineRenameChange"]
+  >;
+  readonly onTableInlineRenameSubmit: NonNullable<
+    BaseSchemaDiagramProps["onTableInlineRenameSubmit"]
+  >;
+  readonly onTableInlineRenameCancel: NonNullable<
+    BaseSchemaDiagramProps["onTableInlineRenameCancel"]
+  >;
   readonly onFocusSource: () => void;
   readonly onPositionsCommit: (positions: Readonly<Record<string, DiagramPosition>>) => void;
   readonly onTableResizeCommit: NonNullable<BaseSchemaDiagramProps["onTableResizeCommit"]>;
@@ -1901,7 +2043,12 @@ function DiagramPanel({
                 sourceNavigationEnabled={sourceNavigationEnabled}
                 onToggleGroup={onToggleGroup}
                 onNavigateSource={onNavigateSource}
+                onEditTable={onEditTable}
                 onEditColumn={onEditColumn}
+                tableInlineRename={tableInlineRename}
+                onTableInlineRenameChange={onTableInlineRenameChange}
+                onTableInlineRenameSubmit={onTableInlineRenameSubmit}
+                onTableInlineRenameCancel={onTableInlineRenameCancel}
                 viewportInsets={viewportInsets}
                 fillContainer
                 requestLayout={requestLayout}

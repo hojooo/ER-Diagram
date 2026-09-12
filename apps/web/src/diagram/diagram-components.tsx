@@ -9,10 +9,14 @@ import {
   type NodeProps,
   Position,
 } from "@xyflow/react";
-import { type CSSProperties, createContext, memo, useContext } from "react";
+import { type CSSProperties, createContext, memo, useContext, useEffect, useRef } from "react";
 import { useUiLocale } from "../localization/ui-locale.js";
-import type { DiagramColumnEditRequest } from "./base-schema-diagram-contract.js";
-import type { DiagramTableResizeRequest } from "./base-schema-diagram-contract.js";
+import type {
+  DiagramColumnEditRequest,
+  DiagramTableEditRequest,
+  DiagramTableInlineRenameState,
+  DiagramTableResizeRequest,
+} from "./base-schema-diagram-contract.js";
 import { MINIMUM_TABLE_WIDTH, tableNodeMinimumHeight } from "./projection.js";
 import type { DiagramSelection } from "./source-navigation.js";
 import type { GroupDiagramNode, SchemaDiagramEdge, TableDiagramNode } from "./types.js";
@@ -20,7 +24,12 @@ import type { GroupDiagramNode, SchemaDiagramEdge, TableDiagramNode } from "./ty
 export interface DiagramInteractions {
   toggleGroup(groupKey: string): void;
   activateElement(selection: DiagramSelection): void;
+  editTable(request: DiagramTableEditRequest): void;
   editColumn(request: DiagramColumnEditRequest): void;
+  tableInlineRename?: DiagramTableInlineRenameState | null;
+  changeTableInlineRename?(value: string): void;
+  submitTableInlineRename?(): void;
+  cancelTableInlineRename?(): void;
   resizeTable?(request: DiagramTableResizeRequest): void;
   showEdgeLabels: boolean;
 }
@@ -28,7 +37,12 @@ export interface DiagramInteractions {
 export const DiagramInteractionContext = createContext<DiagramInteractions>({
   toggleGroup: () => undefined,
   activateElement: () => undefined,
+  editTable: () => undefined,
   editColumn: () => undefined,
+  tableInlineRename: null,
+  changeTableInlineRename: () => undefined,
+  submitTableInlineRename: () => undefined,
+  cancelTableInlineRename: () => undefined,
   resizeTable: () => undefined,
   showEdgeLabels: true,
 });
@@ -91,7 +105,16 @@ export const GroupDiagramNodeComponent = memo(function GroupDiagramNodeComponent
 export const TableDiagramNodeComponent = memo(function TableDiagramNodeComponent({
   data,
 }: NodeProps<TableDiagramNode>) {
-  const { activateElement, editColumn, resizeTable } = useContext(DiagramInteractionContext);
+  const {
+    activateElement,
+    cancelTableInlineRename,
+    changeTableInlineRename,
+    editColumn,
+    editTable,
+    resizeTable,
+    submitTableInlineRename,
+    tableInlineRename,
+  } = useContext(DiagramInteractionContext);
   const { messages } = useUiLocale();
   const displayedColumns =
     data.lod === "FULL"
@@ -99,7 +122,9 @@ export const TableDiagramNodeComponent = memo(function TableDiagramNodeComponent
       : data.lod === "KEYS_ONLY"
         ? data.columns.filter((column) => column.primaryKey || column.foreignKey)
         : [];
-  const resizeVisible = data.selectedElementKey === data.tableKey;
+  const activeTableRename =
+    tableInlineRename?.tableKey === data.tableKey ? tableInlineRename : null;
+  const resizeVisible = data.selectedElementKey === data.tableKey && activeTableRename === null;
   const minimumHeight = tableNodeMinimumHeight({ data });
   const commitResize = (
     _event: unknown,
@@ -116,7 +141,7 @@ export const TableDiagramNodeComponent = memo(function TableDiagramNodeComponent
 
   return (
     <article
-      className={`diagram-table ${data.selectedElementKey ? "is-selected" : ""}`}
+      className={`diagram-table ${data.selectedElementKey ? "is-selected" : ""} ${activeTableRename ? "is-inline-editing" : ""}`}
       aria-label={messages["diagram.tableAccessibleName"](`${data.schemaName}.${data.name}`)}
     >
       {resizeVisible ? (
@@ -150,27 +175,61 @@ export const TableDiagramNodeComponent = memo(function TableDiagramNodeComponent
       ) : null}
       <Handle type="target" position={Position.Left} />
       <header className="diagram-table__header">
-        <span className="diagram-table__drag-handle" aria-hidden="true">
+        <span
+          className={`diagram-table__drag-handle ${activeTableRename ? "nodrag nopan" : ""}`}
+          aria-hidden="true"
+        >
           ⋮⋮
         </span>
-        <button
-          className="nodrag nopan diagram-table__table-action"
-          title={`${data.schemaName}.${data.name}`}
-          type="button"
-          tabIndex={-1}
-          aria-pressed={data.selectedElementKey === data.tableKey}
-          onClick={(event) => {
-            event.stopPropagation();
-            activateElement({
-              elementKey: data.tableKey,
-              kind: "table",
-              tableKeys: [data.tableKey],
-            });
-          }}
-        >
-          <span>{data.schemaName}</span>
-          <strong>{data.name}</strong>
-        </button>
+        {activeTableRename ? (
+          <TableInlineRenameForm
+            tableKey={data.tableKey}
+            schemaName={data.schemaName}
+            state={activeTableRename}
+            onChange={(value) => changeTableInlineRename?.(value)}
+            onSubmit={() => submitTableInlineRename?.()}
+            onCancel={() => cancelTableInlineRename?.()}
+          />
+        ) : (
+          <button
+            className="nodrag nopan diagram-table__table-action"
+            title={`${data.schemaName}.${data.name}`}
+            type="button"
+            tabIndex={-1}
+            aria-label={messages["diagram.tableAccessibleName"](`${data.schemaName}.${data.name}`)}
+            aria-pressed={data.selectedElementKey === data.tableKey}
+            onClick={(event) => {
+              event.stopPropagation();
+              activateElement({
+                elementKey: data.tableKey,
+                kind: "table",
+                tableKeys: [data.tableKey],
+              });
+            }}
+            onDoubleClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const bounds = event.currentTarget.getBoundingClientRect();
+              editTable({
+                selection: {
+                  elementKey: data.tableKey,
+                  kind: "table",
+                  tableKeys: [data.tableKey],
+                },
+                anchor: {
+                  top: bounds.top,
+                  right: bounds.right,
+                  bottom: bounds.bottom,
+                  left: bounds.left,
+                },
+              });
+            }}
+            data-diagram-table-key={data.tableKey}
+          >
+            <span>{data.schemaName}</span>
+            <strong>{data.name}</strong>
+          </button>
+        )}
       </header>
       {displayedColumns.length > 0 ? (
         <ul className="diagram-table__columns">
@@ -230,6 +289,97 @@ export const TableDiagramNodeComponent = memo(function TableDiagramNodeComponent
     </article>
   );
 });
+
+function TableInlineRenameForm({
+  tableKey,
+  schemaName,
+  state,
+  onChange,
+  onSubmit,
+  onCancel,
+}: {
+  readonly tableKey: string;
+  readonly schemaName: string;
+  readonly state: DiagramTableInlineRenameState;
+  readonly onChange: (value: string) => void;
+  readonly onSubmit: () => void;
+  readonly onCancel: () => void;
+}) {
+  const { messages } = useUiLocale();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const statusId = `diagram-table-rename-status-${encodeURIComponent(tableKey)}`;
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  return (
+    <form
+      className="nodrag nopan nowheel diagram-table__rename-form"
+      data-diagram-table-key={tableKey}
+      aria-label={messages["visual.inlineTableRenameForm"](`${schemaName}.${state.value}`)}
+      onSubmit={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (state.disabled || state.value.trim().length === 0) return;
+        onSubmit();
+      }}
+      onClick={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+      onWheel={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (!state.disabled) onCancel();
+      }}
+    >
+      <span className="diagram-table__rename-schema" title={schemaName}>
+        {schemaName}
+      </span>
+      <input
+        ref={inputRef}
+        className="diagram-table__rename-input"
+        aria-label={messages["visual.inlineTableNameInput"]}
+        aria-describedby={state.statusMessage ? statusId : undefined}
+        aria-invalid={state.invalid || undefined}
+        disabled={state.disabled}
+        value={state.value}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      />
+      <button
+        className="diagram-table__rename-button"
+        type="submit"
+        aria-label={messages["visual.inlineTableRenameApply"]}
+        title={messages["visual.inlineTableRenameApply"]}
+        disabled={state.disabled || state.value.trim().length === 0}
+      >
+        <svg aria-hidden="true" viewBox="0 0 16 16" focusable="false">
+          <path d="m3.25 8.25 3 3 6.5-7" />
+        </svg>
+      </button>
+      <button
+        className="diagram-table__rename-button"
+        type="button"
+        aria-label={messages["visual.inlineTableRenameCancel"]}
+        title={messages["visual.inlineTableRenameCancel"]}
+        disabled={state.disabled}
+        onClick={onCancel}
+      >
+        <svg aria-hidden="true" viewBox="0 0 16 16" focusable="false">
+          <path d="m4 4 8 8M12 4l-8 8" />
+        </svg>
+      </button>
+      {state.statusMessage ? (
+        <span id={statusId} className="sr-only" aria-live="polite">
+          {state.statusMessage}
+        </span>
+      ) : null}
+    </form>
+  );
+}
 
 export const ReferenceDiagramEdgeComponent = memo(function ReferenceDiagramEdgeComponent(
   props: EdgeProps<SchemaDiagramEdge>,

@@ -249,6 +249,84 @@ body {
   cursor: pointer;
 }
 
+.diagram-table__rename-form {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(2.5rem, auto) minmax(3.5rem, 1fr) 1.75rem 1.75rem;
+  align-items: center;
+  gap: 4px;
+}
+
+.diagram-table__rename-schema {
+  max-width: 5.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diagram-table__rename-input {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  border: 1px solid var(--ui-accent);
+  border-radius: var(--ui-control-radius);
+  background: var(--ui-page);
+  color: var(--ui-text);
+  padding: 0 7px;
+  font-size: 12px;
+  font-weight: 700;
+  outline: none;
+}
+
+.diagram-table__rename-input:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--ui-selected),
+    0 0 0 4px var(--ui-accent);
+}
+
+.diagram-table__rename-input[aria-invalid="true"] {
+  border-color: var(--ui-danger);
+}
+
+.diagram-table__rename-button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-control-radius);
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  cursor: pointer;
+}
+
+.diagram-table__rename-button:hover:not(:disabled) {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent-hover);
+}
+
+.diagram-table__rename-button:focus-visible {
+  outline: var(--ui-focus);
+  outline-offset: 2px;
+}
+
+.diagram-table__rename-button:disabled,
+.diagram-table__rename-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.diagram-table__rename-button svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.75;
+}
+
 .diagram-table__drag-handle {
   align-self: stretch;
   display: grid;

@@ -22,6 +22,7 @@ const INLINE_EDITOR_MIN_SAFE_WIDTH_PX = 280;
 const INLINE_EDITOR_MIN_SAFE_HEIGHT_PX = 320;
 
 export interface CanvasColumnInlineEditorState {
+  readonly editorKind: "COLUMN";
   readonly request: DiagramColumnEditRequest;
   readonly initialDraft: Extract<VisualCommandDraft, { kind: "ALTER_COLUMN" }>;
   readonly openedSchemaHash: string;
@@ -65,13 +66,14 @@ export function CanvasColumnInlineEditor({
     height: window.innerHeight,
     insets: viewportInsets,
   });
-  const columnName = state.initialDraft.newName ?? state.request.selection.elementKey;
+  const elementName = state.initialDraft.newName ?? state.request.selection.elementKey;
   const action = {
     id: `ALTER_COLUMN:${state.request.selection.elementKey}:canvas`,
     kind: "ALTER_COLUMN" as const,
     label: messages["visual.action.alterColumn"],
     targetElementKey: state.request.selection.elementKey,
   };
+  const title = messages["visual.inlineEditorTitle"](elementName);
 
   useEffect(() => {
     editorRef.current?.querySelector<HTMLElement>("input, select, textarea, button")?.focus();
@@ -84,7 +86,7 @@ export function CanvasColumnInlineEditor({
       style={position}
       role="dialog"
       aria-modal="false"
-      aria-label={messages["visual.inlineEditorTitle"](columnName)}
+      aria-label={title}
       data-testid="canvas-column-inline-editor"
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}
@@ -110,7 +112,7 @@ export function CanvasColumnInlineEditor({
           graph={graph}
           primaryDialect={primaryDialect}
           action={action}
-          displayLabel={messages["visual.inlineEditorTitle"](columnName)}
+          displayLabel={title}
           initialDraft={state.initialDraft}
           disabled={
             interactionDisabled ||

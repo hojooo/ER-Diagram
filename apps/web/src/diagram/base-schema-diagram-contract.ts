@@ -22,7 +22,12 @@ export interface BaseSchemaDiagramProps {
   readonly onToggleGroup: (groupKey: SchemaElementKey) => void;
   readonly onNavigateSource: (selection: DiagramSelection) => void;
   readonly onActivateElement?: (selection: DiagramSelection) => void;
+  readonly onEditTable?: (request: DiagramTableEditRequest) => void;
   readonly onEditColumn?: (request: DiagramColumnEditRequest) => void;
+  readonly tableInlineRename?: DiagramTableInlineRenameState | null;
+  readonly onTableInlineRenameChange?: (value: string) => void;
+  readonly onTableInlineRenameSubmit?: () => void;
+  readonly onTableInlineRenameCancel?: () => void;
   readonly viewportInsets?: DiagramViewportInsets;
   readonly fillContainer?: boolean;
   readonly requestLayout?: (projection: DiagramProjection) => Promise<DiagramProjection>;
@@ -52,6 +57,24 @@ export interface DiagramColumnEditRequest {
     readonly bottom: number;
     readonly left: number;
   };
+}
+
+export interface DiagramTableEditRequest {
+  readonly selection: DiagramSelection;
+  readonly anchor: {
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+    readonly left: number;
+  };
+}
+
+export interface DiagramTableInlineRenameState {
+  readonly tableKey: SchemaElementKey;
+  readonly value: string;
+  readonly disabled: boolean;
+  readonly invalid: boolean;
+  readonly statusMessage: string | null;
 }
 
 export interface DiagramTableResizeRequest {
