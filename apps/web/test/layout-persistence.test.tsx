@@ -125,7 +125,9 @@ describe("workspace layout persistence", () => {
     renderWorkspace(api);
     await screen.findByTestId("layout-position");
 
-    fireEvent.click(screen.getByRole("button", { name: "Preview auto layout" }));
+    const previewButton = screen.getByRole("button", { name: "Preview auto layout" });
+    await waitFor(() => expect(previewButton).toBeEnabled());
+    fireEvent.click(previewButton);
     expect(await screen.findByText("Auto-layout preview ready")).toBeVisible();
     expect(api.saveLayoutInputs).toHaveLength(1);
     expect(api.saveLayoutInputs[0]?.layout.positions[tableKey]).toEqual({ x: 10, y: 20 });
