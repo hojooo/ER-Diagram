@@ -30,6 +30,7 @@ import {
   GLOBAL_VIEW_KEY,
   listDiagramViews,
 } from "./projection.js";
+import { applyRelationshipRoutes } from "./relationship-routing.js";
 import type { DiagramSelection } from "./source-navigation.js";
 import type {
   DiagramFocusRequest,
@@ -402,6 +403,10 @@ export function BaseSchemaDiagram({
       tableInlineRename,
     ],
   );
+  const routedProjection = useMemo(
+    () => applyRelationshipRoutes(displayProjection),
+    [displayProjection],
+  );
   const handleFlowInit = useCallback(
     (instance: ReactFlowInstance<SchemaDiagramNode, SchemaDiagramEdge>) => {
       flowInstanceRef.current = instance;
@@ -411,11 +416,11 @@ export function BaseSchemaDiagram({
   );
 
   const selectedProjection = useMemo<DiagramProjection>(() => {
-    if (!selection) return displayProjection;
+    if (!selection) return routedProjection;
     const selectedElementKey = selection.elementKey;
     return {
-      ...displayProjection,
-      nodes: displayProjection.nodes.map((node) => {
+      ...routedProjection,
+      nodes: routedProjection.nodes.map((node) => {
         if (node.type === "table") {
           const selected = selection.tableKeys.includes(node.data.tableKey);
           if (!selected) return node;
@@ -447,11 +452,11 @@ export function BaseSchemaDiagram({
           },
         } satisfies GroupDiagramNode;
       }),
-      edges: displayProjection.edges.map((edge) =>
+      edges: routedProjection.edges.map((edge) =>
         edge.data.referenceKeys.includes(selectedElementKey) ? { ...edge, selected: true } : edge,
       ),
     };
-  }, [displayProjection, selection]);
+  }, [routedProjection, selection]);
 
   if (visibility.tableKeys.size === 0) {
     return (

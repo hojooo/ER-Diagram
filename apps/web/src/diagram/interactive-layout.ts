@@ -16,7 +16,7 @@ const CHILD_COLUMNS = 2;
 const ROOT_GAP = 80;
 const ROOT_ROW_WIDTH = 3_200;
 
-interface NodeSize {
+export interface NodeSize {
   readonly width: number;
   readonly height: number;
 }
@@ -82,7 +82,7 @@ export function deriveInteractiveLayout(
   for (const node of sizeAwareProjection.nodes) {
     if (node.parentId && nodeById.has(node.parentId)) continue;
     if (node.type === "group") continue;
-    rootSizes.set(node.id, nodeSize(node));
+    rootSizes.set(node.id, diagramNodeSize(node));
     const seed = finitePoint(savedPositions[node.id]) ?? previousAbsolute.get(node.id);
     if (seed) rootPositions.set(node.id, { ...seed });
   }
@@ -334,7 +334,7 @@ export function deriveInteractiveViewport(
     if (options.targetNodeIds && !options.targetNodeIds.has(node.id)) continue;
     const position = absolutePositions.get(node.id);
     if (!position) return null;
-    const dimensions = nodeSize(node);
+    const dimensions = diagramNodeSize(node);
     minimumX = Math.min(minimumX, position.x);
     minimumY = Math.min(minimumY, position.y);
     maximumX = Math.max(maximumX, position.x + dimensions.width);
@@ -368,7 +368,7 @@ function placeGroup(
   savedPositions: Readonly<Record<string, DiagramNodePlacement>>,
   previousAbsolute: ReadonlyMap<string, DiagramPosition>,
 ): GroupPlacement {
-  const baseSize = nodeSize(group);
+  const baseSize = diagramNodeSize(group);
   const savedGroupPosition = finitePoint(savedPositions[group.id]);
   const previousGroupPosition = previousAbsolute.get(group.id);
   let groupPosition = savedGroupPosition ?? previousGroupPosition ?? null;
@@ -439,13 +439,13 @@ function placeMissingChildren(
   const existingBottom = children.reduce(
     (maximum, child) => {
       const position = positions.get(child.id);
-      return position ? Math.max(maximum, position.y + nodeSize(child).height) : maximum;
+      return position ? Math.max(maximum, position.y + diagramNodeSize(child).height) : maximum;
     },
     GROUP_HEADER_HEIGHT + GROUP_PADDING - CHILD_GAP,
   );
   const startY = Math.max(GROUP_HEADER_HEIGHT + GROUP_PADDING, existingBottom + CHILD_GAP);
-  const columnWidth = Math.max(...missing.map((child) => nodeSize(child).width)) + CHILD_GAP;
-  const rowHeight = Math.max(...missing.map((child) => nodeSize(child).height)) + CHILD_GAP;
+  const columnWidth = Math.max(...missing.map((child) => diagramNodeSize(child).width)) + CHILD_GAP;
+  const rowHeight = Math.max(...missing.map((child) => diagramNodeSize(child).height)) + CHILD_GAP;
 
   missing.forEach((child, index) => {
     positions.set(child.id, {
@@ -479,7 +479,7 @@ function groupSize(
   for (const child of children) {
     const position = positions.get(child.id);
     if (!position) continue;
-    const childSize = nodeSize(child);
+    const childSize = diagramNodeSize(child);
     width = Math.max(width, position.x + childSize.width + GROUP_PADDING);
     height = Math.max(height, position.y + childSize.height + GROUP_PADDING);
   }
@@ -495,7 +495,7 @@ function placeMissingRoots(
   const roots = nodes.filter((node) => !node.parentId || !nodeById.has(node.parentId));
   const seededBottom = roots.reduce((maximum, node) => {
     const position = positions.get(node.id);
-    const size = sizes.get(node.id) ?? nodeSize(node);
+    const size = sizes.get(node.id) ?? diagramNodeSize(node);
     return position ? Math.max(maximum, position.y + size.height) : maximum;
   }, -ROOT_GAP);
   const missing = roots
@@ -506,7 +506,7 @@ function placeMissingRoots(
   let rowHeight = 0;
 
   for (const node of missing) {
-    const size = sizes.get(node.id) ?? nodeSize(node);
+    const size = sizes.get(node.id) ?? diagramNodeSize(node);
     if (cursorX > 0 && cursorX + size.width > ROOT_ROW_WIDTH) {
       cursorX = 0;
       cursorY += rowHeight + ROOT_GAP;
@@ -532,7 +532,7 @@ function collectChildren(
   return result;
 }
 
-function nodeSize(node: SchemaDiagramNode): NodeSize {
+export function diagramNodeSize(node: SchemaDiagramNode): NodeSize {
   return {
     width: finiteDimension(node.style?.width, 260),
     height: finiteDimension(node.style?.height, 80),

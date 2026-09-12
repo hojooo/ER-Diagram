@@ -4,6 +4,18 @@ import type { Edge, Node } from "@xyflow/react";
 export type DiagramLod = "NAME_ONLY" | "KEYS_ONLY" | "FULL";
 export type DiagramViewKey = "GLOBAL" | string;
 
+export interface DiagramRoutePoint {
+  x: number;
+  y: number;
+}
+
+export interface DiagramEdgeRoute {
+  path: string;
+  labelX: number;
+  labelY: number;
+  points: DiagramRoutePoint[];
+}
+
 export type DiagramColumn = Pick<ColumnNode, "key" | "name" | "primaryKey"> & {
   type: string;
   foreignKey: boolean;
@@ -42,6 +54,7 @@ export type ReferenceDiagramEdgeData = {
   inactive: boolean;
   sourceMultiplicity?: string;
   targetMultiplicity?: string;
+  route?: DiagramEdgeRoute;
 } & Record<string, unknown>;
 
 export type TableDiagramNode = Node<TableDiagramNodeData, "table"> & {
