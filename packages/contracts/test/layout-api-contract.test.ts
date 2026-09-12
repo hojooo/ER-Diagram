@@ -14,7 +14,9 @@ const HASH = "a".repeat(64);
 
 function layout() {
   return {
-    positions: { 'table:["public","사용자🚀"]': { x: 10.5, y: -20 } },
+    positions: {
+      'table:["public","사용자🚀"]': { x: 10.5, y: -20, width: 360, height: 224 },
+    },
     collapsedGroupKeys: ['group:["public","핵심"]'],
     hiddenElementKeys: [],
     viewport: { x: 1, y: 2, zoom: 0.75 },
@@ -93,5 +95,36 @@ describe("layout HTTP contracts", () => {
     expect(layoutParamsSchema.safeParse({ projectId: PROJECT_ID, viewKey: "   " }).success).toBe(
       false,
     );
+    expect(
+      saveLayoutRequestSchema.safeParse({
+        ...base,
+        layout: {
+          ...layout(),
+          positions: { 'table:["public","users"]': { x: 0, y: 0, width: 320 } },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      saveLayoutRequestSchema.safeParse({
+        ...base,
+        layout: {
+          ...layout(),
+          positions: {
+            'group:["public","identity"]': { x: 0, y: 0, width: 320, height: 240 },
+          },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      saveLayoutRequestSchema.safeParse({
+        ...base,
+        layout: {
+          ...layout(),
+          positions: {
+            'table:["public","users"]': { x: 0, y: 0, width: 320.5, height: -1 },
+          },
+        },
+      }).success,
+    ).toBe(false);
   });
 });

@@ -131,7 +131,9 @@ describe("SQLite project bundle repository", () => {
         viewKey: "GLOBAL",
         expectedLayoutRevisionNo: 0,
         layout: {
-          positions: { 'table:["public","사용자"]': { x: 10, y: 20 } },
+          positions: {
+            'table:["public","사용자"]': { x: 10, y: 20, width: 360, height: 224 },
+          },
           collapsedGroupKeys: [],
           hiddenElementKeys: [],
           viewport: { x: 1, y: 2, zoom: 0.8 },
@@ -180,7 +182,13 @@ describe("SQLite project bundle repository", () => {
     const repo = createSqliteProjectBundleRepository(reopened);
     expect(repo.getProject(importedId)?.draftSource).toBe(INVALID_SOURCE);
     expect(repo.listRevisions(importedId).map(({ revisionNo }) => revisionNo)).toEqual([2, 1]);
-    expect(repo.listLayouts(importedId)).toHaveLength(1);
+    expect(repo.listLayouts(importedId)).toMatchObject([
+      {
+        positions: {
+          'table:["public","사용자"]': { x: 10, y: 20, width: 360, height: 224 },
+        },
+      },
+    ]);
     expect(repo.listImportArtifacts(importedId)[0]).toMatchObject({
       originalSql: null,
       status: "CANCELLED",

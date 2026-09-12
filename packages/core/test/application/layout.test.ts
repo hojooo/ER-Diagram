@@ -193,7 +193,10 @@ describe("layout application", () => {
 
   it("recovers exact rename positions without deleting stale keys", () => {
     const recovered = recoverLayoutStableKeys(
-      layout({ positions: { before: { x: 12, y: 34 } }, hiddenElementKeys: ["before"] }),
+      layout({
+        positions: { before: { x: 12, y: 34, width: 360, height: 224 } },
+        hiddenElementKeys: ["before"],
+      }),
       [
         {
           elementKind: "table",
@@ -209,9 +212,48 @@ describe("layout application", () => {
 
     expect(recovered.recoveredKeys).toEqual(["after"]);
     expect(recovered.layout.positions).toEqual({
-      before: { x: 12, y: 34 },
-      after: { x: 12, y: 34 },
+      before: { x: 12, y: 34, width: 360, height: 224 },
+      after: { x: 12, y: 34, width: 360, height: 224 },
     });
     expect(new Set(recovered.layout.hiddenElementKeys)).toEqual(new Set(["before", "after"]));
+  });
+
+  it("treats table dimensions as part of layout identity", async () => {
+    const persistence = new FakeLayoutPersistence();
+    const application = createLayoutApplication({ persistence });
+    success(
+      await application.saveLayout({
+        projectId: PROJECT_ID,
+        viewKey: "GLOBAL",
+        expectedLayoutRevisionNo: 0,
+        layout: layout({
+          positions: {
+            'table:["public","users"]': { x: 10, y: 20, width: 320, height: 180 },
+          },
+        }),
+      }),
+    );
+
+    const changed = success(
+      await application.saveLayout({
+        projectId: PROJECT_ID,
+        viewKey: "GLOBAL",
+        expectedLayoutRevisionNo: 1,
+        layout: layout({
+          positions: {
+            'table:["public","users"]': { x: 10, y: 20, width: 360, height: 180 },
+          },
+        }),
+      }),
+    );
+
+    expect(changed.layoutUpdated).toBe(true);
+    expect(changed.state.currentLayoutRevisionNo).toBe(2);
+    expect(changed.state.layout?.positions['table:["public","users"]']).toEqual({
+      x: 10,
+      y: 20,
+      width: 360,
+      height: 180,
+    });
   });
 });

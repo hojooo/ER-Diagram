@@ -50,6 +50,11 @@ export interface DiagramPosition {
   readonly y: number;
 }
 
+export interface DiagramNodePlacement extends DiagramPosition {
+  readonly width?: number | undefined;
+  readonly height?: number | undefined;
+}
+
 export interface DiagramViewport extends DiagramPosition {
   readonly zoom: number;
 }
@@ -167,7 +172,7 @@ export const diagramLayouts = sqliteTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     viewKey: text("view_key").notNull(),
     positions: text("positions_json", { mode: "json" })
-      .$type<Readonly<Record<string, DiagramPosition>>>()
+      .$type<Readonly<Record<string, DiagramNodePlacement>>>()
       .notNull(),
     collapsedGroupKeys: text("collapsed_group_keys_json", { mode: "json" })
       .$type<readonly string[]>()

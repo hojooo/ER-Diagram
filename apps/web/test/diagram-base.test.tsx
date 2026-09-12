@@ -18,6 +18,7 @@ vi.mock("@xyflow/react", async () => {
   interface MockNode {
     id: string;
     position: { x: number; y: number };
+    style?: { width?: number; height?: number };
     data: { name?: string };
   }
   interface MockEdge {
@@ -38,6 +39,29 @@ vi.mock("@xyflow/react", async () => {
     Controls: () => null,
     EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => children,
     Handle: () => null,
+    NodeResizeControl: (props: Record<string, unknown>) => {
+      const onResize = props.onResize as
+        | ((
+            event: unknown,
+            params: { x: number; y: number; width: number; height: number },
+          ) => void)
+        | undefined;
+      const onResizeEnd = props.onResizeEnd as
+        | ((
+            event: unknown,
+            params: { x: number; y: number; width: number; height: number },
+          ) => void)
+        | undefined;
+      const params = { x: 400, y: 500, width: 420, height: 240 };
+      return (
+        <button
+          type="button"
+          aria-label={`Resize table ${String(props.position)}`}
+          onMouseDown={() => onResize?.({}, params)}
+          onMouseUp={() => onResizeEnd?.({}, params)}
+        />
+      );
+    },
     Position: { Left: "left", Right: "right" },
     getSmoothStepPath: () => ["", 0, 0],
     ReactFlow: (props: Record<string, unknown>) => {
@@ -92,6 +116,7 @@ vi.mock("@xyflow/react", async () => {
               key={node.id}
               aria-label={`Canvas table ${node.data.name ?? node.id}`}
               data-position={`${node.position.x},${node.position.y}`}
+              data-size={`${String(node.style?.width ?? "")},${String(node.style?.height ?? "")}`}
               onClick={(event) => onNodeClick?.(event, node)}
             >
               {node.data.name ?? node.id}
@@ -707,6 +732,72 @@ describe("base schema diagram canvas", () => {
     fireEvent.click(screen.getByRole("button", { name: "Simulate programmatic pan" }));
     fireEvent.click(screen.getByRole("button", { name: "Simulate user pan" }));
     expect(onPositionsCommit).toHaveBeenCalledOnce();
+  });
+
+  it("applies persisted table dimensions without changing the saved position", async () => {
+    const graph = await parseGraph(`Table resizable {
+  id int [pk]
+  name varchar
+}`);
+    const table = graph.tables[0];
+    if (!table) throw new Error("Missing resizable table.");
+    const selectionStore = createDiagramSelectionStore();
+    selectionStore.getState().setSelection({
+      elementKey: table.key,
+      kind: "table",
+      tableKeys: [table.key],
+    });
+
+    render(
+      <BaseSchemaDiagram
+        graph={graph}
+        viewKey="GLOBAL"
+        detailLevel="FULL"
+        collapsedGroupKeys={new Set()}
+        selectionStore={selectionStore}
+        sourceNavigationEnabled
+        onToggleGroup={vi.fn()}
+        onNavigateSource={vi.fn()}
+        layoutPositions={{
+          [table.key]: { x: 400, y: 500, width: 360, height: 224 },
+        }}
+      />,
+    );
+
+    const tableButton = await screen.findByRole("button", { name: "Canvas table resizable" });
+    await waitFor(() => expect(tableButton).toHaveAttribute("data-size", "360,224"));
+    expect(tableButton).toHaveAttribute("data-position", "400,500");
+  });
+
+  it("keeps the visible table at its current LOD content minimum without rewriting layout", async () => {
+    const graph = await parseGraph(`Table content_minimum {
+  id int [pk]
+  name varchar
+}`);
+    const table = graph.tables[0];
+    if (!table) throw new Error("Missing content-minimum table.");
+    const onTableResizeCommit = vi.fn();
+
+    render(
+      <BaseSchemaDiagram
+        graph={graph}
+        viewKey="GLOBAL"
+        detailLevel="FULL"
+        collapsedGroupKeys={new Set()}
+        selectionStore={createDiagramSelectionStore()}
+        sourceNavigationEnabled
+        onToggleGroup={vi.fn()}
+        onNavigateSource={vi.fn()}
+        layoutPositions={{ [table.key]: { x: 0, y: 0, width: 230, height: 1 } }}
+        onTableResizeCommit={onTableResizeCommit}
+      />,
+    );
+
+    const tableButton = await screen.findByRole("button", {
+      name: "Canvas table content_minimum",
+    });
+    await waitFor(() => expect(tableButton).toHaveAttribute("data-size", "230,104"));
+    expect(onTableResizeCommit).not.toHaveBeenCalled();
   });
 
   it("uses safe-area insets for initial fit without moving the viewport when overlays toggle", async () => {

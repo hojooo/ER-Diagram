@@ -8,12 +8,17 @@ export interface DiagramPosition {
   readonly y: number;
 }
 
+export interface DiagramNodePlacement extends DiagramPosition {
+  readonly width?: number | undefined;
+  readonly height?: number | undefined;
+}
+
 export interface DiagramViewport extends DiagramPosition {
   readonly zoom: number;
 }
 
 export interface DiagramLayoutValue {
-  readonly positions: Readonly<Record<SchemaElementKey, DiagramPosition>>;
+  readonly positions: Readonly<Record<SchemaElementKey, DiagramNodePlacement>>;
   readonly collapsedGroupKeys: readonly SchemaElementKey[];
   readonly hiddenElementKeys: readonly SchemaElementKey[];
   readonly viewport: DiagramViewport;

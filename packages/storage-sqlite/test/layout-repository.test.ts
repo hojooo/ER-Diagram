@@ -51,7 +51,9 @@ function projectApplication(storage: SqliteStorage) {
 
 function layoutValue() {
   return {
-    positions: { 'table:["public","사용자🚀"]': { x: 12.5, y: -30 } },
+    positions: {
+      'table:["public","사용자🚀"]': { x: 12.5, y: -30, width: 384, height: 252 },
+    },
     collapsedGroupKeys: ['group:["public","핵심"]'],
     hiddenElementKeys: ['column:["public","사용자🚀","비밀"]'],
     viewport: { x: 20, y: 30, zoom: 0.75 },

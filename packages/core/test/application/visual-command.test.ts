@@ -521,12 +521,17 @@ describe("visual command application", () => {
     const view = persistence.layouts.get(`${PROJECT_ID}:view`);
     expect(global).toMatchObject({ revisionNo: 1, baseSchemaHash: AFTER_HASH });
     expect(global?.positions).toEqual({
-      [TABLE_KEY]: { x: 10, y: 20 },
-      [RENAMED_TABLE_KEY]: { x: 10, y: 20 },
+      [TABLE_KEY]: { x: 10, y: 20, width: 360, height: 224 },
+      [RENAMED_TABLE_KEY]: { x: 10, y: 20, width: 360, height: 224 },
     });
     expect(global?.hiddenElementKeys).toEqual([RENAMED_TABLE_KEY, TABLE_KEY].sort(compare));
     expect(view).toMatchObject({ revisionNo: 1, baseSchemaHash: "d".repeat(64) });
-    expect(view?.positions[RENAMED_TABLE_KEY]).toEqual({ x: 10, y: 20 });
+    expect(view?.positions[RENAMED_TABLE_KEY]).toEqual({
+      x: 10,
+      y: 20,
+      width: 360,
+      height: 224,
+    });
     expect(view?.collapsedGroupKeys).toEqual(["group:stable"]);
     expect(view?.viewport).toEqual({ x: 1, y: 2, zoom: 0.8 });
   });
@@ -690,7 +695,7 @@ function layout(
   return {
     projectId: PROJECT_ID,
     viewKey,
-    positions: { [TABLE_KEY]: { x: 10, y: 20 } },
+    positions: { [TABLE_KEY]: { x: 10, y: 20, width: 360, height: 224 } },
     collapsedGroupKeys: ["group:stable"],
     hiddenElementKeys: hidden ? [TABLE_KEY] : [],
     viewport: { x: 1, y: 2, zoom: 0.8 },

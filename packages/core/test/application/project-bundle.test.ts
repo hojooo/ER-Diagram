@@ -180,7 +180,9 @@ describe("ProjectBundleApplication", () => {
       {
         projectId: project.id,
         viewKey: "GLOBAL",
-        positions: { 'table:["public","users"]': { x: 12, y: 34 } },
+        positions: {
+          'table:["public","users"]': { x: 12, y: 34, width: 360, height: 224 },
+        },
         collapsedGroupKeys: [],
         hiddenElementKeys: [],
         viewport: { x: 1, y: 2, zoom: 0.75 },
@@ -237,6 +239,9 @@ describe("ProjectBundleApplication", () => {
       projectId: importedId,
       viewKey: "GLOBAL",
       revisionNo: 4,
+      positions: {
+        'table:["public","users"]': { x: 12, y: 34, width: 360, height: 224 },
+      },
     });
     const importedArtifact = repository.artifacts.get(importedId)?.[0];
     expect(importedArtifact).toMatchObject({

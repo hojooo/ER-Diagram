@@ -320,6 +320,46 @@ describe("accessible visual schema inspector", () => {
     expect(commandSession.submit).not.toHaveBeenCalled();
   });
 
+  it("provides an accessible layout-only table size editor and reset", () => {
+    const users = requiredTable("users");
+    const store = createDiagramSelectionStore();
+    store.getState().setSelection(selection("table", users.key, [users.key]));
+    const commandSession = fakeCommandSession();
+    const onApplyTableSize = vi.fn();
+    const onResetTableSize = vi.fn();
+
+    render(
+      <VisualSchemaInspector
+        graph={graph}
+        primaryDialect="POSTGRESQL"
+        currentViewKey="GLOBAL"
+        selectionStore={store}
+        commandSession={commandSession.controller}
+        interactionDisabled={false}
+        sourceNavigationEnabled
+        onOpenSource={vi.fn()}
+        onReloadLayouts={vi.fn()}
+        layoutPositions={{
+          [users.key]: { x: 20, y: 30, width: 340, height: 200 },
+        }}
+        detailLevel="FULL"
+        onApplyTableSize={onApplyTableSize}
+        onResetTableSize={onResetTableSize}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Table size in this view" })).toBeVisible();
+    expect(screen.getByLabelText("Width (px)")).toHaveValue(340);
+    expect(screen.getByLabelText("Height (px)")).toHaveValue(200);
+    fireEvent.change(screen.getByLabelText("Width (px)"), { target: { value: "420" } });
+    fireEvent.change(screen.getByLabelText("Height (px)"), { target: { value: "260" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply size" }));
+    expect(onApplyTableSize).toHaveBeenCalledWith(users.key, 420, 260);
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset size" }));
+    expect(onResetTableSize).toHaveBeenCalledWith(users.key);
+  });
+
   it("blocks graph-known structural dependencies before a delete command is sent", () => {
     const users = requiredTable("users");
     const store = createDiagramSelectionStore();

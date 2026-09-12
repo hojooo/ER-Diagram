@@ -11,7 +11,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
 
 import { useUiLocale } from "../localization/ui-locale.js";
-import type { BaseSchemaDiagramProps } from "./base-schema-diagram-contract.js";
+import type {
+  BaseSchemaDiagramProps,
+  DiagramTableResizeRequest,
+} from "./base-schema-diagram-contract.js";
 import {
   DiagramInteractionContext,
   GroupDiagramNodeComponent,
@@ -64,6 +67,7 @@ export function BaseSchemaDiagram({
   layoutRequest = null,
   interactionDisabled = false,
   onPositionsCommit,
+  onTableResizeCommit,
   onLayoutRequestReady,
   onRenderedLayoutReady,
 }: BaseSchemaDiagramProps) {
@@ -86,7 +90,9 @@ export function BaseSchemaDiagram({
   );
   const [displayProjection, setDisplayProjection] = useState(() =>
     layoutRequest
-      ? projection
+      ? layoutRequest.mode === "PREVIEW"
+        ? deriveInteractiveLayout(projection, { savedPositions: layoutPositions })
+        : projection
       : deriveInteractiveLayout(projection, { savedPositions: layoutPositions }),
   );
   const [layoutStatus, setLayoutStatus] = useState<LayoutStatus>(
@@ -168,9 +174,16 @@ export function BaseSchemaDiagram({
       return;
     }
 
-    setDisplayProjection(projection);
+    const requestedProjection =
+      layoutRequest.mode === "PREVIEW"
+        ? deriveInteractiveLayout(projection, {
+            savedPositions: layoutPositions,
+            previousProjection: stableProjectionRef.current,
+          })
+        : projection;
+    setDisplayProjection(requestedProjection);
     setLayoutStatus("LAYING_OUT");
-    void requestLayout(projection).then(
+    void requestLayout(requestedProjection).then(
       (laidOut) => {
         if (activeLayoutRequestRef.current !== requestId) return;
         setDisplayProjection(laidOut);
@@ -351,10 +364,27 @@ export function BaseSchemaDiagram({
       activateElement,
       editColumn: (request: Parameters<NonNullable<BaseSchemaDiagramProps["onEditColumn"]>>[0]) =>
         onEditColumn?.(request),
+      resizeTable: (request: DiagramTableResizeRequest) => {
+        if (interactionDisabled || layoutRequest) return;
+        onTableResizeCommit?.(request.tableKey, {
+          x: request.x,
+          y: request.y,
+          width: request.width,
+          height: request.height,
+        });
+      },
       toggleGroup: onToggleGroup,
       showEdgeLabels: shouldShowDiagramEdgeLabels(displayProjection.edges.length),
     }),
-    [activateElement, displayProjection.edges.length, onEditColumn, onToggleGroup],
+    [
+      activateElement,
+      displayProjection.edges.length,
+      interactionDisabled,
+      layoutRequest,
+      onEditColumn,
+      onTableResizeCommit,
+      onToggleGroup,
+    ],
   );
   const handleFlowInit = useCallback(
     (instance: ReactFlowInstance<SchemaDiagramNode, SchemaDiagramEdge>) => {
@@ -373,7 +403,7 @@ export function BaseSchemaDiagram({
         if (node.type === "table") {
           const selected = selection.tableKeys.includes(node.data.tableKey);
           if (!selected) return node;
-          return {
+          const selectedNode = {
             ...node,
             selected: true,
             data: {
@@ -381,6 +411,11 @@ export function BaseSchemaDiagram({
               selectedElementKey,
             },
           } satisfies TableDiagramNode;
+          if (selectedElementKey !== node.data.tableKey) return selectedNode;
+          // React Flow constrains resizers to a `parent` extent. Release that transiently so the
+          // following layout derivation can grow the TableGroup around the committed child size.
+          const { extent: _parentExtent, ...resizableNode } = selectedNode;
+          return resizableNode satisfies TableDiagramNode;
         }
         const selected =
           selection.elementKey === node.data.groupKey ||

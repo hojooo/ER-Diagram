@@ -58,6 +58,11 @@ Inspector의 세 column action은 하나의 `Edit column` form으로 합친다. 
 유지하며 다른 column을 열기 전 Apply 또는 Cancel을 요구한다. Partial column은 editor를 열지 않고 source
 fallback을 제공한다. Outline과 Inspector는 동일 기능의 canonical keyboard path다.
 
+Floating editor는 좌우 workspace panel보다 높은 Canvas layer에서 렌더링하고 현재 diagram safe area 안으로
+clamp한다. Panel open·close·resize 또는 viewport resize 뒤에도 editor가 가려지지 않게 재배치하며, 공간이
+부족하면 diagram 위 responsive sheet를 사용한다. Visible local column의 double-click은 silent no-op 대신 editor,
+partial source fallback 또는 unavailable 상태 중 하나를 반드시 표시한다.
+
 ## Alternatives considered
 
 ### 기존 세 command를 client batch로 순차 실행

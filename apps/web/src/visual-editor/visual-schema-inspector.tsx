@@ -1,8 +1,19 @@
-import type { Diagnostic, PrimaryDialect, SourceRange } from "@er-diagram/contracts";
+import type {
+  Diagnostic,
+  DiagramNodePlacement,
+  PrimaryDialect,
+  SourceRange,
+} from "@er-diagram/contracts";
 import type { SchemaGraph } from "@er-diagram/core";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import type { DiagramSelectionStore } from "../diagram/selection-store.js";
+import {
+  DEFAULT_TABLE_WIDTH,
+  MINIMUM_TABLE_WIDTH,
+  tableMinimumHeightInGraph,
+} from "../diagram/projection.js";
+import type { DiagramLod } from "../diagram/types.js";
 import type { UiMessages } from "../localization/messages.js";
 import { useUiLocale } from "../localization/ui-locale.js";
 import { VisualCommandForm } from "./visual-command-form.js";
@@ -29,6 +40,10 @@ export function VisualSchemaInspector({
   sourceNavigationEnabled,
   onOpenSource,
   onReloadLayouts,
+  layoutPositions,
+  detailLevel = "FULL",
+  onApplyTableSize,
+  onResetTableSize,
 }: {
   readonly graph: SchemaGraph;
   readonly primaryDialect: PrimaryDialect;
@@ -39,6 +54,10 @@ export function VisualSchemaInspector({
   readonly sourceNavigationEnabled: boolean;
   readonly onOpenSource: (range: SourceRange | null) => void;
   readonly onReloadLayouts: () => void;
+  readonly layoutPositions?: Readonly<Record<string, DiagramNodePlacement>>;
+  readonly detailLevel?: DiagramLod;
+  readonly onApplyTableSize?: (tableKey: string, width: number, height: number) => void;
+  readonly onResetTableSize?: (tableKey: string) => void;
 }) {
   const { messages } = useUiLocale();
   const selection = useSyncExternalStore(
@@ -61,6 +80,10 @@ export function VisualSchemaInspector({
   const [openedSchemaHash, setOpenedSchemaHash] = useState(graph.schemaHash);
   const [openedSelection, setOpenedSelection] = useState(selection);
   const partialProvenance = findPartialProvenance(graph, selection);
+  const selectedTable =
+    selection?.kind === "table"
+      ? (graph.tables.find((table) => table.key === selection.elementKey) ?? null)
+      : null;
   const activeDraft = activeAction
     ? createInitialVisualDraft(graph, selection, activeAction)
     : null;
@@ -142,6 +165,18 @@ export function VisualSchemaInspector({
           injectionRange={partialProvenance.injectionRange}
           sourceNavigationEnabled={sourceNavigationEnabled}
           onOpenSource={onOpenSource}
+        />
+      ) : null}
+
+      {selectedTable && onApplyTableSize && onResetTableSize ? (
+        <TableSizeControls
+          key={`${currentViewKey}:${selectedTable.key}`}
+          tableKey={selectedTable.key}
+          minimumHeight={tableMinimumHeightInGraph(graph, selectedTable.key, detailLevel)}
+          placement={layoutPositions?.[selectedTable.key]}
+          disabled={busy}
+          onApply={onApplyTableSize}
+          onReset={onResetTableSize}
         />
       ) : null}
 
@@ -237,6 +272,109 @@ export function VisualSchemaInspector({
           commandSession.reviewLatestSchema();
         }}
       />
+    </section>
+  );
+}
+
+function TableSizeControls({
+  tableKey,
+  minimumHeight,
+  placement,
+  disabled,
+  onApply,
+  onReset,
+}: {
+  readonly tableKey: string;
+  readonly minimumHeight: number;
+  readonly placement: DiagramNodePlacement | undefined;
+  readonly disabled: boolean;
+  readonly onApply: (tableKey: string, width: number, height: number) => void;
+  readonly onReset: (tableKey: string) => void;
+}) {
+  const { messages } = useUiLocale();
+  const effectiveWidth = Math.max(MINIMUM_TABLE_WIDTH, placement?.width ?? DEFAULT_TABLE_WIDTH);
+  const effectiveHeight = Math.max(minimumHeight, placement?.height ?? minimumHeight);
+  const [width, setWidth] = useState(String(effectiveWidth));
+  const [height, setHeight] = useState(String(effectiveHeight));
+  const [invalid, setInvalid] = useState(false);
+
+  useEffect(() => {
+    setWidth(String(effectiveWidth));
+    setHeight(String(effectiveHeight));
+    setInvalid(false);
+  }, [effectiveHeight, effectiveWidth]);
+
+  const apply = () => {
+    const parsedWidth = Number(width);
+    const parsedHeight = Number(height);
+    if (
+      !Number.isSafeInteger(parsedWidth) ||
+      !Number.isSafeInteger(parsedHeight) ||
+      parsedWidth < MINIMUM_TABLE_WIDTH ||
+      parsedHeight < minimumHeight
+    ) {
+      setInvalid(true);
+      return;
+    }
+    setInvalid(false);
+    onApply(tableKey, parsedWidth, parsedHeight);
+  };
+
+  return (
+    <section className="mt-4 rounded-xl border border-slate-700 bg-slate-950/45 p-3">
+      <h3 className="text-sm font-semibold text-slate-100">{messages["visual.tableSizeTitle"]}</h3>
+      <p className="mt-1 text-xs text-slate-400">{messages["visual.tableSizeDescription"]}</p>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <label className="text-xs font-semibold text-slate-200">
+          {messages["visual.tableWidth"]}
+          <input
+            className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+            type="number"
+            min={MINIMUM_TABLE_WIDTH}
+            step={1}
+            value={width}
+            disabled={disabled}
+            aria-invalid={invalid}
+            onChange={(event) => setWidth(event.currentTarget.value)}
+          />
+        </label>
+        <label className="text-xs font-semibold text-slate-200">
+          {messages["visual.tableHeight"]}
+          <input
+            className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+            type="number"
+            min={minimumHeight}
+            step={1}
+            value={height}
+            disabled={disabled}
+            aria-invalid={invalid}
+            onChange={(event) => setHeight(event.currentTarget.value)}
+          />
+        </label>
+      </div>
+      {invalid ? (
+        <p className="mt-2 text-xs text-red-200" role="alert">
+          {messages["visual.tableSizeInvalid"]}
+        </p>
+      ) : null}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button className={primaryButtonClass} type="button" disabled={disabled} onClick={apply}>
+          {messages["visual.applyTableSize"]}
+        </button>
+        <button
+          className={secondaryButtonClass}
+          type="button"
+          disabled={disabled || placement?.width === undefined}
+          onClick={() => {
+            onReset(tableKey);
+            setWidth(String(DEFAULT_TABLE_WIDTH));
+            setHeight(String(minimumHeight));
+            setInvalid(false);
+          }}
+        >
+          {messages["visual.resetTableSize"]}
+        </button>
+      </div>
     </section>
   );
 }

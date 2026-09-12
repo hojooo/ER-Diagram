@@ -1,6 +1,7 @@
 import type {
   Diagnostic,
   DiagramLayoutValue,
+  DiagramNodePlacement,
   DiagramPosition,
   DiagramViewport,
   ProjectResponse,
@@ -950,9 +951,63 @@ export function ProjectSourceWorkspace({
     (positions: Readonly<Record<string, DiagramPosition>>) => {
       editActiveLayout((current) => ({
         ...current,
-        positions: { ...current.positions, ...positions },
+        positions: mergePositionUpdates(current.positions, positions),
         baseSchemaHash: activeGraph?.schemaHash ?? current.baseSchemaHash,
       }));
+    },
+    [activeGraph?.schemaHash, editActiveLayout],
+  );
+
+  const handleTableResizeCommit = useCallback(
+    (tableKey: string, placement: Required<DiagramNodePlacement>) => {
+      editActiveLayout((current) => ({
+        ...current,
+        positions: {
+          ...current.positions,
+          [tableKey]: { ...placement },
+        },
+        baseSchemaHash: activeGraph?.schemaHash ?? current.baseSchemaHash,
+      }));
+    },
+    [activeGraph?.schemaHash, editActiveLayout],
+  );
+
+  const handleApplyTableSize = useCallback(
+    (tableKey: string, width: number, height: number) => {
+      editActiveLayout((current) => {
+        const rendered =
+          renderedLayoutRef.current?.viewKey === resolvedViewKey
+            ? renderedLayoutRef.current.positions[tableKey]
+            : undefined;
+        const position = current.positions[tableKey] ?? rendered;
+        if (!position) return current;
+        return {
+          ...current,
+          positions: {
+            ...current.positions,
+            [tableKey]: { x: position.x, y: position.y, width, height },
+          },
+          baseSchemaHash: activeGraph?.schemaHash ?? current.baseSchemaHash,
+        };
+      });
+    },
+    [activeGraph?.schemaHash, editActiveLayout, resolvedViewKey],
+  );
+
+  const handleResetTableSize = useCallback(
+    (tableKey: string) => {
+      editActiveLayout((current) => {
+        const placement = current.positions[tableKey];
+        if (placement?.width === undefined || placement.height === undefined) return current;
+        return {
+          ...current,
+          positions: {
+            ...current.positions,
+            [tableKey]: { x: placement.x, y: placement.y },
+          },
+          baseSchemaHash: activeGraph?.schemaHash ?? current.baseSchemaHash,
+        };
+      });
     },
     [activeGraph?.schemaHash, editActiveLayout],
   );
@@ -1004,7 +1059,7 @@ export function ProjectSourceWorkspace({
       if (includeRenderedLayout && rendered?.viewKey === resolvedViewKey) {
         baseline = {
           ...baseline,
-          positions: { ...baseline.positions, ...rendered.positions },
+          positions: mergePositionUpdates(baseline.positions, rendered.positions),
           baseSchemaHash: graph.schemaHash,
         };
       }
@@ -1041,7 +1096,7 @@ export function ProjectSourceWorkspace({
     if (!controller || !view) return;
     const next: DiagramLayoutValue = {
       ...view.layout,
-      positions: { ...view.layout.positions, ...layoutPreview.positions },
+      positions: mergePositionUpdates(view.layout.positions, layoutPreview.positions),
       baseSchemaHash: activeGraph.schemaHash,
     };
     await controller.replaceAndFlush(resolvedViewKey, next);
@@ -1299,6 +1354,7 @@ export function ProjectSourceWorkspace({
             onEditColumn={handleEditColumn}
             onFocusSource={() => openSourceSurface()}
             onPositionsCommit={handlePositionsCommit}
+            onTableResizeCommit={handleTableResizeCommit}
             onRenderedLayoutReady={handleRenderedLayoutReady}
             onLayoutRequestReady={handleLayoutRequestReady}
             onReloadLayout={() => void handleReloadLayout()}
@@ -1461,6 +1517,10 @@ export function ProjectSourceWorkspace({
               sourceNavigationEnabled={sourceNavigationEnabled}
               onOpenSource={openSourceSurface}
               onReloadLayouts={() => void handleReloadLayout()}
+              layoutPositions={activeLayout.positions}
+              detailLevel={activeLayout.detailLevel}
+              onApplyTableSize={handleApplyTableSize}
+              onResetTableSize={handleResetTableSize}
             />
           ) : (
             <div className="min-w-0 break-words p-2 text-sm text-slate-300 [overflow-wrap:anywhere]">
@@ -1756,6 +1816,7 @@ function DiagramPanel({
   onEditColumn,
   onFocusSource,
   onPositionsCommit,
+  onTableResizeCommit,
   onRenderedLayoutReady,
   onLayoutRequestReady,
   onReloadLayout,
@@ -1775,13 +1836,14 @@ function DiagramPanel({
   readonly sourceNavigationEnabled: boolean;
   readonly layoutView: LayoutViewSnapshot | null;
   readonly layoutConflict: LayoutConflictState | null;
-  readonly layoutPositions: Readonly<Record<string, DiagramPosition>>;
+  readonly layoutPositions: Readonly<Record<string, DiagramNodePlacement>>;
   readonly layoutRequest: DiagramLayoutRequest | null;
   readonly onToggleGroup: (groupKey: string) => void;
   readonly onNavigateSource: (selection: DiagramSelection) => void;
   readonly onEditColumn: NonNullable<BaseSchemaDiagramProps["onEditColumn"]>;
   readonly onFocusSource: () => void;
   readonly onPositionsCommit: (positions: Readonly<Record<string, DiagramPosition>>) => void;
+  readonly onTableResizeCommit: NonNullable<BaseSchemaDiagramProps["onTableResizeCommit"]>;
   readonly onRenderedLayoutReady: (
     positions: Readonly<Record<string, DiagramPosition>>,
     viewport: DiagramViewport,
@@ -1850,6 +1912,7 @@ function DiagramPanel({
                   layoutBusy || layoutConflict !== null || visualInteractionDisabled
                 }
                 onPositionsCommit={onPositionsCommit}
+                onTableResizeCommit={onTableResizeCommit}
                 onRenderedLayoutReady={onRenderedLayoutReady}
                 onLayoutRequestReady={onLayoutRequestReady}
               />
@@ -2676,6 +2739,24 @@ function isSelectionVisible(selection: DiagramSelection, visibility: DiagramVisi
   if (selection.kind === "group") return visibility.groupKeys.has(selection.elementKey);
   if (selection.kind === "reference") return visibility.referenceKeys.has(selection.elementKey);
   return selection.tableKeys.every((tableKey) => visibility.tableKeys.has(tableKey));
+}
+
+function mergePositionUpdates(
+  current: Readonly<Record<string, DiagramNodePlacement>>,
+  updates: Readonly<Record<string, DiagramPosition>>,
+): Readonly<Record<string, DiagramNodePlacement>> {
+  const merged: Record<string, DiagramNodePlacement> = { ...current };
+  for (const [key, position] of Object.entries(updates)) {
+    const existing = current[key];
+    merged[key] = {
+      ...(existing?.width !== undefined && existing.height !== undefined
+        ? { width: existing.width, height: existing.height }
+        : {}),
+      x: position.x,
+      y: position.y,
+    };
+  }
+  return merged;
 }
 
 function updateCachedLayoutRevision(

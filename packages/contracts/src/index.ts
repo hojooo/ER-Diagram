@@ -131,6 +131,22 @@ export const diagramPositionSchema = z
   .strict();
 export type DiagramPosition = z.infer<typeof diagramPositionSchema>;
 
+const diagramDimensionSchema = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+export const diagramNodePlacementSchema = diagramPositionSchema
+  .extend({
+    width: diagramDimensionSchema.optional(),
+    height: diagramDimensionSchema.optional(),
+  })
+  .strict()
+  .superRefine((placement, context) => {
+    if ((placement.width === undefined) === (placement.height === undefined)) return;
+    context.addIssue({
+      code: "custom",
+      message: "Layout width and height must be provided together.",
+    });
+  });
+export type DiagramNodePlacement = z.infer<typeof diagramNodePlacementSchema>;
+
 export const diagramViewportSchema = z
   .object({
     x: z.number().finite(),
@@ -163,7 +179,18 @@ const uniqueLayoutElementKeysSchema = z
 
 export const diagramLayoutValueSchema = z
   .object({
-    positions: z.record(layoutElementKeySchema, diagramPositionSchema),
+    positions: z
+      .record(layoutElementKeySchema, diagramNodePlacementSchema)
+      .superRefine((positions, context) => {
+        for (const [key, placement] of Object.entries(positions)) {
+          if (placement.width === undefined || key.startsWith("table:[")) continue;
+          context.addIssue({
+            code: "custom",
+            message: "Only table placements may contain dimensions.",
+            path: [key],
+          });
+        }
+      }),
     collapsedGroupKeys: uniqueLayoutElementKeysSchema,
     hiddenElementKeys: uniqueLayoutElementKeysSchema,
     viewport: diagramViewportSchema,

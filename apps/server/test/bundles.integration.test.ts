@@ -110,7 +110,9 @@ describe("portable project bundle Fastify API", () => {
         commandId: COMMAND_ID,
         expectedLayoutRevisionNo: 0,
         layout: {
-          positions: { 'table:["public","사용자"]': { x: 10, y: 20 } },
+          positions: {
+            'table:["public","사용자"]': { x: 10, y: 20, width: 360, height: 224 },
+          },
           collapsedGroupKeys: [],
           hiddenElementKeys: [],
           viewport: { x: 1, y: 2, zoom: 0.75 },
@@ -218,7 +220,12 @@ describe("portable project bundle Fastify API", () => {
       method: "GET",
       url: `/api/v1/projects/${importedId}/layouts/GLOBAL`,
     });
-    expect(layoutResponseSchema.parse(layout.json()).layout).toMatchObject({ revisionNo: 1 });
+    expect(layoutResponseSchema.parse(layout.json()).layout).toMatchObject({
+      revisionNo: 1,
+      positions: {
+        'table:["public","사용자"]': { x: 10, y: 20, width: 360, height: 224 },
+      },
+    });
     expect(
       createSqliteProjectBundleRepository(runtime.storage).listImportArtifacts(importedId)[0],
     ).toMatchObject({
