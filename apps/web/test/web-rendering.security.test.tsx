@@ -125,6 +125,7 @@ describe("Web text and byte-preservation security boundaries", () => {
         selectionStore={createDiagramSelectionStore()}
         sourceNavigationEnabled
         onToggleGroup={vi.fn()}
+        onSetGroupsCollapsed={vi.fn()}
         onNavigateSource={vi.fn()}
       />,
     );
@@ -160,7 +161,7 @@ describe("Web text and byte-preservation security boundaries", () => {
       />,
     );
     const renderedGroup = await screen.findByLabelText(/Color url\(javascript:/);
-    expect(renderedGroup).toHaveTextContent("Color url(javascript:window.pwned=true)");
+    expect(renderedGroup).not.toHaveTextContent("Color url(javascript:window.pwned=true)");
     expect(renderedGroup).not.toHaveAttribute("style");
     expectNoExecutableMarkup();
 

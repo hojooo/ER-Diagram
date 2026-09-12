@@ -90,6 +90,7 @@ vi.mock("@xyflow/react", async () => {
 import { BaseSchemaDiagram } from "../src/diagram/base-schema-diagram.js";
 import {
   retainAvailableCollapsedGroups,
+  setGroupsCollapsed,
   toggleCollapsedGroup,
 } from "../src/diagram/collapse-state.js";
 import {
@@ -297,6 +298,21 @@ describe("TableGroup diagram projection", () => {
     expect([...retained]).toEqual([secondGroup.key]);
   });
 
+  it("sets a visible group collection in one immutable collapse transition", () => {
+    const [firstGroup, secondGroup] = graph.groups;
+    if (!firstGroup || !secondGroup) throw new Error("Expected both groups.");
+    const initial = new Set([firstGroup.key]);
+
+    const collapsed = setGroupsCollapsed(initial, [firstGroup.key, secondGroup.key], true);
+    expect([...collapsed]).toEqual([firstGroup.key, secondGroup.key]);
+    expect(initial).toEqual(new Set([firstGroup.key]));
+    expect(setGroupsCollapsed(collapsed, [firstGroup.key, secondGroup.key], true)).toBe(collapsed);
+
+    const expanded = setGroupsCollapsed(collapsed, [firstGroup.key, secondGroup.key], false);
+    expect(expanded).toEqual(new Set());
+    expect(setGroupsCollapsed(expanded, [firstGroup.key, secondGroup.key], false)).toBe(expanded);
+  });
+
   it("preserves the fidelity fixture group and expanded relationship inventory", async () => {
     const fidelityGraph = await parseGraph(generateFidelityFixture());
     const projection = createGroupedDiagramProjection(fidelityGraph, new Set());
@@ -370,7 +386,7 @@ describe("TableGroup navigation and collapse interactions", () => {
     });
   });
 
-  it("shows an invalid source color as text without applying it to CSS", async () => {
+  it("keeps an invalid source color out of visible canvas text without applying it to CSS", async () => {
     const group = graph.groups[0];
     if (!group) throw new Error("Expected a group.");
     const unsafeColorGraph: SchemaGraph = {
@@ -399,7 +415,7 @@ describe("TableGroup navigation and collapse interactions", () => {
     const renderedGroup = await screen.findByLabelText(
       /Table group public\.도메인<script>😀, 2 tables, expanded, Color url/,
     );
-    expect(renderedGroup).toHaveTextContent("Color url(javascript:alert(1))");
+    expect(renderedGroup).not.toHaveTextContent("Color url(javascript:alert(1))");
     expect(renderedGroup).not.toHaveAttribute("style");
   });
 
@@ -456,6 +472,7 @@ describe("TableGroup navigation and collapse interactions", () => {
     const group = graph.groups[0];
     if (!group) throw new Error("Expected a group.");
     const onToggleGroup = vi.fn();
+    const onSetGroupsCollapsed = vi.fn();
     const onNavigateSource = vi.fn();
     const selectionStore = createDiagramSelectionStore();
     const rendered = render(
@@ -467,11 +484,18 @@ describe("TableGroup navigation and collapse interactions", () => {
         selectionStore={selectionStore}
         sourceNavigationEnabled
         onToggleGroup={onToggleGroup}
+        onSetGroupsCollapsed={onSetGroupsCollapsed}
         onNavigateSource={onNavigateSource}
       />,
     );
 
     expect(screen.getByRole("heading", { name: "Table groups" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Expand all groups" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Collapse all groups" }));
+    expect(onSetGroupsCollapsed).toHaveBeenCalledWith(
+      graph.groups.map((candidate) => candidate.key),
+      true,
+    );
     expect(screen.getByText("public.도메인<script>😀", { exact: true })).toBeVisible();
     expect(screen.getByText(/Color #778899/)).toBeVisible();
     expect(screen.getByText("alpha, beta", { exact: true })).toBeVisible();
@@ -499,6 +523,7 @@ describe("TableGroup navigation and collapse interactions", () => {
         selectionStore={selectionStore}
         sourceNavigationEnabled={false}
         onToggleGroup={onToggleGroup}
+        onSetGroupsCollapsed={onSetGroupsCollapsed}
         onNavigateSource={onNavigateSource}
       />,
     );
@@ -507,6 +532,26 @@ describe("TableGroup navigation and collapse interactions", () => {
         name: `Open source for group at line ${group.range.startLine}`,
       }),
     ).toBeDisabled();
+
+    rendered.rerender(
+      <SchemaOutline
+        graph={graph}
+        visibility={createDiagramVisibility(graph, "GLOBAL")}
+        viewLabel="Global"
+        collapsedGroupKeys={new Set(graph.groups.map((candidate) => candidate.key))}
+        selectionStore={selectionStore}
+        sourceNavigationEnabled
+        onToggleGroup={onToggleGroup}
+        onSetGroupsCollapsed={onSetGroupsCollapsed}
+        onNavigateSource={onNavigateSource}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Collapse all groups" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Expand all groups" }));
+    expect(onSetGroupsCollapsed).toHaveBeenLastCalledWith(
+      graph.groups.map((candidate) => candidate.key),
+      false,
+    );
   });
 
   it("switches collapse projections without invoking implicit worker layout", async () => {

@@ -335,6 +335,7 @@ describe("diagram source navigation", () => {
         selectionStore={selectionStore}
         sourceNavigationEnabled
         onToggleGroup={vi.fn()}
+        onSetGroupsCollapsed={vi.fn()}
         onNavigateSource={onNavigateSource}
       />,
     );
@@ -368,6 +369,7 @@ describe("diagram source navigation", () => {
         selectionStore={selectionStore}
         sourceNavigationEnabled={false}
         onToggleGroup={vi.fn()}
+        onSetGroupsCollapsed={vi.fn()}
         onNavigateSource={onNavigateSource}
       />,
     );
@@ -389,6 +391,7 @@ describe("diagram source navigation", () => {
         selectionStore={createDiagramSelectionStore()}
         sourceNavigationEnabled
         onToggleGroup={vi.fn()}
+        onSetGroupsCollapsed={vi.fn()}
         onNavigateSource={vi.fn()}
       />,
     );
@@ -538,7 +541,7 @@ describe("base schema diagram canvas", () => {
     expect(requestLayout).not.toHaveBeenCalled();
   });
 
-  it("discards stale layout results and focuses stable-key selections", async () => {
+  it("discards stale layout results without auto-focusing canvas click selections", async () => {
     const firstGraph = await parseGraph("Table first { id int [pk] }");
     const secondGraph = await parseGraph("Table second { id int [pk] }");
     const firstLayout = deferred<ReturnType<typeof createBaseDiagramProjection>>();
@@ -594,10 +597,26 @@ describe("base schema diagram canvas", () => {
     expect(screen.queryByRole("button", { name: "Canvas table first" })).not.toBeInTheDocument();
     expect(requestLayout).toHaveBeenCalledTimes(2);
 
+    flowSpies.fitView.mockClear();
+    flowSpies.setViewport.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "Canvas table second" }));
     expect(selectionStore.getState().selection).toMatchObject({ kind: "table" });
     expect(onNavigateSource).not.toHaveBeenCalled();
     expect(onActivateElement).toHaveBeenCalledOnce();
+    await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    expect(flowSpies.fitView).not.toHaveBeenCalled();
+    expect(flowSpies.setViewport).not.toHaveBeenCalled();
+
+    const secondTable = secondGraph.tables[0];
+    const secondColumn = secondTable?.columns[0];
+    if (!secondTable || !secondColumn) throw new Error("Expected the second table and column.");
+    act(() => {
+      selectionStore.getState().setSelection({
+        elementKey: secondColumn.key,
+        kind: "column",
+        tableKeys: [secondTable.key],
+      });
+    });
     await waitFor(() => expect(flowSpies.fitView).toHaveBeenCalled());
   });
 

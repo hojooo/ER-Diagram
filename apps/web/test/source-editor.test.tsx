@@ -110,7 +110,8 @@ describe("DBML source workspace", () => {
     await findWorkspaceStatus("Draft valid");
     expect(screen.queryByRole("heading", { name: "Problems" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Outline" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open source and outline" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Outline" }));
     const compilerInformation = await screen.findByRole("region", {
       name: "DBML compiler information",
     });
@@ -428,11 +429,22 @@ describe("DBML source workspace", () => {
     expect(within(commandBar).queryByRole("button", { name: "Source" })).toBeNull();
     expect(within(commandBar).queryByRole("button", { name: "Outline" })).toBeNull();
     expect(within(commandBar).queryByRole("button", { name: "Tools" })).toBeNull();
+    expect(commandBar.firstElementChild?.firstElementChild).toHaveClass(
+      "min-w-0",
+      "flex-wrap",
+      "[overflow-wrap:anywhere]",
+    );
+    expect(document.getElementById("workspace-heading")).toHaveClass(
+      "whitespace-normal",
+      "break-words",
+      "[overflow-wrap:anywhere]",
+    );
 
-    fireEvent.click(screen.getByRole("button", { name: "Source" }));
-    fireEvent.click(screen.getByRole("button", { name: "Outline" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open source and outline" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Outline" }));
     fireEvent.click(screen.getByRole("button", { name: "Collapse workspace tools" }));
-    fireEvent.click(screen.getByRole("button", { name: "Outline" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Outline" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse source and outline" }));
 
     expect(screen.getByRole("application", { name: "ER diagram canvas" })).toBe(diagram);
     expect(screen.queryByTestId("diagram-controls")).not.toBeInTheDocument();
@@ -486,7 +498,8 @@ describe("DBML source workspace", () => {
     expect(screen.queryByTitle(/Selected table .*users/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Open workspace tools" }));
     expect(screen.getByText(/Selected table .*users/)).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Outline" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open source and outline" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Outline" }));
     const openSource = await screen.findByRole("button", {
       name: /Open source for table at line/,
     });
@@ -521,11 +534,12 @@ describe("DBML source workspace", () => {
       "false",
     );
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute(
+      expect(screen.getByRole("button", { name: "Collapse source and outline" })).toHaveAttribute(
         "aria-expanded",
         "true",
       ),
     );
+    expect(screen.getByRole("tab", { name: "Source" })).toHaveAttribute("aria-selected", "true");
     fireEvent.click(screen.getByRole("button", { name: "Focus source editor" }));
     await waitFor(() => expect(focusSource).toHaveBeenCalledOnce());
   });
@@ -603,6 +617,27 @@ describe("DBML source workspace", () => {
     expect(screen.getByTestId("fake-diagram-selection")).toHaveTextContent("table");
     expect(api.saveDraftInputs).toHaveLength(0);
     expect(parserClient.parseCalls).toBe(initialParseCalls);
+  });
+
+  it("collapses and expands every visible diagram group from the outline in one layout update", async () => {
+    const api = new SourceProjectApi(projectState(VIEW_SOURCE, 1, "VALID"));
+    renderWorkspace(api);
+    await screen.findByText("Canonical DBML source");
+    await findWorkspaceStatus("Draft valid");
+    await waitFor(() => expect(api.getLayoutInputs).toHaveLength(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Open source and outline" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Outline" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Collapse all groups" }));
+
+    expect(screen.getByTestId("fake-diagram-collapse-count")).toHaveTextContent("1");
+    await waitFor(() => expect(api.saveLayoutInputs).toHaveLength(1), { timeout: 1_500 });
+    expect(api.saveLayoutInputs[0]?.layout.collapsedGroupKeys).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand all groups" }));
+    expect(screen.getByTestId("fake-diagram-collapse-count")).toHaveTextContent("0");
+    await waitFor(() => expect(api.saveLayoutInputs).toHaveLength(2), { timeout: 1_500 });
+    expect(api.saveLayoutInputs[1]?.layout.collapsedGroupKeys).toEqual([]);
   });
 });
 

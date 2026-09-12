@@ -56,9 +56,6 @@ export const GroupDiagramNodeComponent = memo(function GroupDiagramNodeComponent
           <p className="diagram-kicker">TableGroup</p>
           <p className="diagram-group__schema">{data.schemaName}</p>
           <h2>{data.name}</h2>
-          <p className="diagram-group__color">
-            {messages["diagram.groupColor"](data.color ?? messages["outline.defaultColor"])}
-          </p>
         </div>
         <button
           className="nodrag nopan diagram-group__toggle"

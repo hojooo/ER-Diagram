@@ -158,9 +158,23 @@ describe("Korean-first Web localization", () => {
     expect(englishMessages["diagram.canvas"]).toBe("ER diagram canvas");
     expect(englishMessages["source.editorAria"]).toBe("DBML source editor");
     expect(englishMessages["outline.compilerInformationLocations"](2)).toBe("2 source locations");
+    expect(englishMessages["outline.expandAllGroups"]).toBe("Expand all groups");
+    expect(englishMessages["outline.collapseAllGroups"]).toBe("Collapse all groups");
     expect(englishMessages["workspace.leftToolsPanel"]).toBe("Source and outline");
+    expect(englishMessages["workspace.openLeftTools"]).toBe("Open source and outline");
+    expect(englishMessages["workspace.collapseLeftTools"]).toBe("Collapse source and outline");
+    expect(englishMessages["diagram.currentViewName"]("Architecture overview")).toBe(
+      "Current view: Architecture overview",
+    );
     expect(englishMessages["workspace.toolsPanel"]).toBe("Workspace tools");
     expect(koreanMessages["workspace.leftToolsPanel"]).toBe("소스와 개요");
+    expect(koreanMessages["workspace.openLeftTools"]).toBe("소스와 개요 열기");
+    expect(koreanMessages["workspace.collapseLeftTools"]).toBe("소스와 개요 접기");
+    expect(koreanMessages["outline.expandAllGroups"]).toBe("모두 펼치기");
+    expect(koreanMessages["outline.collapseAllGroups"]).toBe("모두 접기");
+    expect(koreanMessages["diagram.currentViewName"]("아키텍처 개요")).toBe(
+      "현재 뷰: 아키텍처 개요",
+    );
     expect(koreanMessages["workspace.toolsPanel"]).toBe("작업 공간 도구");
 
     const korean = render(

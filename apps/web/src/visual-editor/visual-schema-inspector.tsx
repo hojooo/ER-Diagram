@@ -113,14 +113,22 @@ export function VisualSchemaInspector({
   };
 
   return (
-    <section className="bg-slate-900 p-4" aria-label={messages["inspector.title"]}>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+    <section
+      className="min-w-0 break-words bg-slate-900 p-4 [overflow-wrap:anywhere]"
+      aria-label={messages["inspector.title"]}
+    >
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <h2 className="font-semibold text-white">{messages["inspector.title"]}</h2>
-          <p className="mt-1 text-xs text-slate-400">{messages["visual.inspectorDescription"]}</p>
+          <p className="mt-1 min-w-0 break-words text-xs text-slate-400 [overflow-wrap:anywhere]">
+            {messages["visual.inspectorDescription"]}
+          </p>
         </div>
         {selection ? (
-          <p className="text-xs font-semibold text-cyan-200" aria-live="polite">
+          <p
+            className="min-w-0 break-words text-xs font-semibold text-cyan-200 [overflow-wrap:anywhere]"
+            aria-live="polite"
+          >
             {selectionLabel(graph, selection, messages)}
           </p>
         ) : null}
@@ -296,7 +304,10 @@ function CommandStatusPanel({
   const error = snapshot.error;
   if (!error) return null;
   return (
-    <section className="mt-4 rounded-xl border border-red-400/40 bg-red-950/30 p-4" role="alert">
+    <section
+      className="mt-4 min-w-0 break-words rounded-xl border border-red-400/40 bg-red-950/30 p-4 [overflow-wrap:anywhere]"
+      role="alert"
+    >
       <h3 className="font-semibold text-red-100">
         {snapshot.status === "STALE_REVIEW"
           ? messages["visual.reviewLatestTitle"]
@@ -304,9 +315,11 @@ function CommandStatusPanel({
             ? messages["visual.unknownOutcomeTitle"]
             : messages["visual.notAppliedTitle"]}
       </h3>
-      <p className="mt-2 text-sm text-red-100/90">{error.message}</p>
+      <p className="mt-2 min-w-0 break-words text-sm text-red-100/90 [overflow-wrap:anywhere]">
+        {error.message}
+      </p>
       {error.correlationId ? (
-        <p className="mt-2 text-xs text-red-100/70">
+        <p className="mt-2 break-all text-xs text-red-100/70">
           {messages["error.correlationId"](error.correlationId)}
         </p>
       ) : null}
@@ -317,8 +330,10 @@ function CommandStatusPanel({
               key={diagnosticIdentity(diagnostic)}
               className="rounded-lg border border-red-300/20 p-3 text-sm"
             >
-              <p className="font-semibold">{diagnostic.code}</p>
-              <p className="mt-1">{diagnostic.message}</p>
+              <p className="break-all font-semibold">{diagnostic.code}</p>
+              <p className="mt-1 min-w-0 break-words [overflow-wrap:anywhere]">
+                {diagnostic.message}
+              </p>
               <button
                 className={`${secondaryButtonClass} mt-2`}
                 type="button"
@@ -401,7 +416,7 @@ function PartialSelectionNotice({
   const affectedTables = collectPartialAffectedTables(graph, partialKey, injectionRange);
   const provenanceComplete = definitionRange !== null && affectedTables.length > 0;
   return (
-    <section className="mt-4 rounded-xl border border-amber-300/40 bg-amber-950/30 p-4 text-sm text-amber-100">
+    <section className="mt-4 min-w-0 break-words rounded-xl border border-amber-300/40 bg-amber-950/30 p-4 text-sm text-amber-100 [overflow-wrap:anywhere]">
       <p className="font-semibold">
         {messages["visual.partialOwns"](partial?.name ?? messages["visual.partialDefinition"])}
       </p>
@@ -592,10 +607,10 @@ function diagnosticIdentity(diagnostic: Diagnostic): string {
 }
 
 const actionButtonClass =
-  "min-h-10 rounded-lg border border-cyan-400/40 px-3 text-sm font-semibold text-cyan-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50 aria-pressed:bg-cyan-950";
+  "min-h-10 max-w-full whitespace-normal break-words rounded-lg border border-cyan-400/40 px-3 text-center text-sm font-semibold text-cyan-100 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50 aria-pressed:bg-cyan-950";
 const dangerButtonClass =
-  "min-h-10 rounded-lg border border-red-400/50 px-3 text-sm font-semibold text-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-300 disabled:cursor-not-allowed disabled:opacity-50";
+  "min-h-10 max-w-full whitespace-normal break-words rounded-lg border border-red-400/50 px-3 text-center text-sm font-semibold text-red-100 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-300 disabled:cursor-not-allowed disabled:opacity-50";
 const primaryButtonClass =
-  "min-h-10 rounded-lg bg-cyan-300 px-4 text-sm font-bold text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300";
+  "min-h-10 max-w-full whitespace-normal break-words rounded-lg bg-cyan-300 px-4 text-center text-sm font-bold text-slate-950 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300";
 const secondaryButtonClass =
-  "min-h-10 rounded-lg border border-slate-600 px-3 text-sm font-semibold text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50";
+  "min-h-10 max-w-full whitespace-normal break-words rounded-lg border border-slate-600 px-3 text-center text-sm font-semibold text-slate-100 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50";
