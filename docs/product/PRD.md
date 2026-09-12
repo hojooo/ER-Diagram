@@ -666,7 +666,8 @@ table의 위치와 실제 크기에서 파생하며 group 자체 크기는 저�
 사용자가 pan·zoom한 camera viewport는 browser session에서만 유지하며 layout API를 호출하거나 reload 후
 복원하지 않는다. Version 1 layout contract의 `viewport`는 호환을 위해 neutral `{ x: 0, y: 0, zoom: 1 }`
 placeholder로 유지한다. Canvas 위의 일반 wheel·trackpad scroll은 camera를 pan하고, pinch gesture와 명시적
-zoom control은 확대·축소에 사용한다. Layout write는 project 전체의 `layoutRevisionNo` 하나로 optimistic
+zoom control은 확대·축소에 사용한다. Table drag는 node 위치만 변경하며 canvas 가장자리에서도 camera를
+자동 pan하지 않는다. Layout write는 project 전체의 `layoutRevisionNo` 하나로 optimistic
 locking하며 다른 view에서 먼저 발생한 write도 stale request를 `409`로 차단한다. 동일 payload는 revision을
 만들지 않는 no-op이고 layout write는 DBML source, schema revision, project `updatedAt`과 Project Home 정렬을
 변경하지 않는다.
@@ -772,7 +773,10 @@ action은 이름·속성·순서를 한 form에서 비교해 정확히 한 `ALTE
 row를 double-click하면 node 크기를 바꾸지 않는 fixed inline editor를 열고 Apply 또는 `Ctrl/Cmd+Enter`에서만
 같은 command flow를 실행한다. Blur나 pane click은 저장·닫기를 수행하지 않고, `Escape`는 취소한다. Partial
 column은 inline mutation을 열지 않고 source fallback을 제공한다. Outline·Inspector는 모든 column edit의
-canonical keyboard 경로로 유지한다.
+canonical keyboard 경로로 유지한다. Canvas의 table header를 double-click하면 header의 table name 자체가
+input으로 전환된다. 명시적 Apply 또는 Enter에서만 기존 `RENAME_TABLE` command를 실행하고, blur는 저장하거나
+닫지 않으며 Escape는 취소한다. Schema name은 read-only로 유지하고 Table note·color 편집은 Inspector에
+유지한다.
 
 Visual command 제출 전에는 source debounce·queued/in-flight save와 모든 hydrated layout write를 순서대로
 flush한다. Flush 결과가 `SAVED + VALID + CURRENT_DRAFT`가 아니거나 form을 연 뒤 semantic hash가 바뀌면
