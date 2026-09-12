@@ -369,13 +369,15 @@ parser migration checkpoint는 pruning하지 않는다. `original_sql`은 사용
   - `ALTER_COLUMN` 하나가 column name, 속성과 순서를 최소 source edit와 단일 reparse·semantic verification으로
     원자 적용한다. 기존 update·rename·reorder command는 public contract에서 제거하되 과거 receipt evidence는 보존한다.
   - Canvas column row의 double-click editor는 explicit Apply 또는 Cancel만 허용하고 Inspector와 같은 authoritative
-    source adoption, stale review, safe replay와 partial fallback을 사용한다.
+    source adoption, stale review, safe replay와 partial fallback을 사용한다. Table header double-click은 table name
+    자체를 input으로 바꾸고 explicit Apply·Enter에서만 기존 `RENAME_TABLE`로 이름을 변경한다.
   - 검증: `pnpm --filter @er-diagram/source-transform test test/table-column.test.ts && pnpm --filter @er-diagram/web test test/visual-editor.test.tsx`
 - [x] `M4-017` view별 table 크기 layout persistence
   - 기존 layout `positions`를 table-only optional width/height pair로 하위 호환 확장하고 global·DiagramView마다
     사용자 크기를 독립 저장한다. TableGroup bounds와 explicit Auto-layout은 사용자 table geometry를 사용한다.
   - Canvas pointer resize는 release에서 한 번만 layout을 저장하며 Inspector width/height Apply·Reset을 keyboard
-    대체 경로로 제공한다. Resize는 DBML, viewport, schema revision, receipt, history와 project `updatedAt`을 바꾸지 않는다.
+    대체 경로로 제공한다. Table drag 중에는 canvas camera를 auto-pan하지 않는다. Drag·resize는 DBML, viewport,
+    schema revision, receipt, history와 project `updatedAt`을 바꾸지 않는다.
   - 검증: `pnpm --filter @er-diagram/web test test/layout-persistence.test.tsx test/diagram-base.test.tsx`
 - [ ] `P0-RELEASE` M4-012~M4-017 디자인·언어·편집 재정비, `pnpm ci:verify`, Release Gate A~F, OrbStack restore drill,
       source/image mapping과 exact candidate approval 통과 후에만 `v0.1.0` tag 생성

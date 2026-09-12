@@ -106,6 +106,8 @@ vi.mock("@xyflow/react", async () => {
           role="application"
           aria-label={String(props["aria-label"])}
           data-has-move-end={String(onMoveEnd !== undefined)}
+          data-auto-pan-on-node-drag={String(props.autoPanOnNodeDrag)}
+          data-nodes-draggable={String(props.nodesDraggable)}
           data-pan-on-scroll={String(props.panOnScroll)}
           data-zoom-on-pinch={String(props.zoomOnPinch)}
           data-zoom-on-scroll={String(props.zoomOnScroll)}
@@ -710,6 +712,14 @@ describe("base schema diagram canvas", () => {
       "true",
     );
     expect(screen.getByRole("application", { name: "ER diagram canvas" })).toHaveAttribute(
+      "data-auto-pan-on-node-drag",
+      "false",
+    );
+    expect(screen.getByRole("application", { name: "ER diagram canvas" })).toHaveAttribute(
+      "data-nodes-draggable",
+      "true",
+    );
+    expect(screen.getByRole("application", { name: "ER diagram canvas" })).toHaveAttribute(
       "data-zoom-on-scroll",
       "false",
     );
@@ -732,6 +742,42 @@ describe("base schema diagram canvas", () => {
     fireEvent.click(screen.getByRole("button", { name: "Simulate programmatic pan" }));
     fireEvent.click(screen.getByRole("button", { name: "Simulate user pan" }));
     expect(onPositionsCommit).toHaveBeenCalledOnce();
+  });
+
+  it("disables node dragging while a table name is edited in place", async () => {
+    const graph = await parseGraph("Table users { id int [pk] }");
+    const table = graph.tables[0];
+    if (!table) throw new Error("Missing users table.");
+
+    render(
+      <BaseSchemaDiagram
+        graph={graph}
+        viewKey="GLOBAL"
+        detailLevel="FULL"
+        collapsedGroupKeys={new Set()}
+        selectionStore={createDiagramSelectionStore()}
+        sourceNavigationEnabled
+        onToggleGroup={vi.fn()}
+        onNavigateSource={vi.fn()}
+        tableInlineRename={{
+          tableKey: table.key,
+          value: "users",
+          disabled: false,
+          invalid: false,
+          statusMessage: null,
+        }}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("base-diagram-layout-status")).toHaveTextContent(
+        "Diagram layout ready",
+      ),
+    );
+    expect(screen.getByRole("application", { name: "ER diagram canvas" })).toHaveAttribute(
+      "data-nodes-draggable",
+      "false",
+    );
   });
 
   it("applies persisted table dimensions without changing the saved position", async () => {

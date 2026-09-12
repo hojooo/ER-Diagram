@@ -58,7 +58,12 @@ export function BaseSchemaDiagram({
   selectionStore,
   onToggleGroup,
   onActivateElement,
+  onEditTable,
   onEditColumn,
+  tableInlineRename = null,
+  onTableInlineRenameChange,
+  onTableInlineRenameSubmit,
+  onTableInlineRenameCancel,
   viewportInsets = EMPTY_VIEWPORT_INSETS,
   fillContainer = false,
   requestLayout = requestWorkerLayout,
@@ -362,8 +367,14 @@ export function BaseSchemaDiagram({
   const interactions = useMemo(
     () => ({
       activateElement,
+      editTable: (request: Parameters<NonNullable<BaseSchemaDiagramProps["onEditTable"]>>[0]) =>
+        onEditTable?.(request),
       editColumn: (request: Parameters<NonNullable<BaseSchemaDiagramProps["onEditColumn"]>>[0]) =>
         onEditColumn?.(request),
+      tableInlineRename,
+      changeTableInlineRename: (value: string) => onTableInlineRenameChange?.(value),
+      submitTableInlineRename: () => onTableInlineRenameSubmit?.(),
+      cancelTableInlineRename: () => onTableInlineRenameCancel?.(),
       resizeTable: (request: DiagramTableResizeRequest) => {
         if (interactionDisabled || layoutRequest) return;
         onTableResizeCommit?.(request.tableKey, {
@@ -381,9 +392,14 @@ export function BaseSchemaDiagram({
       displayProjection.edges.length,
       interactionDisabled,
       layoutRequest,
+      onEditTable,
       onEditColumn,
+      onTableInlineRenameCancel,
+      onTableInlineRenameChange,
+      onTableInlineRenameSubmit,
       onTableResizeCommit,
       onToggleGroup,
+      tableInlineRename,
     ],
   );
   const handleFlowInit = useCallback(
@@ -557,7 +573,10 @@ export function BaseSchemaDiagram({
             positions[node.id] = { ...node.position };
             onPositionsCommit?.(positions);
           }}
-          nodesDraggable={!interactionDisabled && layoutStatus === "READY"}
+          nodesDraggable={
+            !interactionDisabled && layoutStatus === "READY" && tableInlineRename === null
+          }
+          autoPanOnNodeDrag={false}
           nodesConnectable={false}
           nodesFocusable={false}
           edgesReconnectable={false}

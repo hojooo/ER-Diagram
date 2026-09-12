@@ -40,6 +40,7 @@ export function VisualSchemaInspector({
   sourceNavigationEnabled,
   onOpenSource,
   onReloadLayouts,
+  onReviewLatestSchema,
   layoutPositions,
   detailLevel = "FULL",
   onApplyTableSize,
@@ -54,6 +55,7 @@ export function VisualSchemaInspector({
   readonly sourceNavigationEnabled: boolean;
   readonly onOpenSource: (range: SourceRange | null) => void;
   readonly onReloadLayouts: () => void;
+  readonly onReviewLatestSchema?: () => void;
   readonly layoutPositions?: Readonly<Record<string, DiagramNodePlacement>>;
   readonly detailLevel?: DiagramLod;
   readonly onApplyTableSize?: (tableKey: string, width: number, height: number) => void;
@@ -269,6 +271,7 @@ export function VisualSchemaInspector({
             setOpenedSelection(null);
           }
           setOpenedSchemaHash(graph.schemaHash);
+          onReviewLatestSchema?.();
           commandSession.reviewLatestSchema();
         }}
       />

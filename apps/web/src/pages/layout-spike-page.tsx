@@ -90,6 +90,7 @@ export function LayoutSpikePage() {
   const interactions = useMemo(
     () => ({
       activateElement: () => undefined,
+      editTable: () => undefined,
       editColumn: () => undefined,
       showEdgeLabels: shouldShowDiagramEdgeLabels(displayProjection.edges.length),
       toggleGroup: (groupKey: string) => {

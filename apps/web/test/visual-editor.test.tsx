@@ -538,6 +538,7 @@ describe("canvas column inline editor", () => {
     render(
       <CanvasColumnInlineEditor
         state={{
+          editorKind: "COLUMN",
           request: {
             selection: currentSelection,
             anchor: { top: 40, right: 320, bottom: 68, left: 40 },
@@ -562,7 +563,7 @@ describe("canvas column inline editor", () => {
     const dialog = screen.getByRole("dialog", { name: /Edit column id/ });
     expect(dialog).toHaveClass("nodrag", "nopan", "nowheel");
     expect(screen.getByLabelText("Column name")).toHaveFocus();
-    expect(screen.getByRole("alert")).toHaveTextContent(/Apply or cancel this column draft/);
+    expect(screen.getByRole("alert")).toHaveTextContent(/Apply or cancel this inline draft/);
     fireEvent.change(screen.getByLabelText("Column name"), { target: { value: "user_id" } });
     fireEvent.keyDown(screen.getByRole("form"), { key: "Enter", ctrlKey: true });
     expect(commandSession.submit).toHaveBeenCalledWith(
