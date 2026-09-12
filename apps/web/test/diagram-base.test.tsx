@@ -23,6 +23,7 @@ vi.mock("@xyflow/react", async () => {
   }
   interface MockEdge {
     id: string;
+    data?: { route?: unknown };
   }
   return {
     applyNodeChanges: (
@@ -111,6 +112,9 @@ vi.mock("@xyflow/react", async () => {
           data-pan-on-scroll={String(props.panOnScroll)}
           data-zoom-on-pinch={String(props.zoomOnPinch)}
           data-zoom-on-scroll={String(props.zoomOnScroll)}
+          data-routed-edge-count={String(
+            edges.filter((edge) => edge.data?.route !== undefined).length,
+          )}
         >
           {nodes.map((node) => (
             <button
@@ -463,6 +467,10 @@ describe("base schema diagram canvas", () => {
       ),
     );
     expect(requestLayout).not.toHaveBeenCalled();
+    expect(screen.getByRole("application", { name: "ER diagram canvas" })).toHaveAttribute(
+      "data-routed-edge-count",
+      "1",
+    );
     expect(fullProjection.nodes.filter((node) => node.type === "table")).toHaveLength(2);
     expect(fullProjection.edges).toHaveLength(1);
 

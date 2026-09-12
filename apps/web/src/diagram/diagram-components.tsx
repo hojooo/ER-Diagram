@@ -2,8 +2,6 @@ import {
   BaseEdge,
   EdgeLabelRenderer,
   type EdgeProps,
-  getSmoothStepPath,
-  getStraightPath,
   Handle,
   NodeResizeControl,
   type NodeProps,
@@ -386,12 +384,11 @@ export const ReferenceDiagramEdgeComponent = memo(function ReferenceDiagramEdgeC
 ) {
   const { showEdgeLabels } = useContext(DiagramInteractionContext);
   const { messages } = useUiLocale();
-  // Dense overview projections keep every relationship visible, but avoid calculating hundreds
-  // of orthogonal routes that cannot be distinguished at the fitted overview zoom. Focused views
-  // retain the labeled smooth-step route.
-  const [edgePath, labelX, labelY] = showEdgeLabels
-    ? getSmoothStepPath(props)
-    : getStraightPath(props);
+  const route = props.data?.route;
+  if (!route) return null;
+  const edgePath = route.path;
+  const labelX = route.labelX;
+  const labelY = route.labelY;
   const count = props.data?.count ?? 1;
   const label =
     count > 1

@@ -22,6 +22,7 @@ import {
   GLOBAL_VIEW_KEY,
   listDiagramViews,
 } from "../diagram/projection.js";
+import { applyRelationshipRoutes } from "../diagram/relationship-routing.js";
 import type {
   DiagramLod,
   DiagramProjection,
@@ -104,6 +105,10 @@ export function LayoutSpikePage() {
     }),
     [displayProjection.edges.length],
   );
+  const routedProjection = useMemo(
+    () => applyRelationshipRoutes(displayProjection),
+    [displayProjection],
+  );
 
   return (
     <main className="app-shell">
@@ -153,8 +158,8 @@ export function LayoutSpikePage() {
       >
         <DiagramInteractionContext.Provider value={interactions}>
           <ReactFlow<SchemaDiagramNode, SchemaDiagramEdge>
-            nodes={displayProjection.nodes}
-            edges={displayProjection.edges}
+            nodes={routedProjection.nodes}
+            edges={routedProjection.edges}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             onInit={setFlowInstance}

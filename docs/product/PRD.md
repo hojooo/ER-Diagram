@@ -273,7 +273,11 @@ Dock 상단에는 `Editable ER diagram`, source-defined `DiagramView`, current-v
 모은다. `Global`은 전체 schema를 표시하지만 source-defined `DiagramView`는 해당 view의 `TableGroups` filter와 선택된
 group의 member table만 canvas에 투영한다. `Tables`, `Notes`, `Schemas` filter는 DBML source와 visual command에서
 손실 없이 유지하되 workspace projection을 확장하지 않는다. 관계는 투영된 table 양쪽 endpoint가 모두 보일 때만
-표시한다. 상단 영역은 전체 높이의 절반까지만 사용하고 자체 scroll하며, Visual Inspector는 남은 높이에서 독립적으로
+표시한다. 관계선은 현재 projection의 table card와 접힌 group card, 펼친 group header를 장애물로 취급하는 결정론적
+직교 경로를 사용한다. Source·target port만 card 경계에 닿고 중간 경로는 다른 card 내부를 통과하지 않는다. 이 경로는
+node 위치·크기·group collapse가 달라질 때 화면에서 다시 파생하며 layout sidecar, schema revision 또는 viewport에
+저장하지 않는다. 대규모 overview에서 label을 생략하더라도 관계선을 직선으로 되돌리지 않는다. 상단 영역은 전체
+높이의 절반까지만 사용하고 자체 scroll하며, Visual Inspector는 남은 높이에서 독립적으로
 scroll한다. 검색 결과는 panel flow 안에서 펼쳐져 Inspector나 canvas와 겹치지 않는다. 별도의 selection summary
 rail과 선택 없음 문구는 표시하지 않는다. Canvas 선택만으로 panel을 다시 열지는 않으며, 사용자는 panel-edge
 toggle로만 panel을 명시적으로 연다. Canvas의 table, column, group 또는 relationship를 직접 클릭하면 selection만
@@ -643,7 +647,7 @@ candidate의 SQL과 versioned ConversionReport JSON은 별도 파일로 제공�
 
 | ID | 우선순위 | 요구사항 | 수용 기준 |
 | --- | --- | --- | --- |
-| `DGM-001` | P0 | table과 column, PK/FK, relationship를 렌더링한다. | source inventory와 canvas inventory가 일치한다. |
+| `DGM-001` | P0 | table과 column, PK/FK, relationship를 렌더링한다. | source inventory와 canvas inventory가 일치하고 모든 relationship가 visible table/group content를 통과하지 않는 직교 경로를 가진다. |
 | `DGM-002` | P0 | `TableGroup`을 compound group으로 표현한다. | group color·name·membership이 source와 일치한다. |
 | `DGM-003` | P0 | group collapse 시 외부 relationship를 group summary edge로 집계한다. | 숨겨진 child edge 때문에 관계가 사라진 것으로 오인되지 않는다. |
 | `DGM-004` | P0 | `DiagramView` selector를 제공하고 source-defined view는 `TableGroups` 범위로 집중한다. | 7개 view fixture를 재파싱 없이 전환하고 canvas group·table이 source의 `visibleGroupKeys`와 해당 membership에 정확히 일치한다. `Global`은 전체 schema를 유지한다. |
