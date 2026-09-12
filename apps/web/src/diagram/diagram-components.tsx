@@ -10,18 +10,21 @@ import {
 } from "@xyflow/react";
 import { type CSSProperties, createContext, memo, useContext } from "react";
 import { useUiLocale } from "../localization/ui-locale.js";
+import type { DiagramColumnEditRequest } from "./base-schema-diagram-contract.js";
 import type { DiagramSelection } from "./source-navigation.js";
 import type { GroupDiagramNode, SchemaDiagramEdge, TableDiagramNode } from "./types.js";
 
 export interface DiagramInteractions {
   toggleGroup(groupKey: string): void;
   activateElement(selection: DiagramSelection): void;
+  editColumn(request: DiagramColumnEditRequest): void;
   showEdgeLabels: boolean;
 }
 
 export const DiagramInteractionContext = createContext<DiagramInteractions>({
   toggleGroup: () => undefined,
   activateElement: () => undefined,
+  editColumn: () => undefined,
   showEdgeLabels: true,
 });
 
@@ -83,7 +86,7 @@ export const GroupDiagramNodeComponent = memo(function GroupDiagramNodeComponent
 export const TableDiagramNodeComponent = memo(function TableDiagramNodeComponent({
   data,
 }: NodeProps<TableDiagramNode>) {
-  const { activateElement } = useContext(DiagramInteractionContext);
+  const { activateElement, editColumn } = useContext(DiagramInteractionContext);
   const { messages } = useUiLocale();
   const displayedColumns =
     data.lod === "FULL"
@@ -104,6 +107,7 @@ export const TableDiagramNodeComponent = memo(function TableDiagramNodeComponent
         </span>
         <button
           className="nodrag nopan diagram-table__table-action"
+          title={`${data.schemaName}.${data.name}`}
           type="button"
           tabIndex={-1}
           aria-pressed={data.selectedElementKey === data.tableKey}
@@ -134,6 +138,8 @@ export const TableDiagramNodeComponent = memo(function TableDiagramNodeComponent
                   className="nodrag nopan diagram-table__column-action"
                   type="button"
                   tabIndex={-1}
+                  data-diagram-column-key={column.key}
+                  title={`${column.name}, ${column.type}${badges.length > 0 ? `, ${badges.join(", ")}` : ""}`}
                   aria-pressed={data.selectedElementKey === column.key}
                   aria-label={`${column.name}, ${column.type}${badges.length > 0 ? `, ${badges.join(", ")}` : ""}`}
                   onClick={(event) => {
@@ -142,6 +148,24 @@ export const TableDiagramNodeComponent = memo(function TableDiagramNodeComponent
                       elementKey: column.key,
                       kind: "column",
                       tableKeys: [data.tableKey],
+                    });
+                  }}
+                  onDoubleClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const bounds = event.currentTarget.getBoundingClientRect();
+                    editColumn({
+                      selection: {
+                        elementKey: column.key,
+                        kind: "column",
+                        tableKeys: [data.tableKey],
+                      },
+                      anchor: {
+                        top: bounds.top,
+                        right: bounds.right,
+                        bottom: bounds.bottom,
+                        left: bounds.left,
+                      },
                     });
                   }}
                 >

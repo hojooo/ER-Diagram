@@ -3,7 +3,7 @@
 import "@testing-library/jest-dom/vitest";
 
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -73,6 +73,17 @@ describe("canvas workspace shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open source and outline" }));
     expect(screen.getByRole("tab", { name: "Outline" })).toHaveAttribute("aria-selected", "true");
     expect(diagramMounts).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps canvas editors above the full-height tool docks", () => {
+    render(<Harness canvasOverlay={<button type="button">Inline editor action</button>} />);
+
+    const overlay = screen.getByTestId("workspace-canvas-overlay");
+    expect(overlay).toHaveClass("z-[60]");
+    expect(overlay.compareDocumentPosition(screen.getByTestId("workspace-right-tool-dock"))).toBe(
+      Node.DOCUMENT_POSITION_PRECEDING,
+    );
+    expect(within(overlay).getByRole("button", { name: "Inline editor action" })).toBeVisible();
   });
 
   it("closes a focused surface with Escape and returns focus to its trigger", () => {
@@ -370,7 +381,7 @@ describe("canvas workspace shell", () => {
       if (this instanceof HTMLElement && this.classList.contains("top-3")) {
         return testRect(12, 70, 1_120);
       }
-      if (this instanceof HTMLElement && this.classList.contains("bottom-3")) {
+      if (this instanceof HTMLElement && this.dataset.testid === "workspace-status-region") {
         return testRect(660, 708, 460);
       }
       return testRect(0, 0, 0);
@@ -406,10 +417,12 @@ function Harness({
   narrow = false,
   initialSourceOpen = false,
   diagramMounts = vi.fn(),
+  canvasOverlay,
 }: {
   readonly narrow?: boolean;
   readonly initialSourceOpen?: boolean;
   readonly diagramMounts?: () => void;
+  readonly canvasOverlay?: ReactNode;
 }) {
   const surfaces = useCanvasWorkspaceSurfaces({
     initialLeftSurface: "SOURCE",
@@ -426,6 +439,7 @@ function Harness({
       diagramTools={<h2>Editable ER diagram</h2>}
       source={<input aria-label="Source draft probe" defaultValue="" />}
       outline={<p>Outline content</p>}
+      canvasOverlay={canvasOverlay}
       inspector={
         <div>
           <p>Inspector content</p>

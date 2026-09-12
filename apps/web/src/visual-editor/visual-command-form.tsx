@@ -24,6 +24,7 @@ export function VisualCommandForm({
   displayLabel,
   initialDraft,
   disabled,
+  submitOnModEnter = false,
   onCancel,
   onSubmit,
 }: {
@@ -33,6 +34,7 @@ export function VisualCommandForm({
   readonly displayLabel?: string;
   readonly initialDraft: VisualCommandDraft;
   readonly disabled: boolean;
+  readonly submitOnModEnter?: boolean;
   readonly onCancel: () => void;
   readonly onSubmit: (draft: VisualCommandDraft) => void;
 }) {
@@ -115,6 +117,13 @@ export function VisualCommandForm({
         onSubmit={(event) => {
           event.preventDefault();
           if (!destructive) submit();
+        }}
+        onKeyDown={(event) => {
+          if (!submitOnModEnter || event.key !== "Enter" || (!event.metaKey && !event.ctrlKey)) {
+            return;
+          }
+          event.preventDefault();
+          if (!disabled && !destructive) submit();
         }}
       >
         <DraftFields
@@ -281,56 +290,68 @@ function DraftFields({
           />
         </>
       );
-    case "UPDATE_COLUMN":
-      return (
-        <ColumnValueFields
-          value={{
-            name: "",
-            type: draft.changes.type ?? "integer",
-            primaryKey: draft.changes.primaryKey ?? false,
-            unique: draft.changes.unique ?? false,
-            notNull: draft.changes.notNull ?? false,
-            default: draft.changes.default ?? null,
-            increment: draft.changes.increment ?? false,
-            note: draft.changes.note ?? null,
-          }}
-          typeSuggestions={typeSuggestions}
-          onChange={(value) => {
-            const { name: _name, ...changes } = value;
-            onChange({ ...draft, changes });
-          }}
-        />
-      );
-    case "RENAME_COLUMN":
-      return (
-        <TextField
-          label={messages["visual.field.newColumnName"]}
-          value={draft.newName}
-          onChange={(newName) => onChange({ ...draft, newName })}
-        />
-      );
-    case "REORDER_COLUMN": {
+    case "ALTER_COLUMN": {
       const table = graph.tables.find((candidate) => candidate.key === draft.targetTableKey);
+      const column = table?.columns.find((candidate) => candidate.key === draft.targetColumnKey);
+      const current = column
+        ? {
+            name: column.name,
+            type: column.type.display,
+            primaryKey: column.primaryKey,
+            unique: column.unique,
+            notNull: column.notNull,
+            default: column.default,
+            increment: column.increment,
+            note: column.note?.value ?? null,
+          }
+        : emptyColumn();
       return (
-        <label className={labelClass}>
-          {messages["visual.field.moveBefore"]}
-          <select
-            className={inputClass}
-            value={draft.beforeColumnKey ?? ""}
-            onChange={(event) =>
-              onChange({ ...draft, beforeColumnKey: event.target.value || null })
-            }
-          >
-            <option value="">{messages["visual.field.endOfColumns"]}</option>
-            {table?.columns
-              .filter((column) => column.key !== draft.targetColumnKey && !column.injectedFrom)
-              .map((column) => (
-                <option key={column.key} value={column.key}>
-                  {column.name}
-                </option>
-              ))}
-          </select>
-        </label>
+        <>
+          <TextField
+            label={messages["visual.field.columnName"]}
+            value={draft.newName ?? current.name}
+            onChange={(newName) => onChange({ ...draft, newName })}
+          />
+          <ColumnValueFields
+            value={{
+              name: draft.newName ?? current.name,
+              type: draft.changes?.type ?? current.type,
+              primaryKey: draft.changes?.primaryKey ?? current.primaryKey,
+              unique: draft.changes?.unique ?? current.unique,
+              notNull: draft.changes?.notNull ?? current.notNull,
+              default:
+                draft.changes?.default === undefined ? current.default : draft.changes.default,
+              increment: draft.changes?.increment ?? current.increment,
+              note: draft.changes?.note === undefined ? current.note : draft.changes.note,
+            }}
+            typeSuggestions={typeSuggestions}
+            onChange={(value) => {
+              const { name: newName, ...changes } = value;
+              onChange({ ...draft, newName, changes });
+            }}
+          />
+          <label className={labelClass}>
+            {messages["visual.field.moveBefore"]}
+            <select
+              className={inputClass}
+              value={draft.beforeColumnKey ?? ""}
+              onChange={(event) =>
+                onChange({ ...draft, beforeColumnKey: event.target.value || null })
+              }
+            >
+              <option value="">{messages["visual.field.endOfColumns"]}</option>
+              {table?.columns
+                .filter(
+                  (candidate) => candidate.key !== draft.targetColumnKey && !candidate.injectedFrom,
+                )
+                .map((candidate) => (
+                  <option key={candidate.key} value={candidate.key}>
+                    {candidate.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+        </>
       );
     }
     case "CREATE_REFERENCE":
@@ -488,6 +509,7 @@ function ColumnValueFields({
   readonly onChange: (value: ReturnType<typeof emptyColumn>) => void;
 }) {
   const { messages } = useUiLocale();
+  const typeListId = useId();
   const actual = value;
   return (
     <>
@@ -496,12 +518,12 @@ function ColumnValueFields({
         <input
           aria-label={messages["visual.field.columnType"]}
           className={inputClass}
-          list="visual-column-types"
+          list={typeListId}
           required
           value={actual.type}
           onChange={(event) => onChange({ ...actual, type: event.target.value })}
         />
-        <datalist id="visual-column-types">
+        <datalist id={typeListId}>
           {typeSuggestions.map((type) => (
             <option key={type} value={type} />
           ))}
@@ -1467,15 +1489,10 @@ function compareCodeUnits(left: string, right: string): number {
 }
 
 const labelClass = "grid gap-1.5 text-sm font-semibold text-slate-200";
-const inputClass =
-  "min-h-10 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-60";
+const inputClass = "ui-input";
 const fieldsetClass = "space-y-3 rounded-xl border border-slate-700 p-3";
 const legendClass = "px-1 text-sm font-semibold text-cyan-100";
-const primaryButtonClass =
-  "min-h-10 rounded-lg bg-cyan-300 px-4 text-sm font-bold text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50";
-const secondaryButtonClass =
-  "min-h-10 rounded-lg border border-slate-600 px-3 text-sm font-semibold text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50";
-const dangerButtonClass =
-  "min-h-10 rounded-lg border border-red-400/60 px-3 text-sm font-semibold text-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-300 disabled:cursor-not-allowed disabled:opacity-50";
-const smallButtonClass =
-  "min-h-9 rounded-md border border-slate-600 px-2 text-xs font-semibold text-slate-200 disabled:opacity-40";
+const primaryButtonClass = "ui-button ui-button--primary";
+const secondaryButtonClass = "ui-button";
+const dangerButtonClass = "ui-button ui-button--danger";
+const smallButtonClass = "ui-button ui-button--compact";

@@ -23,10 +23,16 @@ export interface VisualCommandMutation {
   readonly appliedLayoutRevisionNo: number;
 }
 
+export type HistoricalVisualCommandKind =
+  | VisualCommandKind
+  | "UPDATE_COLUMN"
+  | "RENAME_COLUMN"
+  | "REORDER_COLUMN";
+
 export interface VisualCommandReceipt {
   readonly projectId: string;
   readonly commandId: string;
-  readonly commandKind: VisualCommandKind;
+  readonly commandKind: HistoricalVisualCommandKind;
   readonly commandHash: string;
   readonly expectedSchemaRevisionNo: number;
   readonly appliedSchemaRevisionNo: number;

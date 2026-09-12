@@ -22,7 +22,7 @@ import { applyTextEdits, transformVisualCommand } from "../src/index.js";
 import { runVerifiedVisualTransform } from "../src/verified-transform.js";
 
 describe("M3 visual command source-fidelity gate", () => {
-  it("applies all 20 command kinds with exact source, reparse, and semantic evidence", async () => {
+  it("applies all 18 command kinds with exact source, reparse, and semantic evidence", async () => {
     let source = visualCommandGateFixture.initialSource;
     const observed: Array<{
       id: string;
@@ -52,7 +52,19 @@ describe("M3 visual command source-fidelity gate", () => {
 
       const after = await parseOrThrow(result.source);
       const independentDiff = diffSchemaGraphs(before, after);
-      expect(result.semanticDiff, step.id).toEqual(independentDiff);
+      if (step.id === "alter-column") {
+        expect(result.semanticDiff.changes, step.id).toEqual(independentDiff.changes);
+        expect(independentDiff.renameCandidates, step.id).toEqual([]);
+        expect(result.semanticDiff.renameCandidates, step.id).toEqual([
+          expect.objectContaining({
+            elementKind: "column",
+            confidence: "HIGH",
+            reason: "UNIQUE_EXACT_STRUCTURE",
+          }),
+        ]);
+      } else {
+        expect(result.semanticDiff, step.id).toEqual(independentDiff);
+      }
       expect(result.beforeSchemaHash, step.id).toBe(before.schemaHash);
       expect(result.afterSchemaHash, step.id).toBe(after.schemaHash);
       expect(
@@ -63,7 +75,7 @@ describe("M3 visual command source-fidelity gate", () => {
       for (const sentinel of visualCommandGateFixture.sentinels) {
         expect(result.source, `${step.id}: ${sentinel}`).toContain(sentinel);
       }
-      if (step.id === "rename-column") {
+      if (step.id === "alter-column") {
         expect(result.source).toContain(
           "public.accounts.(backup_user_id, display_order) ?> public.users.(id, sort_order)",
         );
@@ -83,7 +95,7 @@ describe("M3 visual command source-fidelity gate", () => {
         afterSourceHash: sha256FixtureSource(result.source),
         beforeSchemaHash: before.schemaHash,
         afterSchemaHash: after.schemaHash,
-        semanticSummary: summarizeDiff(independentDiff),
+        semanticSummary: summarizeDiff(result.semanticDiff),
       });
       source = result.source;
     }

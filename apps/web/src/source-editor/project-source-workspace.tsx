@@ -7,6 +7,7 @@ import type {
   ProjectState,
   ProjectsResponse,
   VisualCommand,
+  SourceRange,
 } from "@er-diagram/contracts";
 import { utf8ByteLength } from "@er-diagram/contracts";
 import { diffSchemaGraphs, recoverLayoutStableKeys, type SchemaGraph } from "@er-diagram/core";
@@ -27,6 +28,7 @@ import { Link, useBlocker } from "react-router-dom";
 import type {
   BaseSchemaDiagramComponent,
   BaseSchemaDiagramProps,
+  DiagramColumnEditRequest,
   DiagramLayoutRequest,
   DiagramLayoutRequestResult,
   DiagramViewportInsets,
@@ -76,11 +78,16 @@ import { dialectLabel, ValidityBadge } from "../projects/project-home-page.js";
 import { projectQueryKeys } from "../projects/project-queries.js";
 import { useRuntimeResourceLimits } from "../runtime-config.js";
 import {
+  CanvasColumnInlineEditor,
+  type CanvasColumnInlineEditorState,
+} from "../visual-editor/canvas-column-inline-editor.js";
+import {
   createVisualCommandSession,
   type VisualCommandSessionController,
   type VisualCommandSessionSnapshot,
 } from "../visual-editor/visual-command-session.js";
 import { VisualSchemaInspector } from "../visual-editor/visual-schema-inspector.js";
+import { createInitialVisualDraft, findColumn } from "../visual-editor/visual-editor-model.js";
 import {
   CanvasWorkspaceShell,
   useCanvasWorkspaceSurfaces,
@@ -109,6 +116,7 @@ const LazyBaseSchemaDiagram = lazy(async () => {
 });
 
 const NO_COLLAPSED_GROUP_KEYS: ReadonlySet<string> = new Set();
+const EMPTY_VIEWPORT_INSETS: DiagramViewportInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 
 export interface ProjectWorkspaceAdapters {
   readonly createParserClient?: () => DbmlParserWorkerClient;
@@ -175,6 +183,13 @@ export function ProjectSourceWorkspace({
     selection: DiagramSelection;
     viewLabel: string;
   } | null>(null);
+  const [inlineColumnEditor, setInlineColumnEditor] =
+    useState<CanvasColumnInlineEditorState | null>(null);
+  const [inlinePartialNotice, setInlinePartialNotice] = useState<{
+    readonly name: string;
+    readonly range: SourceRange | null;
+  } | null>(null);
+  const [inlineEditUnavailableNotice, setInlineEditUnavailableNotice] = useState(false);
   const surfaces = useCanvasWorkspaceSurfaces({
     initialRightPanelOpen:
       initialState.currentRevision.validity === "VALID" || initialState.lastValidRevision !== null,
@@ -271,6 +286,106 @@ export function ProjectSourceWorkspace({
     },
     [sourceEditorReady, surfaces.openLeft],
   );
+
+  const focusDiagramColumn = useCallback((columnKey: string) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const row = [...document.querySelectorAll<HTMLElement>("[data-diagram-column-key]")].find(
+          (candidate) => candidate.dataset.diagramColumnKey === columnKey,
+        );
+        row?.focus();
+      });
+    });
+  }, []);
+
+  const handleEditColumn = useCallback(
+    (request: DiagramColumnEditRequest) => {
+      if (!activeGraph) return;
+      if (
+        inlineColumnEditor &&
+        inlineColumnEditor.request.selection.elementKey !== request.selection.elementKey
+      ) {
+        setInlineColumnEditor({ ...inlineColumnEditor, switchBlocked: true });
+        return;
+      }
+      selectionStore.getState().setSelection(request.selection);
+      if (inlineColumnEditor) return;
+      const resolved = findColumn(activeGraph, request.selection.elementKey);
+      if (!resolved) {
+        setInlineEditUnavailableNotice(true);
+        return;
+      }
+      if (resolved.column.injectedFrom) {
+        setInlineEditUnavailableNotice(false);
+        setInlinePartialNotice({
+          name: resolved.column.name,
+          range:
+            activeGraph.sourceMap[resolved.column.injectedFrom.partialElementKey] ??
+            resolved.column.injectedFrom.injectionRange,
+        });
+        return;
+      }
+      if (
+        !visualCommandSession ||
+        layoutInteractionLocked ||
+        sessionSnapshot?.canUseValidSchema !== true
+      ) {
+        setInlineEditUnavailableNotice(true);
+        return;
+      }
+      const action = {
+        id: `ALTER_COLUMN:${resolved.column.key}:canvas`,
+        kind: "ALTER_COLUMN" as const,
+        label: messagesRef.current["visual.action.alterColumn"],
+        targetElementKey: resolved.column.key,
+      };
+      const draft = createInitialVisualDraft(activeGraph, request.selection, action);
+      if (draft?.kind !== "ALTER_COLUMN") {
+        setInlineEditUnavailableNotice(true);
+        return;
+      }
+      visualCommandSession.reset();
+      setInlinePartialNotice(null);
+      setInlineEditUnavailableNotice(false);
+      setInlineColumnEditor({
+        request,
+        initialDraft: draft,
+        openedSchemaHash: activeGraph.schemaHash,
+        switchBlocked: false,
+      });
+    },
+    [
+      activeGraph,
+      inlineColumnEditor,
+      layoutInteractionLocked,
+      selectionStore,
+      sessionSnapshot?.canUseValidSchema,
+      visualCommandSession,
+    ],
+  );
+
+  const cancelInlineColumnEdit = useCallback(() => {
+    if (visualCommandWorkspaceLocked) return;
+    const columnKey = inlineColumnEditor?.request.selection.elementKey;
+    setInlineColumnEditor(null);
+    visualCommandSession?.reset();
+    if (columnKey) focusDiagramColumn(columnKey);
+  }, [focusDiagramColumn, inlineColumnEditor, visualCommandSession, visualCommandWorkspaceLocked]);
+
+  const reviewInlineColumnEdit = useCallback(() => {
+    if (!inlineColumnEditor || !activeGraph || !visualCommandSession) return;
+    const column = findColumn(activeGraph, inlineColumnEditor.request.selection.elementKey);
+    if (!column) {
+      setInlineColumnEditor(null);
+      return;
+    }
+    setInlineColumnEditor({
+      ...inlineColumnEditor,
+      openedSchemaHash: activeGraph.schemaHash,
+      switchBlocked: false,
+    });
+    visualCommandSession.reviewLatestSchema();
+  }, [activeGraph, inlineColumnEditor, visualCommandSession]);
 
   useEffect(() => {
     if (!sourceEditorRecoveryRequired) return;
@@ -547,6 +662,21 @@ export function ProjectSourceWorkspace({
   }, [activeGraph, selectionStore]);
 
   useEffect(() => {
+    const command = visualCommandSnapshot?.lastCommand;
+    if (
+      !inlineColumnEditor ||
+      visualCommandSnapshot?.status !== "SUCCEEDED" ||
+      command?.kind !== "ALTER_COLUMN" ||
+      command.targetColumnKey !== inlineColumnEditor.request.selection.elementKey
+    ) {
+      return;
+    }
+    const focusKey = selectionStore.getState().selection?.elementKey ?? command.targetColumnKey;
+    setInlineColumnEditor(null);
+    focusDiagramColumn(focusKey);
+  }, [focusDiagramColumn, inlineColumnEditor, selectionStore, visualCommandSnapshot]);
+
+  useEffect(() => {
     if (!activeGraph) return;
     void layoutSessionRef.current?.hydrate(
       resolvedViewKey,
@@ -784,7 +914,8 @@ export function ProjectSourceWorkspace({
       onBeforeCommittedState: (_state, _mutation, command) => {
         lastAppliedVisualCommandRef.current = command;
         skipNextClientRenameRecoveryRef.current =
-          command.kind === "RENAME_TABLE" || command.kind === "RENAME_COLUMN";
+          command.kind === "RENAME_TABLE" ||
+          (command.kind === "ALTER_COLUMN" && command.newName !== undefined);
       },
       onCommittedState: (state) => {
         queryClient.setQueryData<ProjectResponse>(projectQueryKeys.detail(projectId), { state });
@@ -1096,7 +1227,7 @@ export function ProjectSourceWorkspace({
               {messages["workspace.backToProjects"]}
             </Link>
             <div className="min-w-0 max-w-full basis-48 px-1 sm:px-2">
-              <p className="min-w-0 whitespace-normal break-words text-[0.65rem] font-bold uppercase tracking-[0.14em] text-cyan-300 [overflow-wrap:anywhere]">
+              <p className="min-w-0 whitespace-normal break-words text-xs font-bold uppercase tracking-[0.14em] text-cyan-300 [overflow-wrap:anywhere]">
                 {messages["workspace.revisionSummary"](
                   dialectLabel(serverState.project.primaryDialect),
                   serverState.project.schemaRevisionNo,
@@ -1165,6 +1296,7 @@ export function ProjectSourceWorkspace({
             layoutRequest={layoutRequest}
             onToggleGroup={handleToggleGroup}
             onNavigateSource={handleNavigateSource}
+            onEditColumn={handleEditColumn}
             onFocusSource={() => openSourceSurface()}
             onPositionsCommit={handlePositionsCommit}
             onRenderedLayoutReady={handleRenderedLayoutReady}
@@ -1337,6 +1469,23 @@ export function ProjectSourceWorkspace({
             </div>
           )
         }
+        canvasOverlay={
+          inlineColumnEditor && activeGraph && visualCommandSession ? (
+            <CanvasColumnInlineEditor
+              state={inlineColumnEditor}
+              graph={activeGraph}
+              primaryDialect={serverState.project.primaryDialect}
+              commandSession={visualCommandSession}
+              interactionDisabled={visualInteractionDisabled}
+              sourceNavigationEnabled={sourceNavigationEnabled}
+              viewportInsets={viewportInsets ?? EMPTY_VIEWPORT_INSETS}
+              onCancel={cancelInlineColumnEdit}
+              onOpenSource={openSourceSurface}
+              onReloadLayouts={() => void handleReloadLayout()}
+              onReviewLatest={reviewInlineColumnEdit}
+            />
+          ) : null
+        }
         status={
           <div className="flex min-w-0 flex-wrap items-center justify-center gap-2 px-3 py-2 text-xs [overflow-wrap:anywhere] sm:justify-start">
             <span
@@ -1408,6 +1557,38 @@ export function ProjectSourceWorkspace({
                 >
                   {messages["source.showInGlobal"]}
                 </button>
+              </section>
+            ) : null}
+            {inlinePartialNotice ? (
+              <section
+                className="rounded-2xl border border-amber-300/50 bg-amber-950/90 p-4 text-sm text-amber-100"
+                role="status"
+              >
+                <p className="font-semibold">{messages["visual.inlinePartialTitle"]}</p>
+                <p className="mt-1 min-w-0 break-words [overflow-wrap:anywhere]">
+                  {messages["visual.inlinePartialDescription"]}
+                </p>
+                <button
+                  className="mt-3 min-h-10 rounded-lg border border-amber-200 px-3 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200"
+                  type="button"
+                  onClick={() => {
+                    openSourceSurface(inlinePartialNotice.range);
+                    setInlinePartialNotice(null);
+                  }}
+                >
+                  {messages["visual.openPartialDefinition"]}
+                </button>
+              </section>
+            ) : null}
+            {inlineEditUnavailableNotice ? (
+              <section
+                className="rounded-2xl border border-amber-300/50 bg-amber-950/90 p-4 text-sm text-amber-100"
+                role="status"
+              >
+                <p className="font-semibold">{messages["visual.inlineUnavailableTitle"]}</p>
+                <p className="mt-1 min-w-0 break-words [overflow-wrap:anywhere]">
+                  {messages["visual.inlineUnavailableDescription"]}
+                </p>
               </section>
             ) : null}
           </div>
@@ -1572,6 +1753,7 @@ function DiagramPanel({
   layoutRequest,
   onToggleGroup,
   onNavigateSource,
+  onEditColumn,
   onFocusSource,
   onPositionsCommit,
   onRenderedLayoutReady,
@@ -1597,6 +1779,7 @@ function DiagramPanel({
   readonly layoutRequest: DiagramLayoutRequest | null;
   readonly onToggleGroup: (groupKey: string) => void;
   readonly onNavigateSource: (selection: DiagramSelection) => void;
+  readonly onEditColumn: NonNullable<BaseSchemaDiagramProps["onEditColumn"]>;
   readonly onFocusSource: () => void;
   readonly onPositionsCommit: (positions: Readonly<Record<string, DiagramPosition>>) => void;
   readonly onRenderedLayoutReady: (
@@ -1656,6 +1839,7 @@ function DiagramPanel({
                 sourceNavigationEnabled={sourceNavigationEnabled}
                 onToggleGroup={onToggleGroup}
                 onNavigateSource={onNavigateSource}
+                onEditColumn={onEditColumn}
                 viewportInsets={viewportInsets}
                 fillContainer
                 requestLayout={requestLayout}
@@ -2451,13 +2635,14 @@ function applyVisualCommandSelection(
     );
     return;
   }
-  if (command.kind === "RENAME_TABLE" || command.kind === "RENAME_COLUMN") {
+  if (command.kind === "RENAME_TABLE" || command.kind === "ALTER_COLUMN") {
     const kind = command.kind === "RENAME_TABLE" ? "table" : "column";
     const beforeKey =
       command.kind === "RENAME_TABLE" ? command.targetTableKey : command.targetColumnKey;
     const candidates = diff.renameCandidates.filter(
       (candidate) => candidate.elementKind === kind && candidate.beforeKey === beforeKey,
     );
+    if (command.kind === "ALTER_COLUMN" && candidates.length === 0) return;
     if (candidates.length !== 1) {
       selectionStore.getState().setSelection(null);
       return;
@@ -2528,9 +2713,6 @@ function isSchemaHistoryShortcutTarget(target: EventTarget | null): boolean {
   return target.closest("[data-schema-history-scope]") !== null;
 }
 
-const secondaryButtonClass =
-  "min-h-10 max-w-full whitespace-normal break-words rounded-lg border border-slate-600 px-3 text-center text-sm font-semibold text-slate-100 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:opacity-50";
-const primaryButtonClass =
-  "min-h-10 max-w-full whitespace-normal break-words rounded-lg bg-cyan-300 px-3 text-center text-sm font-semibold text-slate-950 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:opacity-50";
-const commandBarButtonClass =
-  "inline-flex min-h-10 max-w-full items-center whitespace-normal break-words rounded-lg border border-slate-600 px-3 text-center text-xs font-semibold text-slate-100 no-underline [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:opacity-50";
+const secondaryButtonClass = "ui-button";
+const primaryButtonClass = "ui-button ui-button--primary";
+const commandBarButtonClass = "ui-button ui-button--compact";

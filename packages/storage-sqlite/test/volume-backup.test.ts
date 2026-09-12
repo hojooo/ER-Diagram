@@ -146,7 +146,7 @@ describe("SQLite whole-volume backup", () => {
       importArtifacts: 0,
       visualCommandReceipts: 1,
       appMetadata: 2,
-      drizzleMigrations: 2,
+      drizzleMigrations: 3,
     });
     expect(lstatSync(output).mode & 0o777).toBe(0o700);
     expect(lstatSync(path.join(output, "database.sqlite")).mode & 0o777).toBe(0o600);
@@ -323,7 +323,7 @@ describe("SQLite whole-volume restore and migration", () => {
       importArtifacts: 1,
       visualCommandReceipts: 1,
       appMetadata: 2,
-      drizzleMigrations: 2,
+      drizzleMigrations: 3,
     });
     const plan = await planSqliteVolumeRestore({ backup, database: target });
     await applySqliteVolumeRestore({ backup, database: target, planHash: plan.planHash });
@@ -442,7 +442,7 @@ describe("SQLite whole-volume restore and migration", () => {
       .prepare("UPDATE app_metadata SET value = '1' WHERE key = ?")
       .run(APP_METADATA_STORAGE_SCHEMA_VERSION_KEY);
     legacy.exec(
-      "DELETE FROM __drizzle_migrations WHERE created_at = (SELECT max(created_at) FROM __drizzle_migrations)",
+      "DELETE FROM __drizzle_migrations WHERE created_at > (SELECT min(created_at) FROM __drizzle_migrations)",
     );
     legacy.close();
     const backupOutput = path.join(directory, "pre-migration");
@@ -467,13 +467,59 @@ describe("SQLite whole-volume restore and migration", () => {
       reopened.database.get<{ value: string }>(
         `SELECT value FROM app_metadata WHERE key = '${APP_METADATA_STORAGE_SCHEMA_VERSION_KEY}'`,
       ).value,
-    ).toBe("2");
+    ).toBe("3");
     expect(
       reopened.database.get<{ count: number }>(
         "SELECT count(*) AS count FROM visual_command_receipts",
       ).count,
     ).toBe(0);
     reopened.close();
+  });
+
+  it("restores a version 2 backup through the staged version 3 migration without rewriting legacy receipts", async () => {
+    const directory = temporaryDirectory();
+    const sourcePath = path.join(directory, "version-two.sqlite");
+    const storage = createPopulatedDatabase(sourcePath);
+    storage.close();
+    storages.delete(storage);
+
+    const versionTwo = new BetterSqlite3(sourcePath);
+    versionTwo.prepare("UPDATE visual_command_receipts SET command_kind = 'RENAME_COLUMN'").run();
+    versionTwo
+      .prepare("UPDATE app_metadata SET value = '2' WHERE key = ?")
+      .run(APP_METADATA_STORAGE_SCHEMA_VERSION_KEY);
+    versionTwo.exec(
+      "DELETE FROM __drizzle_migrations WHERE created_at = (SELECT max(created_at) FROM __drizzle_migrations)",
+    );
+    versionTwo.close();
+
+    const backup = path.join(directory, "version-two-backup");
+    const backupResult = await createSqliteVolumeBackup({ database: sourcePath, output: backup });
+    expect(backupResult.manifest.database.storageSchemaVersion).toBe(2);
+    expect(backupResult.manifest.inventory.drizzleMigrations).toBe(2);
+
+    const target = path.join(directory, "restored.sqlite");
+    const plan = await planSqliteVolumeRestore({ backup, database: target });
+    expect(plan).toMatchObject({
+      sourceStorageSchemaVersion: 2,
+      resultStorageSchemaVersion: 3,
+      requiresMigration: true,
+    });
+    await applySqliteVolumeRestore({ backup, database: target, planHash: plan.planHash });
+
+    const restored = openSqliteStorage({ filename: target });
+    expect(
+      restored.database
+        .select()
+        .from(visualCommandReceipts)
+        .where(eq(visualCommandReceipts.commandId, COMMAND_ID))
+        .get(),
+    ).toMatchObject({
+      commandId: COMMAND_ID,
+      commandKind: "RENAME_COLUMN",
+      commandHash: "a".repeat(64),
+    });
+    restored.close();
   });
 
   it("returns a no-op migration plan for current storage without creating a backup", async () => {
@@ -533,7 +579,7 @@ describe("SQLite whole-volume restore and migration", () => {
     storages.delete(futureStorage);
     const future = new BetterSqlite3(futurePath);
     future
-      .prepare("UPDATE app_metadata SET value = '3' WHERE key = ?")
+      .prepare("UPDATE app_metadata SET value = '4' WHERE key = ?")
       .run(APP_METADATA_STORAGE_SCHEMA_VERSION_KEY);
     future.close();
     await expect(validateSqliteVolumeDatabase(futurePath)).rejects.toMatchObject({

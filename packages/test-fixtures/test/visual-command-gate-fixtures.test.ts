@@ -8,16 +8,15 @@ import {
 } from "../src/index.js";
 
 const EXPECTED_FIXTURE_SET_HASH =
-  "909e2c737062cc0a67c060ad9d0a78ff7b0690a7d8349112babea6a763487710";
+  "63f47cf54c67c161c993bb312174bafa0a2a3ca335eb536fc6d8acc9e38ea7fd";
 const EXPECTED_COMMAND_KINDS = [
   "CREATE_TABLE",
   "UPDATE_TABLE",
   "RENAME_TABLE",
   "CREATE_COLUMN",
-  "UPDATE_COLUMN",
   "CREATE_REFERENCE",
   "CREATE_INDEX",
-  "RENAME_COLUMN",
+  "ALTER_COLUMN",
   "UPDATE_REFERENCE",
   "UPDATE_INDEX",
   "CREATE_CHECK",
@@ -25,7 +24,6 @@ const EXPECTED_COMMAND_KINDS = [
   "DELETE_CHECK",
   "DELETE_REFERENCE",
   "DELETE_INDEX",
-  "REORDER_COLUMN",
   "DELETE_COLUMN",
   "UPDATE_GROUP_MEMBERSHIP",
   "UPDATE_DIAGRAM_VIEW",
@@ -34,7 +32,7 @@ const EXPECTED_COMMAND_KINDS = [
 
 describe("versioned visual command gate fixture", () => {
   it("publishes dependency-free deterministic plain data", () => {
-    expect(VISUAL_COMMAND_GATE_FIXTURE_VERSION).toBe(1);
+    expect(VISUAL_COMMAND_GATE_FIXTURE_VERSION).toBe(2);
     expect(VISUAL_COMMAND_GATE_FIXTURE_SET_HASH).toBe(EXPECTED_FIXTURE_SET_HASH);
     expect(structuredClone(visualCommandGateFixture)).toEqual(visualCommandGateFixture);
     expect(JSON.parse(JSON.stringify(visualCommandGateFixture))).toEqual(visualCommandGateFixture);
@@ -45,18 +43,18 @@ describe("versioned visual command gate fixture", () => {
 
   it("covers every visual command kind exactly once in a successful deterministic sequence", () => {
     expect(visualCommandGateFixture.steps.map(({ sequence }) => sequence)).toEqual(
-      Array.from({ length: 20 }, (_, index) => index + 1),
+      Array.from({ length: 18 }, (_, index) => index + 1),
     );
     expect(visualCommandGateFixture.steps.map(({ command }) => command.kind)).toEqual(
       EXPECTED_COMMAND_KINDS,
     );
     expect(new Set(visualCommandGateFixture.steps.map(({ command }) => command.kind)).size).toBe(
-      20,
+      18,
     );
     expect(visualCommandGateFixture.steps.every(({ outcome }) => outcome === "SUCCESS")).toBe(true);
     expect(
       visualCommandGateFixture.steps.map(({ command }) => command.expectedSchemaRevisionNo),
-    ).toEqual(Array.from({ length: 20 }, (_, index) => index + 1));
+    ).toEqual(Array.from({ length: 18 }, (_, index) => index + 1));
   });
 
   it("pins CRLF, Unicode, quoted, comment, metadata, partial, group, and view coverage", () => {

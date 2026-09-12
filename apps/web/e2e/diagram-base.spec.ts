@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { expect, type Locator, type Page, test } from "./test-fixture.js";
-
 import { createControlledLayoutApi } from "./controlled-layout-api.js";
+import { expect, type Locator, type Page, test } from "./test-fixture.js";
+import { openWorkspaceTab } from "./workspace-panels.js";
 
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-0123456789ab";
 const CREATED_AT = "2026-08-27T01:02:03.004Z";
@@ -46,6 +46,7 @@ test("renders the active graph and keeps source navigation revision-safe", async
   await expect(page.locator(".diagram-table__column-action")).toHaveCount(3);
   await expect(page.locator(".react-flow__edge")).toHaveCount(1);
 
+  await openWorkspaceTab(page, "Outline");
   const postsSummary = page.getByText("public.posts", { exact: true });
   await postsSummary.click();
   const focusPosts = page.getByRole("button", { name: "Focus public.posts in diagram" });
@@ -57,21 +58,26 @@ test("renders the active graph and keeps source navigation revision-safe", async
 
   const accountColumn = page.getByRole("button", { name: /account_id, int, FK/ });
   await accountColumn.click();
-  await expect(editor).toBeFocused();
+  await expect(accountColumn).toHaveAttribute("aria-pressed", "true");
+  await openWorkspaceTab(page, "Source");
 
-  await findInEditor(page, "account_id");
+  await findInEditor(page, "account_id int");
+  await openWorkspaceTab(page, "Outline");
   await expect(
     page.getByRole("button", { name: "Focus column account_id in diagram" }),
   ).toHaveAttribute("aria-current", "true");
 
+  await openWorkspaceTab(page, "Source");
   await replaceEditorSource(editor, INVALID_SOURCE);
   await expect.poll(() => api.writes.length).toBe(1);
   await expect(page.getByText(/Showing last-valid revision 1/)).toBeVisible();
+  await openWorkspaceTab(page, "Outline");
   await expect(
     page.getByRole("button", { name: /Open source for table at line/ }).first(),
   ).toBeDisabled();
   await expect(page.getByLabel("Table public.posts")).toBeVisible();
 
+  await openWorkspaceTab(page, "Source");
   await replaceEditorSource(editor, RECOVERED_SOURCE);
   await expect.poll(() => api.writes.length).toBe(2);
   expect(api.writes[1]?.source).toBe(RECOVERED_SOURCE);
@@ -79,7 +85,9 @@ test("renders the active graph and keeps source navigation revision-safe", async
   await expect(page.getByRole("button", { name: "title, varchar" })).toBeVisible({
     timeout: 10_000,
   });
+  await openWorkspaceTab(page, "Outline");
   await expect(page.getByRole("button", { name: "Focus column title in diagram" })).toBeVisible();
+  await openWorkspaceTab(page, "Outline");
   await expect(
     page.getByRole("button", { name: /Open source for table at line/ }).first(),
   ).toBeEnabled();
@@ -95,6 +103,8 @@ async function findInEditor(page: Page, text: string): Promise<void> {
   await findInput.fill(text);
   await findInput.press("Enter");
   await page.keyboard.press("Escape");
+  // Source ranges are half-open; put the caret inside the match, not at its end.
+  await editor.press("ArrowLeft");
 }
 
 async function replaceEditorSource(editor: Locator, source: string): Promise<void> {

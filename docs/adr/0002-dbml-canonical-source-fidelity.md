@@ -97,10 +97,10 @@ position을 저장하며 계산된 viewport는 현재 session에만 적용한다
 
 Visual schema mutation의 public contract는 `commandId`, positive `expectedSchemaRevisionNo`와 explicit
 `kind`를 가진 strict discriminated union이다. Command target은 parser object나 source offset이 아니라
-normalized graph의 kind-qualified stable key로 지정한다. Table·column rename은 일반 update patch에
-숨기지 않고 별도 command로 표현해 key 변경과 후속 layout migration을 명시적으로 처리할 수 있게 한다.
-그 밖의 update는 non-empty `changes` patch만 허용하고, create는 현재 visual catalog가 소유하는 값을
-명시적으로 전달한다.
+normalized graph의 kind-qualified stable key로 지정한다. Table rename은 별도 command로 유지한다. Column
+name·property·order는 `ALTER_COLUMN` 하나에서 변경 전 target·anchor key를 명시하고 한 source edit 계획과
+한 번의 reparse·semantic verification으로 원자 적용한다. 그 밖의 update는 non-empty `changes` patch만
+허용하고, create는 현재 visual catalog가 소유하는 값을 명시적으로 전달한다.
 
 이 wire contract는 canonical source를 소유하거나 domain correctness를 확정하지 않는다. Zod는 variant
 shape, key kind prefix와 command-local 구조를 검증하고, target 존재·owner 관계·이름 충돌·partial
@@ -115,6 +115,11 @@ identifier, string, triple-quoted note, backtick expression, comment와 bracket 
 수정하지 않는다. 기존 setting은 value span만 바꾸어 key spelling, comma spacing과 quote style을 보존하고,
 없는 setting이나 새 declaration만 canonical form으로 추가한다. 이 경계에서는 parser warning count도
 늘어나지 않아야 한다.
+
+`ALTER_COLUMN`에 실제 reorder가 없으면 이름·type·setting token만 최소 수정한다. Reorder가 있으면 trailing
+inline comment를 포함한 source-owned column span을 한 번만 이동하고, 이동 fragment에 이름·속성 변경을 먼저
+반영한다. 실제 rename일 때만 Ref endpoint와 index `COLUMN` term을 갱신한다. 이름·속성·순서 중 어느 하나의
+preflight, reparse 또는 semantic closure가 실패하면 전체 command의 edit를 폐기하고 원본 source를 반환한다.
 
 Table rename은 pinned `@dbml/core.renameTable()`을 사용하되 결과 전체를 정본으로 채택하지 않는다.
 원본과 official output 사이에서 line structure를 보존하는 최소 UTF-16 edit를 만들고, 변경이 target table,
@@ -157,8 +162,9 @@ member, leading comment, note, color와 metadata는 그대로 둔다.
 반환한다. 누락되거나 서로 다른 injection range를 하나로 추정하지 않으며, 이러한 불일치는 source range
 오류로 fail-closed 처리한다. Partial definition 자체는 canonical source editor에서만 변경한다.
 
-Explicit table/column visual rename의 exact HIGH candidate는 모든 stored view layout에 같은 schema
-transaction으로 적용한다. Old position과 hidden key는 recovery를 위해 남기고 new key에 값을 복사한다.
+Explicit table rename 또는 `ALTER_COLUMN`의 verified exact HIGH rename evidence는 모든 stored view layout에
+같은 schema transaction으로 적용한다. Command kind만으로 rename을 가정하지 않는다. Old position과 hidden
+key는 recovery를 위해 남기고 new key에 값을 복사한다.
 New key에 다른 position이 이미 있으면 임의 overwrite하지 않고 source revision과 receipt까지 전부
 rollback한다. Rename 전 `baseSchemaHash`와 일치하는 row만 rename 후 hash로 전진시키며 이미 stale한
 provenance는 유지한다. 여러 row가 바뀌어도 하나의 project-global layout revision만 사용한다.
@@ -212,7 +218,8 @@ Rename 추적은 쉬워지지만 표준 DBML 호환성을 깨뜨리고 사용자
 - reparse 또는 semantic verification 실패 시 canonical source가 바뀌지 않아야 한다.
 - out-of-order worker/save 응답은 최신 Monaco buffer와 revision 기준을 덮지 않아야 한다.
 - invalid draft, worker failure와 revision conflict에서도 local source가 보존되어야 한다.
-- Versioned M3 gate corpus에서 20종 visual command를 각각 한 번 실행하고 매 단계의 최소 edit 재현,
-  source/schema hash, semantic diff closure와 unrelated comment·metadata·partial·view byte 보존을 확인한다.
+- Version 2 M3 gate corpus에서 현재 18종 visual command를 각각 한 번 실행하고 `ALTER_COLUMN`은
+  name·property·order의 복합 변경을 한 단계에서 증명한다. 매 단계의 최소 edit 재현, source/schema hash,
+  semantic diff closure와 unrelated comment·metadata·partial·view byte 보존을 확인한다.
 - Compact CRLF corpus뿐 아니라 143-table fidelity fixture의 대표 edit에서도 target table 밖 bytes와
   `143/86/4/15/7/573` inventory가 유지되며, test-only unexpected edit는 semantic mismatch로 rollback되어야 한다.

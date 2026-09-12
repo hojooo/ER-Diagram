@@ -328,7 +328,7 @@ function AppShell() {
       </a>
       {canvasWorkspace ? null : (
         <header className="border-b border-slate-800 bg-slate-950/95">
-          <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-5 py-4 sm:px-8">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-4 sm:px-8">
             <div>
               <Link
                 className="text-lg font-semibold tracking-tight text-white no-underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
@@ -338,7 +338,7 @@ function AppShell() {
               </Link>
               <p className="mt-1 text-xs text-slate-400">{messages["app.tagline"]}</p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
               <LanguageSelect />
               <span className="rounded-full border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-300">
                 {messages["app.singleUser"]}

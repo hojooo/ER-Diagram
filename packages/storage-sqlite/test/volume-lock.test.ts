@@ -122,7 +122,7 @@ describe("SQLite volume lifecycle lock", () => {
 
     try {
       await expect(createSqliteVolumeBackup({ database, output: backup })).resolves.toMatchObject({
-        manifest: { database: { storageSchemaVersion: 2 } },
+        manifest: { database: { storageSchemaVersion: 3 } },
       });
       await expect(planSqliteVolumeRestore({ backup, database })).resolves.toMatchObject({
         operation: "RESTORE",

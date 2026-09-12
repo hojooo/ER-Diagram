@@ -64,7 +64,7 @@ export function VisualSchemaInspector({
   const activeDraft = activeAction
     ? createInitialVisualDraft(graph, selection, activeAction)
     : null;
-  const busy = isBusy(commandSnapshot) || interactionDisabled;
+  const busy = isVisualCommandSessionBusy(commandSnapshot) || interactionDisabled;
   const activeActionLabel = activeAction ? visualActionLabel(graph, activeAction, messages) : null;
 
   useEffect(() => {
@@ -219,7 +219,7 @@ export function VisualSchemaInspector({
         </p>
       ) : null}
 
-      <CommandStatusPanel
+      <VisualCommandStatusPanel
         snapshot={commandSnapshot}
         fallbackRange={selection ? (graph.sourceMap[selection.elementKey] ?? null) : null}
         sourceNavigationEnabled={sourceNavigationEnabled}
@@ -241,7 +241,7 @@ export function VisualSchemaInspector({
   );
 }
 
-function CommandStatusPanel({
+export function VisualCommandStatusPanel({
   snapshot,
   fallbackRange,
   sourceNavigationEnabled,
@@ -260,7 +260,7 @@ function CommandStatusPanel({
 }) {
   const { messages } = useUiLocale();
   if (snapshot.status === "IDLE") return null;
-  if (isBusy(snapshot)) {
+  if (isVisualCommandSessionBusy(snapshot)) {
     return (
       <p
         className="mt-4 rounded-lg border border-cyan-400/30 bg-cyan-950/30 p-3 text-sm text-cyan-100"
@@ -554,12 +554,8 @@ function visualActionLabel(
       return messages["visual.action.deleteTable"];
     case "CREATE_COLUMN":
       return messages["visual.action.createColumn"];
-    case "UPDATE_COLUMN":
-      return messages["visual.action.updateColumn"];
-    case "RENAME_COLUMN":
-      return messages["visual.action.renameColumn"];
-    case "REORDER_COLUMN":
-      return messages["visual.action.reorderColumn"];
+    case "ALTER_COLUMN":
+      return messages["visual.action.alterColumn"];
     case "DELETE_COLUMN":
       return messages["visual.action.deleteColumn"];
     case "CREATE_REFERENCE":
@@ -593,7 +589,7 @@ function visualActionLabel(
   }
 }
 
-function isBusy(snapshot: VisualCommandSessionSnapshot): boolean {
+export function isVisualCommandSessionBusy(snapshot: VisualCommandSessionSnapshot): boolean {
   return (
     snapshot.status === "FLUSHING_SOURCE" ||
     snapshot.status === "FLUSHING_LAYOUT" ||
@@ -606,11 +602,7 @@ function diagnosticIdentity(diagnostic: Diagnostic): string {
   return `${diagnostic.code}:${diagnostic.message}:${range?.filepath ?? "none"}:${range?.startOffset ?? "none"}:${range?.endOffset ?? "none"}`;
 }
 
-const actionButtonClass =
-  "min-h-10 max-w-full whitespace-normal break-words rounded-lg border border-cyan-400/40 px-3 text-center text-sm font-semibold text-cyan-100 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50 aria-pressed:bg-cyan-950";
-const dangerButtonClass =
-  "min-h-10 max-w-full whitespace-normal break-words rounded-lg border border-red-400/50 px-3 text-center text-sm font-semibold text-red-100 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-300 disabled:cursor-not-allowed disabled:opacity-50";
-const primaryButtonClass =
-  "min-h-10 max-w-full whitespace-normal break-words rounded-lg bg-cyan-300 px-4 text-center text-sm font-bold text-slate-950 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300";
-const secondaryButtonClass =
-  "min-h-10 max-w-full whitespace-normal break-words rounded-lg border border-slate-600 px-3 text-center text-sm font-semibold text-slate-100 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50";
+const actionButtonClass = "ui-button ui-button--action";
+const dangerButtonClass = "ui-button ui-button--danger";
+const primaryButtonClass = "ui-button ui-button--primary";
+const secondaryButtonClass = "ui-button";

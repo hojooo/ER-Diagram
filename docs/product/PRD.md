@@ -381,7 +381,8 @@ project나 artifact를 만들지 않는다. Replace는 이미 저장된 current 
 
 ### 10.5 Diagram에서 schema 편집
 
-1. 사용자가 table·column·reference·index·constraint command를 입력한다.
+1. 사용자가 table·column·reference·index·constraint command를 입력한다. Column 이름·속성·순서의 한 번 편집은
+   하나의 `ALTER_COLUMN`으로 제출한다.
 2. app은 current draft가 valid이고 expected revision이 일치하는지 확인한다.
 3. source map을 사용해 최소 `TextEdit` 집합을 생성한다.
 4. edit를 memory에 적용한 뒤 전체 DBML을 재파싱한다.
@@ -684,7 +685,7 @@ view는 변경하지 않는다.
 | ID | 우선순위 | 요구사항 | 수용 기준 |
 | --- | --- | --- | --- |
 | `EDIT-001` | P0 | diagram에서 table을 생성·rename·수정·삭제한다. | command 후 DBML 재파싱과 expected semantic diff가 성공한다. |
-| `EDIT-002` | P0 | column을 생성·rename·reorder·수정·삭제한다. | name, type, nullability, PK, unique, increment, default, note를 표준 DBML로 표현한다. |
+| `EDIT-002` | P0 | column을 생성·원자 변경·삭제한다. | `ALTER_COLUMN` 하나로 name, type, nullability, PK, unique, increment, default, note와 order를 함께 적용하거나 전체 rollback한다. |
 | `EDIT-003` | P0 | relationship를 생성·수정·삭제한다. | endpoint, cardinality, composite columns, `onDelete`, `onUpdate`를 검증한다. |
 | `EDIT-004` | P0 | basic index와 key/check constraint를 편집한다. | DBML 표준으로 표현 가능한 범위만 form에서 활성화한다. |
 | `EDIT-005` | P0 | table의 group membership과 `DiagramView` visibility를 편집한다. | official transform API가 있는 경우 우선 사용하고 source를 재검증한다. |
@@ -699,12 +700,12 @@ view는 변경하지 않는다.
 Visual schema write의 wire contract는 `commandId`, 양의 `expectedSchemaRevisionNo`와 `kind`를 공통
 envelope로 갖는 strict `VisualCommand` discriminated union이다. Project ID는 HTTP path에서 전달하고
 `expectedSchemaHash`는 authoritative server parse에서 계산하므로 command payload에 중복하지 않는다.
-P0 command catalog는 다음 20종으로 고정한다.
+P0 command catalog는 다음 18종으로 고정한다.
 
 | 영역 | Command |
 | --- | --- |
 | Table | `CREATE_TABLE`, `UPDATE_TABLE`, `RENAME_TABLE`, `DELETE_TABLE` |
-| Column | `CREATE_COLUMN`, `UPDATE_COLUMN`, `RENAME_COLUMN`, `REORDER_COLUMN`, `DELETE_COLUMN` |
+| Column | `CREATE_COLUMN`, `ALTER_COLUMN`, `DELETE_COLUMN` |
 | Reference | `CREATE_REFERENCE`, `UPDATE_REFERENCE`, `DELETE_REFERENCE` |
 | Index | `CREATE_INDEX`, `UPDATE_INDEX`, `DELETE_INDEX` |
 | Check | `CREATE_CHECK`, `UPDATE_CHECK`, `DELETE_CHECK` |
@@ -712,10 +713,20 @@ P0 command catalog는 다음 20종으로 고정한다.
 | View | `UPDATE_DIAGRAM_VIEW` |
 
 Create command는 시각적으로 편집 가능한 값을 모두 명시하고 update command는 non-empty `changes`
-patch만 받는다. Table·column rename은 stable key가 바뀌는 효과를 숨기지 않도록 별도 command로
-분리한다. Group membership은 add/remove delta이며 `DiagramView` filter는 `[]`(전체 표시), non-empty
-array(지정 항목만 표시), `null`(전체 숨김)의 tri-state를 유지한다. Table schema 이동, alias, custom
-metadata와 partial membership은 P0 visual command 범위 밖이며 source에서만 편집한다.
+patch만 받는다. Table rename은 stable key가 바뀌는 효과를 숨기지 않도록 별도 command로 유지한다.
+Column은 `ALTER_COLUMN`의 optional `newName`, non-empty `changes`, `beforeColumnKey` 중 하나 이상을
+명시한다. 세 영역은 변경 전 graph의 target·anchor key를 기준으로 한 번 계획하고, 한 source edit 집합과
+한 번의 full reparse·semantic verification으로 전부 적용하거나 전부 rollback한다. Group membership은
+add/remove delta이며 `DiagramView` filter는 `[]`(전체 표시), non-empty array(지정 항목만 표시),
+`null`(전체 숨김)의 tri-state를 유지한다. Table schema 이동, alias, custom metadata와 partial membership은
+P0 visual command 범위 밖이며 source에서만 편집한다.
+
+`ALTER_COLUMN`에서 일부 요청이 현재 의미와 같으면 실제로 다른 이름·속성·순서만 source에 적용한다.
+모든 요청이 같으면 source, schema/layout revision과 `updatedAt`을 유지하고 durable no-op receipt만 저장한다.
+실제 rename이 확인된 경우에만 structural reference/index key를 바꾸고 검증된 exact HIGH rename evidence로
+layout key를 한 번 migration한다. Public HTTP contract는 이전 `UPDATE_COLUMN`, `RENAME_COLUMN`,
+`REORDER_COLUMN`을 받지 않는다. Pre-release database의 과거 receipt는 replay/idempotency evidence로
+읽기 전용 보존하며 새 command catalog로 변환하지 않는다.
 
 Group membership delta는 current graph에 대해 strict하게 적용한다. 이미 포함된 table의 add, 포함되지
 않은 table의 remove 또는 다른 group에 속한 table의 add는 source를 바꾸지 않고 membership conflict로
@@ -746,18 +757,23 @@ Visual command HTTP adapter는 `POST /api/v1/projects/:projectId/visual-commands
 반환한다. 따라서 최초 적용 이후 다른 revision이 생성된 뒤 replay하면 current state revision과 applied
 revision이 다를 수 있다. 정상적으로 검증된 command의 `commandId`는 `x-command-id`로 반환한다.
 
-제품 Web은 canvas gesture 대신 selection-driven `Visual schema inspector`에서 위 20종 command를 모두
+제품 Web은 selection-driven `Visual schema inspector`에서 위 18종 command를 모두
 제공한다. Inspector는 선택된 table, column, reference, group과 current source-defined `DiagramView`에
 적용 가능한 action만 노출하고 index/check는 selected table의 nested inventory에서 편집한다. Column type
 입력은 project dialect의 built-in type과 current graph enum을 제안하되 native `datalist`에 없는 raw DBML
 type을 지우거나 client validation만으로 차단하지 않는다. Create·update·delete form은 contract payload를
-그대로 만들며 서버가 반환한 source와 graph를 Web에서 source patch로 재현하지 않는다.
+그대로 만들며 서버가 반환한 source와 graph를 Web에서 source patch로 재현하지 않는다. Inspector의 column
+action은 이름·속성·순서를 한 form에서 비교해 정확히 한 `ALTER_COLUMN`만 만든다. Canvas의 visible column
+row를 double-click하면 node 크기를 바꾸지 않는 fixed inline editor를 열고 Apply 또는 `Ctrl/Cmd+Enter`에서만
+같은 command flow를 실행한다. Blur나 pane click은 저장·닫기를 수행하지 않고, `Escape`는 취소한다. Partial
+column은 inline mutation을 열지 않고 source fallback을 제공한다. Outline·Inspector는 모든 column edit의
+canonical keyboard 경로로 유지한다.
 
 Visual command 제출 전에는 source debounce·queued/in-flight save와 모든 hydrated layout write를 순서대로
 flush한다. Flush 결과가 `SAVED + VALID + CURRENT_DRAFT`가 아니거나 form을 연 뒤 semantic hash가 바뀌면
 API를 호출하지 않고 recovery 또는 명시적 재검토를 요구한다. 성공 시 response의 authoritative
 `ProjectState`로 Monaco model, source session, query cache와 revision을 교체하고 parser worker가 새 source를
-검증한 뒤 diagram을 갱신한다. Explicit rename이 server-side layout migration을 수행했다면 hydrated layout을
+검증한 뒤 diagram을 갱신한다. Verified rename evidence가 server-side layout migration을 수행했다면 hydrated layout을
 다시 읽고 client rename recovery를 중복 적용하지 않는다.
 
 Network 또는 response-contract failure처럼 commit 여부를 알 수 없는 경우에는 exact command payload와
@@ -965,9 +981,11 @@ Table·column patch는 quoted identifier, string, triple-quoted note, backtick e
 bracket을 구분하는 scanner로 target fragment를 해석한다. 기존 setting을 변경할 때는 해당 value token만
 교체해 key spelling, separator spacing, quote style과 unrelated metadata/check를 유지한다. 구조적 table
 rename은 official `renameTable` 결과를 허용된 declaration·Ref·TableGroup·DiagramView range의 최소 edit로
-재구성하고, column rename은 parser-resolved Ref endpoint와 column index term만 함께 바꾼다. Raw
-expression 의존성이나 외부 structural dependency를 안전하게 갱신할 수 없으면 rename/delete를 source
-editor로 돌려보내며 자동 cascade하지 않는다.
+재구성한다. `ALTER_COLUMN`은 reorder가 없으면 요청 token만 바꾸고, reorder가 있으면 trailing inline
+comment를 포함한 원본 column span을 한 번 이동하면서 name·setting 변경을 같은 fragment에 반영한다. 실제
+column rename만 parser-resolved Ref endpoint와 column index term을 함께 바꾼다. Raw expression 의존성이나
+외부 structural dependency를 안전하게 갱신할 수 없으면 rename/delete를 source editor로 돌려보내며 자동
+cascade하지 않는다.
 
 `TablePartial`에서 주입된 column은 local declaration처럼 update·rename·delete·reorder하지 않으며 reorder
 anchor로도 사용하지 않는다. 의미가 이미 같은 update·rename·reorder는 source edit와 semantic diff가 없는
@@ -1133,6 +1151,10 @@ Preview conversion 실패도 `FAILED` row로 보존한다. 성공 Apply에서만
 
 Receipt는 schema revision FK를 두지 않아 retention 후에도 replay할 수 있고 project 삭제 시 cascade된다.
 Diagnostic, DBML source와 command payload 본문은 receipt에 중복 저장하지 않는다.
+Storage schema v3는 public 18종 command와 historical receipt kind를 분리한다. 기존
+`UPDATE_COLUMN`·`RENAME_COLUMN`·`REORDER_COLUMN` receipt row는 byte-identical evidence로 유지하지만 신규
+HTTP command로는 받을 수 없다. 신규 `ALTER_COLUMN`이 같은 command ID를 다른 payload hash로 재사용하면
+legacy kind 여부와 관계없이 idempotency conflict로 차단한다.
 
 ### 14.6 파생 데이터
 
@@ -1248,7 +1270,7 @@ virtualization, viewport culling, label LOD, edge simplification을 순서대로
   전송하지 않는다. 저장소가 없거나 손상됐거나 접근이 실패하면 한국어로 fallback한다.
 - Locale 전환은 current route, Query cache, Monaco model, diagram, source·layout session과 visual form draft를
   remount·초기화하지 않는다.
-- Project Home, Canvas workspace, Source·Outline·Inspector, 20종 visual command, history, SQL import·export,
+- Project Home, Canvas workspace, Source·Outline·Inspector, 18종 visual command, history, SQL import·export,
   portable bundle, startup·route·error과 접근성 문구는 한국어·영어 catalog를 동일한 계약으로 제공한다.
 - Project·schema name, DBML·SQL source, note·comment, hash, code, correlation ID와 download byte는
   번역하지 않는다. Parser·server diagnostic message도 정확성을 위해 원문을 유지하고 제목,

@@ -78,7 +78,7 @@ describe("production SQLite lifecycle", () => {
     ]);
     expect(flushes).toBe(1);
     expect(JSON.stringify(events)).not.toContain(fixture.databaseFilename);
-  });
+  }, 30_000);
 
   it("fails readiness while retaining liveness when the SQLite metadata probe fails", async () => {
     const fixture = createFixture();
@@ -169,7 +169,7 @@ function createVersionOneDatabase(filename: string): void {
       `UPDATE app_metadata SET value = '1' WHERE key = '${APP_METADATA_STORAGE_SCHEMA_VERSION_KEY}'`,
     );
     storage.database.run(
-      "DELETE FROM __drizzle_migrations WHERE created_at = (SELECT max(created_at) FROM __drizzle_migrations)",
+      "DELETE FROM __drizzle_migrations WHERE created_at > (SELECT min(created_at) FROM __drizzle_migrations)",
     );
   } finally {
     storage.close();

@@ -1,5 +1,7 @@
 .git
 .github
+.agents
+**/.impeccable
 .pnpm-store
 **/node_modules
 **/dist

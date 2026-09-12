@@ -39,8 +39,8 @@ fallback하며 `/api`, `/health`, non-GET과 일반 asset miss는 JSON 404 경�
 밖 path는 차단하며 ADR 0008의 CSP와 security header를 static, API와 error response에 동일 적용한다. Operational
 log에는 raw asset path 대신 `WEB_STATIC` operation만 기록한다.
 
-Entrypoint는 Web root와 `index.html`을 먼저 확인한다. 새 database는 storage schema v2로 초기화하지만 기존 database는
-whole-volume validator가 current schema v2와 exact migration history를 확인한 경우에만 연다. Older/future/divergent
+Entrypoint는 Web root와 `index.html`을 먼저 확인한다. 새 database는 storage schema v3로 초기화하지만 기존 database는
+whole-volume validator가 current schema v3와 exact migration history를 확인한 경우에만 연다. Older/future/divergent
 database는 기본적으로 자동 migration하지 않고 `SERVER_STORAGE_MIGRATION_REQUIRED`로 종료한다. ADR 0012의 explicit
 `APPLY_WITH_BACKUP`만 ADR 0010의 verified plan/apply를 startup에 연결한다. Strict environment, process lock과 signal
 lifecycle도 ADR 0012를 따른다.

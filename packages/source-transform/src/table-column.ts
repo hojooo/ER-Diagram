@@ -1,5 +1,9 @@
 import { renameTable } from "@dbml/core";
-import type { VisualColumnDefault, VisualCommand } from "@er-diagram/contracts";
+import type {
+  VisualColumnChanges,
+  VisualColumnDefault,
+  VisualCommand,
+} from "@er-diagram/contracts";
 import {
   type ColumnDefaultNode,
   type ColumnNode,
@@ -62,9 +66,7 @@ const TABLE_COLUMN_COMMAND_KINDS = new Set<VisualCommand["kind"]>([
   "RENAME_TABLE",
   "DELETE_TABLE",
   "CREATE_COLUMN",
-  "UPDATE_COLUMN",
-  "RENAME_COLUMN",
-  "REORDER_COLUMN",
+  "ALTER_COLUMN",
   "DELETE_COLUMN",
 ]);
 
@@ -74,9 +76,7 @@ type TableColumnCommandKind =
   | "RENAME_TABLE"
   | "DELETE_TABLE"
   | "CREATE_COLUMN"
-  | "UPDATE_COLUMN"
-  | "RENAME_COLUMN"
-  | "REORDER_COLUMN"
+  | "ALTER_COLUMN"
   | "DELETE_COLUMN";
 
 export type TableColumnVisualCommand = Extract<VisualCommand, { kind: TableColumnCommandKind }>;
@@ -96,6 +96,7 @@ export async function transformTableColumnCommand(
     preflight: preflightCommand,
     isSemanticNoOp,
     planEdits: planCommandEdits,
+    completeSemanticDiff,
     verifySemantics: verifyCommandSemantics,
   });
 }
@@ -164,7 +165,11 @@ function preflightCommand(graph: SchemaGraph, command: TableColumnVisualCommand)
     return protectedPartialTarget(graph, targetColumn.injectedFrom, "column");
   }
 
-  if (command.kind === "REORDER_COLUMN" && command.beforeColumnKey !== null) {
+  if (
+    command.kind === "ALTER_COLUMN" &&
+    command.beforeColumnKey !== undefined &&
+    command.beforeColumnKey !== null
+  ) {
     const anchor = targetTable.columns.find((column) => column.key === command.beforeColumnKey);
     if (!anchor) {
       const belongsElsewhere = graph.tables.some((table) =>
@@ -182,7 +187,11 @@ function preflightCommand(graph: SchemaGraph, command: TableColumnVisualCommand)
     }
   }
 
-  if (command.kind === "RENAME_COLUMN") {
+  if (
+    command.kind === "ALTER_COLUMN" &&
+    command.newName !== undefined &&
+    command.newName !== targetColumn.name
+  ) {
     const newKey = qualifiedElementKey(
       "column",
       targetTable.schemaName,
@@ -240,26 +249,13 @@ function planCommandEdits(
       };
     case "CREATE_COLUMN":
       return planCreateColumn(source, requireTable(graph, command.targetTableKey), command);
-    case "UPDATE_COLUMN":
-      return planUpdateColumn(
-        source,
-        requireColumn(requireTable(graph, command.targetTableKey), command.targetColumnKey),
-        command,
-      );
-    case "RENAME_COLUMN":
-      return planRenameColumn(
+    case "ALTER_COLUMN":
+      return planAlterColumn(
         source,
         graph,
         requireTable(graph, command.targetTableKey),
         requireColumn(requireTable(graph, command.targetTableKey), command.targetColumnKey),
         command,
-      );
-    case "REORDER_COLUMN":
-      return planReorderColumn(
-        source,
-        requireTable(graph, command.targetTableKey),
-        requireColumn(requireTable(graph, command.targetTableKey), command.targetColumnKey),
-        command.beforeColumnKey,
       );
     case "DELETE_COLUMN": {
       const target = requireColumn(
@@ -480,44 +476,51 @@ function planCreateColumn(
   };
 }
 
-function planUpdateColumn(
+function rewriteColumnDeclaration(
   source: string,
   column: ColumnNode,
-  command: Extract<TableColumnVisualCommand, { kind: "UPDATE_COLUMN" }>,
-): EditPlan {
+  command: Extract<TableColumnVisualCommand, { kind: "ALTER_COLUMN" }>,
+): { ok: true; original: string; rewritten: string } | Extract<EditPlan, { ok: false }> {
+  const fail = (message: string): Extract<EditPlan, { ok: false }> =>
+    planFailure("VISUAL_SOURCE_RANGE_INVALID", message);
   const original = source.slice(column.range.startOffset, column.range.endOffset);
   let rewritten = original;
   let parsed = parseColumnDeclaration(rewritten);
-  if (!parsed) return invalidRange("The target column declaration could not be resolved.");
-  if (command.changes.type !== undefined) {
-    rewritten = `${rewritten.slice(0, parsed.typeSpan.startOffset)}${command.changes.type.trim()}${rewritten.slice(parsed.typeSpan.endOffset)}`;
+  if (!parsed) return fail("The target column declaration could not be resolved.");
+
+  if (command.newName !== undefined && command.newName !== column.name) {
+    const oldDeclaration = rewritten.slice(parsed.nameSpan.startOffset, parsed.nameSpan.endOffset);
+    rewritten = `${rewritten.slice(0, parsed.nameSpan.startOffset)}${renderIdentifier(command.newName, isQuotedIdentifier(oldDeclaration))}${rewritten.slice(parsed.nameSpan.endOffset)}`;
     parsed = parseColumnDeclaration(rewritten);
-    if (!parsed) return invalidRange("The updated column type could not be represented safely.");
+    if (!parsed) return fail("The renamed column declaration could not be represented safely.");
+  }
+
+  const changes = command.changes;
+  if (changes?.type !== undefined) {
+    rewritten = `${rewritten.slice(0, parsed.typeSpan.startOffset)}${changes.type.trim()}${rewritten.slice(parsed.typeSpan.endOffset)}`;
+    parsed = parseColumnDeclaration(rewritten);
+    if (!parsed) return fail("The updated column type could not be represented safely.");
   }
 
   const mutations: Record<string, SettingMutation> = {};
-  if (command.changes.primaryKey !== undefined)
-    mutations.pk = command.changes.primaryKey ? "pk" : null;
-  if (command.changes.unique !== undefined)
-    mutations.unique = command.changes.unique ? "unique" : null;
-  if (command.changes.notNull !== undefined)
-    mutations["not null"] = command.changes.notNull ? "not null" : null;
-  if (command.changes.default !== undefined) {
-    const rendered = renderDefault(command.changes.default);
+  if (changes?.primaryKey !== undefined) mutations.pk = changes.primaryKey ? "pk" : null;
+  if (changes?.unique !== undefined) mutations.unique = changes.unique ? "unique" : null;
+  if (changes?.notNull !== undefined) mutations["not null"] = changes.notNull ? "not null" : null;
+  if (changes?.default !== undefined) {
+    const rendered = renderDefault(changes.default);
     if (!rendered.ok) return rendered;
     if (rendered.value === null) {
       mutations.default = null;
-    } else if (command.changes.default?.type === "string") {
-      mutations.default = stringSettingMutation("default", command.changes.default.value);
+    } else if (changes.default?.type === "string") {
+      mutations.default = stringSettingMutation("default", changes.default.value);
     } else {
       mutations.default = valueSettingMutation("default", rendered.value);
     }
   }
-  if (command.changes.increment !== undefined)
-    mutations.increment = command.changes.increment ? "increment" : null;
-  if (command.changes.note !== undefined) {
-    mutations.note =
-      command.changes.note === null ? null : stringSettingMutation("note", command.changes.note);
+  if (changes?.increment !== undefined)
+    mutations.increment = changes.increment ? "increment" : null;
+  if (changes?.note !== undefined) {
+    mutations.note = changes.note === null ? null : stringSettingMutation("note", changes.note);
   }
   const settingsRewritten = rewriteSettings(
     rewritten,
@@ -525,35 +528,73 @@ function planUpdateColumn(
     parsed.typeSpan.endOffset,
     mutations,
   );
-  if (settingsRewritten === null) return invalidRange("Duplicate column settings are ambiguous.");
+  if (settingsRewritten === null) return fail("Duplicate column settings are ambiguous.");
   rewritten = settingsRewritten;
-  const edits = deriveMinimalTextEdits(original, rewritten, column.range.startOffset);
-  return edits
-    ? { ok: true, edits }
-    : unsafeTransform("The column declaration is too large to patch safely.");
+  return { ok: true, original, rewritten };
 }
 
-function planRenameColumn(
+function planAlterColumn(
   source: string,
   graph: SchemaGraph,
   table: TableNode,
   column: ColumnNode,
-  command: Extract<TableColumnVisualCommand, { kind: "RENAME_COLUMN" }>,
+  command: Extract<TableColumnVisualCommand, { kind: "ALTER_COLUMN" }>,
 ): EditPlan {
-  const fragment = source.slice(column.range.startOffset, column.range.endOffset);
-  const declaration = parseColumnDeclaration(fragment);
-  if (!declaration) return invalidRange("The target column declaration could not be resolved.");
-  const oldDeclaration = fragment.slice(
-    declaration.nameSpan.startOffset,
-    declaration.nameSpan.endOffset,
+  const declaration = rewriteColumnDeclaration(source, column, command);
+  if (!declaration.ok) return declaration;
+  const edits: TextEdit[] = [];
+  const beforeColumnKey = command.beforeColumnKey;
+  const desiredOrder =
+    beforeColumnKey === undefined
+      ? table.columns.map((candidate) => candidate.key)
+      : reorderedColumnKeys(table, column.key, beforeColumnKey);
+  const reorderChanged = !arraysEqual(
+    table.columns.map((candidate) => candidate.key),
+    desiredOrder,
   );
-  const edits: TextEdit[] = [
-    {
-      startOffset: column.range.startOffset + declaration.nameSpan.startOffset,
-      endOffset: column.range.startOffset + declaration.nameSpan.endOffset,
-      newText: renderIdentifier(command.newName, isQuotedIdentifier(oldDeclaration)),
-    },
-  ];
+
+  if (reorderChanged) {
+    const targetSpan = lineSpanForRange(source, column.range);
+    const prefix = source.slice(targetSpan.startOffset, column.range.startOffset);
+    const suffix = source.slice(column.range.endOffset, targetSpan.endOffset);
+    const targetText = `${prefix}${declaration.rewritten}${suffix}`;
+    let insertionOffset: number;
+    if (beforeColumnKey !== undefined && beforeColumnKey !== null) {
+      const anchor = requireColumn(table, beforeColumnKey);
+      insertionOffset = lineStartOffset(source, anchor.range.startOffset);
+    } else {
+      const remainingUnits = effectiveColumnSourceUnits(table).filter(
+        (range) =>
+          range.startOffset !== column.range.startOffset ||
+          range.endOffset !== column.range.endOffset,
+      );
+      const last = remainingUnits
+        .toSorted((left, right) => left.endOffset - right.endOffset)
+        .at(-1);
+      insertionOffset = last ? lineEndOffset(source, last.endOffset, true) : targetSpan.startOffset;
+    }
+    if (insertionOffset >= targetSpan.startOffset && insertionOffset <= targetSpan.endOffset) {
+      return invalidRange("The reorder destination overlaps the target column declaration.");
+    }
+    edits.push(
+      { startOffset: targetSpan.startOffset, endOffset: targetSpan.endOffset, newText: "" },
+      { startOffset: insertionOffset, endOffset: insertionOffset, newText: targetText },
+    );
+  } else {
+    const declarationEdits = deriveMinimalTextEdits(
+      declaration.original,
+      declaration.rewritten,
+      column.range.startOffset,
+    );
+    if (!declarationEdits) {
+      return unsafeTransform("The column declaration is too large to patch safely.");
+    }
+    edits.push(...declarationEdits);
+  }
+
+  if (command.newName === undefined || command.newName === column.name) {
+    return { ok: true, edits };
+  }
 
   for (const reference of graph.references) {
     for (const endpoint of reference.endpoints) {
@@ -597,39 +638,6 @@ function planRenameColumn(
   return { ok: true, edits };
 }
 
-function planReorderColumn(
-  source: string,
-  table: TableNode,
-  column: ColumnNode,
-  beforeColumnKey: SchemaElementKey | null,
-): EditPlan {
-  const targetSpan = lineSpanForRange(source, column.range);
-  const targetText = source.slice(targetSpan.startOffset, targetSpan.endOffset);
-  let insertionOffset: number;
-  if (beforeColumnKey !== null) {
-    const anchor = requireColumn(table, beforeColumnKey);
-    insertionOffset = lineStartOffset(source, anchor.range.startOffset);
-  } else {
-    const remainingUnits = effectiveColumnSourceUnits(table).filter(
-      (range) =>
-        range.startOffset !== column.range.startOffset ||
-        range.endOffset !== column.range.endOffset,
-    );
-    const last = remainingUnits.toSorted((left, right) => left.endOffset - right.endOffset).at(-1);
-    insertionOffset = last ? lineEndOffset(source, last.endOffset, true) : targetSpan.startOffset;
-  }
-  if (insertionOffset >= targetSpan.startOffset && insertionOffset <= targetSpan.endOffset) {
-    return invalidRange("The reorder destination overlaps the target column declaration.");
-  }
-  return {
-    ok: true,
-    edits: [
-      { startOffset: targetSpan.startOffset, endOffset: targetSpan.endOffset, newText: "" },
-      { startOffset: insertionOffset, endOffset: insertionOffset, newText: targetText },
-    ],
-  };
-}
-
 function isSemanticNoOp(graph: SchemaGraph, command: TableColumnVisualCommand): boolean {
   if (command.kind === "UPDATE_TABLE") {
     const table = graph.tables.find((candidate) => candidate.key === command.targetTableKey);
@@ -646,27 +654,65 @@ function isSemanticNoOp(graph: SchemaGraph, command: TableColumnVisualCommand): 
       graph.tables.find((table) => table.key === command.targetTableKey)?.name === command.newName
     );
   }
-  if (command.kind === "UPDATE_COLUMN") {
+  if (command.kind === "ALTER_COLUMN") {
     const table = graph.tables.find((candidate) => candidate.key === command.targetTableKey);
     const column = table?.columns.find((candidate) => candidate.key === command.targetColumnKey);
-    return Boolean(column && columnMatchesChanges(column, command.changes));
-  }
-  if (command.kind === "RENAME_COLUMN") {
+    if (!table || !column) return false;
     return (
-      graph.tables
-        .find((table) => table.key === command.targetTableKey)
-        ?.columns.find((column) => column.key === command.targetColumnKey)?.name === command.newName
-    );
-  }
-  if (command.kind === "REORDER_COLUMN") {
-    const table = graph.tables.find((candidate) => candidate.key === command.targetTableKey);
-    if (!table) return false;
-    return arraysEqual(
-      table.columns.map((column) => column.key),
-      reorderedColumnKeys(table, command.targetColumnKey, command.beforeColumnKey),
+      (command.newName === undefined || command.newName === column.name) &&
+      (command.changes === undefined || columnMatchesChanges(column, command.changes)) &&
+      (command.beforeColumnKey === undefined ||
+        arraysEqual(
+          table.columns.map((candidate) => candidate.key),
+          reorderedColumnKeys(table, command.targetColumnKey, command.beforeColumnKey),
+        ))
     );
   }
   return false;
+}
+
+function completeSemanticDiff(
+  before: SchemaGraph,
+  after: SchemaGraph,
+  command: TableColumnVisualCommand,
+  diff: SchemaGraphDiff,
+): SchemaGraphDiff {
+  if (command.kind !== "ALTER_COLUMN" || !hasActualColumnRename(before, command)) return diff;
+  if (diff.renameCandidates.length > 0) return diff;
+  const afterKey = renameAfterKey(before, command);
+  const beforeTable = before.tables.find((table) => table.key === command.targetTableKey);
+  const afterTable = after.tables.find((table) => table.key === command.targetTableKey);
+  if (
+    !beforeTable?.columns.some((column) => column.key === command.targetColumnKey) ||
+    !afterTable?.columns.some((column) => column.key === afterKey)
+  ) {
+    return diff;
+  }
+  return {
+    changes: diff.changes,
+    renameCandidates: [
+      {
+        elementKind: "column",
+        beforeKey: command.targetColumnKey,
+        afterKey,
+        beforeParentKey: command.targetTableKey,
+        afterParentKey: command.targetTableKey,
+        confidence: "HIGH",
+        reason: "UNIQUE_EXACT_STRUCTURE",
+      },
+    ],
+  };
+}
+
+function hasActualColumnRename(
+  graph: SchemaGraph,
+  command: Extract<TableColumnVisualCommand, { kind: "ALTER_COLUMN" }>,
+): boolean {
+  if (command.newName === undefined) return false;
+  const column = graph.tables
+    .find((table) => table.key === command.targetTableKey)
+    ?.columns.find((candidate) => candidate.key === command.targetColumnKey);
+  return column !== undefined && column.name !== command.newName;
 }
 
 function verifyCommandSemantics(
@@ -678,7 +724,10 @@ function verifyCommandSemantics(
   const allowed = allowedChangeKeys(before, after, command);
   if (!allowed) return false;
   if (diff.changes.some((change) => !allowed.has(change.key))) return false;
-  if (command.kind === "RENAME_TABLE" || command.kind === "RENAME_COLUMN") {
+  const expectedRename =
+    command.kind === "RENAME_TABLE" ||
+    (command.kind === "ALTER_COLUMN" && hasActualColumnRename(before, command));
+  if (expectedRename) {
     const candidate = diff.renameCandidates[0];
     const expectedAfterKey = renameAfterKey(before, command);
     if (
@@ -687,7 +736,8 @@ function verifyCommandSemantics(
       candidate.beforeKey !==
         (command.kind === "RENAME_TABLE" ? command.targetTableKey : command.targetColumnKey) ||
       candidate.afterKey !== expectedAfterKey ||
-      candidate.confidence !== "HIGH"
+      candidate.confidence !== "HIGH" ||
+      candidate.reason !== "UNIQUE_EXACT_STRUCTURE"
     ) {
       return false;
     }
@@ -755,30 +805,8 @@ function verifyCommandSemantics(
           hasChangedField(diff.changes, command.targetTableKey, "columnOrder"),
       );
     }
-    case "UPDATE_COLUMN": {
-      const column = after.tables
-        .find((table) => table.key === command.targetTableKey)
-        ?.columns.find((candidate) => candidate.key === command.targetColumnKey);
-      return Boolean(
-        column && columnMatchesChanges(column, command.changes) && diff.changes.length > 0,
-      );
-    }
-    case "RENAME_COLUMN":
-      return verifyColumnRename(before, after, command);
-    case "REORDER_COLUMN": {
-      const beforeTable = before.tables.find((table) => table.key === command.targetTableKey);
-      const afterTable = after.tables.find((table) => table.key === command.targetTableKey);
-      return Boolean(
-        beforeTable &&
-          afterTable &&
-          arraysEqual(
-            afterTable.columns.map((column) => column.key),
-            reorderedColumnKeys(beforeTable, command.targetColumnKey, command.beforeColumnKey),
-          ) &&
-          diff.changes.length === 1 &&
-          hasChangedField(diff.changes, command.targetTableKey, "columnOrder"),
-      );
-    }
+    case "ALTER_COLUMN":
+      return verifyAlterColumn(before, after, command);
     case "DELETE_COLUMN":
       return (
         !after.tables.some((table) =>
@@ -817,8 +845,6 @@ function allowedChangeKeys(
         ])
       : null;
   }
-  if (command.kind === "UPDATE_COLUMN") return new Set([command.targetColumnKey]);
-  if (command.kind === "REORDER_COLUMN") return new Set([command.targetTableKey]);
   if (command.kind === "DELETE_COLUMN") {
     const table = before.tables.find((candidate) => candidate.key === command.targetTableKey);
     const column = table?.columns.find((candidate) => candidate.key === command.targetColumnKey);
@@ -859,6 +885,7 @@ function allowedChangeKeys(
     }
     return keys;
   }
+  if (command.kind !== "ALTER_COLUMN") return null;
   const beforeTable = before.tables.find((candidate) => candidate.key === command.targetTableKey);
   const afterTable = after.tables.find((candidate) => candidate.key === command.targetTableKey);
   const afterKey = renameAfterKey(before, command);
@@ -931,18 +958,21 @@ function verifyTableRename(
   );
 }
 
-function verifyColumnRename(
+function verifyAlterColumn(
   before: SchemaGraph,
   after: SchemaGraph,
-  command: Extract<TableColumnVisualCommand, { kind: "RENAME_COLUMN" }>,
+  command: Extract<TableColumnVisualCommand, { kind: "ALTER_COLUMN" }>,
 ): boolean {
   const beforeTable = before.tables.find((table) => table.key === command.targetTableKey);
   const afterTable = after.tables.find((table) => table.key === command.targetTableKey);
   if (!beforeTable || !afterTable) return false;
   const afterKey = renameAfterKey(before, command);
-  const remap = new Map([[command.targetColumnKey, afterKey]]);
+  const remap =
+    afterKey === command.targetColumnKey
+      ? new Map<string, string>()
+      : new Map([[command.targetColumnKey, afterKey]]);
   if (
-    stableJson(tablePayloadShape(beforeTable, command.targetColumnKey, command.newName)) !==
+    stableJson(tablePayloadShape(beforeTable, command)) !==
     stableJson(tablePayloadShape(afterTable))
   ) {
     return false;
@@ -953,33 +983,53 @@ function verifyColumnRename(
   );
 }
 
-function tablePayloadShape(table: TableNode, renamedColumnKey?: string, newName?: string) {
+function tablePayloadShape(
+  table: TableNode,
+  alteration?: Extract<TableColumnVisualCommand, { kind: "ALTER_COLUMN" }>,
+) {
   const names = new Map(table.columns.map((column) => [column.key, column.name]));
-  if (renamedColumnKey && newName) names.set(renamedColumnKey, newName);
+  if (alteration?.newName !== undefined) {
+    names.set(alteration.targetColumnKey, alteration.newName);
+  }
+  const orderedColumnKeys =
+    alteration?.beforeColumnKey === undefined
+      ? table.columns.map((column) => column.key)
+      : reorderedColumnKeys(table, alteration.targetColumnKey, alteration.beforeColumnKey);
+  const columnsByKey = new Map(table.columns.map((column) => [column.key, column]));
   return {
     alias: table.alias,
     note: table.note?.value ?? null,
     color: table.color,
     metadata: table.metadata,
     partialKeys: [...table.partialKeys].toSorted(),
-    columns: table.columns.map((column) => ({
-      name: names.get(column.key) ?? column.name,
-      type: column.type,
-      primaryKey: column.primaryKey,
-      unique: column.unique,
-      notNull: column.notNull,
-      default: column.default,
-      increment: column.increment,
-      note: column.note?.value ?? null,
-      metadata: column.metadata,
-      checks: column.checks.map((check) => ({ name: check.name, expression: check.expression })),
-      injectedFrom: column.injectedFrom
-        ? {
-            partialKey: column.injectedFrom.partialKey,
-            partialElementKey: column.injectedFrom.partialElementKey,
-          }
-        : null,
-    })),
+    columns: orderedColumnKeys.map((key) => {
+      const column = columnsByKey.get(key);
+      if (!column) throw new Error(`Column payload invariant violated for ${key}`);
+      const changes = key === alteration?.targetColumnKey ? alteration.changes : undefined;
+      const changedType =
+        changes?.type === undefined ? null : parseColumnTypeFragment(changes.type);
+      if (changes?.type !== undefined && changedType === null) {
+        throw new Error(`Column type invariant violated for ${key}`);
+      }
+      return {
+        name: names.get(column.key) ?? column.name,
+        type: changedType ?? column.type,
+        primaryKey: changes?.primaryKey ?? column.primaryKey,
+        unique: changes?.unique ?? column.unique,
+        notNull: changes?.notNull ?? column.notNull,
+        default: changes?.default === undefined ? column.default : changes.default,
+        increment: changes?.increment ?? column.increment,
+        note: changes?.note === undefined ? (column.note?.value ?? null) : changes.note,
+        metadata: column.metadata,
+        checks: column.checks.map((check) => ({ name: check.name, expression: check.expression })),
+        injectedFrom: column.injectedFrom
+          ? {
+              partialKey: column.injectedFrom.partialKey,
+              partialElementKey: column.injectedFrom.partialElementKey,
+            }
+          : null,
+      };
+    }),
     indexes: table.indexes
       .map((index) => ({
         name: index.name,
@@ -1138,10 +1188,7 @@ function columnMatchesValue(
   );
 }
 
-function columnMatchesChanges(
-  column: ColumnNode,
-  changes: Extract<TableColumnVisualCommand, { kind: "UPDATE_COLUMN" }>["changes"],
-): boolean {
+function columnMatchesChanges(column: ColumnNode, changes: VisualColumnChanges): boolean {
   return (
     (changes.type === undefined || matchesTypeFragment(column, changes.type)) &&
     (changes.primaryKey === undefined || column.primaryKey === changes.primaryKey) &&
@@ -1351,13 +1398,15 @@ function inferTableChildIndent(source: string, table: TableNode): string | null 
 
 function renameAfterKey(
   before: SchemaGraph,
-  command: Extract<TableColumnVisualCommand, { kind: "RENAME_TABLE" | "RENAME_COLUMN" }>,
+  command: Extract<TableColumnVisualCommand, { kind: "RENAME_TABLE" | "ALTER_COLUMN" }>,
 ): string {
   const table = before.tables.find((candidate) => candidate.key === command.targetTableKey);
   if (!table) return "";
   return command.kind === "RENAME_TABLE"
     ? qualifiedElementKey("table", table.schemaName, command.newName)
-    : qualifiedElementKey("column", table.schemaName, table.name, command.newName);
+    : command.newName === undefined
+      ? command.targetColumnKey
+      : qualifiedElementKey("column", table.schemaName, table.name, command.newName);
 }
 
 function renderQualifiedName(schemaName: string, tableName: string): string {

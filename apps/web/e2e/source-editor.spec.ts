@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
-import { expect, type Page, test } from "./test-fixture.js";
-
 import { createControlledLayoutApi } from "./controlled-layout-api.js";
+import { expect, type Page, test } from "./test-fixture.js";
 
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-0123456789ab";
 const CREATED_AT = "2026-08-27T01:02:03.004Z";
@@ -18,7 +17,7 @@ test("validates and autosaves Monaco source with revision-safe recovery", async 
   const api = await installSourceApi(page);
 
   await page.goto(`/projects/${PROJECT_ID}`);
-  await page.getByRole("button", { name: "Source", exact: true }).click();
+  await page.getByRole("button", { name: /^(Open|Collapse) source and outline$/ }).click();
   const sourcePanel = page.getByText("Canonical DBML source").locator("xpath=ancestor::section[1]");
   const editor = page.locator('section[aria-label="DBML source editor"] .monaco-editor');
   await expect(editor).toBeVisible();

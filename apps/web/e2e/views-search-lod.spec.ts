@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { expect, type Locator, type Page, test } from "./test-fixture.js";
-
 import { createControlledLayoutApi } from "./controlled-layout-api.js";
+import { expect, type Locator, type Page, test } from "./test-fixture.js";
+import { openWorkspaceTab } from "./workspace-panels.js";
 
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-2123456789ab";
 const CREATED_AT = "2026-08-28T01:02:03.004Z";
@@ -68,14 +68,14 @@ test("switches DiagramViews, searches the current view, and preserves revision-s
   const api = await installViewsApi(page);
 
   await page.goto(`/projects/${PROJECT_ID}`);
-  await page.getByRole("button", { name: "Source", exact: true }).click();
+  await page.getByRole("button", { name: /^(Open|Collapse) source and outline$/ }).click();
   const editor = page.getByRole("textbox", { name: "DBML source editor" });
   await expect(page.locator('section[aria-label="DBML source editor"] .monaco-editor')).toBeVisible(
     {
       timeout: 20_000,
     },
   );
-  await page.getByRole("button", { name: "Source", exact: true }).click();
+  await page.getByRole("button", { name: /^(Open|Collapse) source and outline$/ }).click();
   await waitForDiagramLayout(page);
 
   const viewSelector = page.getByRole("combobox", { name: "Diagram view" });
@@ -88,7 +88,11 @@ test("switches DiagramViews, searches the current view, and preserves revision-s
   await expect(page.locator(".react-flow__node-group")).toHaveCount(1);
   await expect(page.locator(".react-flow__node-table")).toHaveCount(2);
   await expect(page.locator(".react-flow__edge")).toHaveCount(1);
-  await expect(page.getByText("2 tables · 1 group · 1 relationship").first()).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Editable ER diagram", exact: true })
+      .getByText("2 tables · 1 group · 1 relationship", { exact: true }),
+  ).toBeVisible();
 
   await detailSelector.selectOption("NAME_ONLY");
   await waitForDiagramLayout(page);
@@ -127,36 +131,36 @@ test("switches DiagramViews, searches the current view, and preserves revision-s
   await page.getByRole("option", { name: "schema public" }).click();
   await expect(search).toHaveAttribute("aria-expanded", "false");
 
-  await page.getByRole("button", { name: "Source", exact: true }).click();
+  await page.getByRole("button", { name: /^(Open|Collapse) source and outline$/ }).click();
   await findInEditor(page, "Table orders");
   await expect(page.getByText("This symbol is hidden by identity_only.")).toBeVisible();
   await page.getByRole("button", { name: "Show in Global" }).click();
   await expect(viewSelector).toHaveValue("GLOBAL");
-  await page.getByRole("button", { name: "Outline", exact: true }).click();
+  await openWorkspaceTab(page, "Outline");
   await expect(
     page.locator("#workspace-outline-surface").getByRole("button", {
       name: "Focus public.orders in diagram",
     }),
   ).toHaveAttribute("aria-current", "true");
-  await page.getByRole("button", { name: "Outline", exact: true }).click();
+  await page.getByRole("button", { name: "Collapse source and outline" }).click();
 
   await viewSelector.selectOption({ label: "identity_only" });
-  await page.getByRole("button", { name: "Source", exact: true }).click();
+  await openWorkspaceTab(page, "Source");
   await replaceEditorSource(editor, INVALID_SOURCE);
   await expect.poll(() => api.writes.length).toBe(1);
   await expect(page.getByText(/Showing last-valid revision 1/)).toBeVisible();
   await expect(viewSelector).toHaveValue(identityViewValue);
-  await page.getByRole("button", { name: "Outline", exact: true }).click();
+  await openWorkspaceTab(page, "Outline");
   const firstVisibleTable = page.locator("#workspace-outline-surface").locator("details").first();
   await firstVisibleTable.locator("summary").click();
   await expect(
     firstVisibleTable.getByRole("button", { name: /Open source for table at line/ }),
   ).toBeDisabled();
-  await page.getByRole("button", { name: "Outline", exact: true }).click();
+  await page.getByRole("button", { name: "Collapse source and outline" }).click();
   await search.fill("profiles");
   await expect(page.getByRole("option", { name: "table public.profiles" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Source", exact: true }).click();
+  await openWorkspaceTab(page, "Source");
   await replaceEditorSource(editor, RECOVERED_SOURCE);
   await expect.poll(() => api.writes.length).toBe(2);
   await expect(page.getByText(/Showing the current valid draft/)).toBeVisible();

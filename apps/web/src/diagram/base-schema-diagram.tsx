@@ -55,6 +55,7 @@ export function BaseSchemaDiagram({
   selectionStore,
   onToggleGroup,
   onActivateElement,
+  onEditColumn,
   viewportInsets = EMPTY_VIEWPORT_INSETS,
   fillContainer = false,
   requestLayout = requestWorkerLayout,
@@ -348,10 +349,12 @@ export function BaseSchemaDiagram({
   const interactions = useMemo(
     () => ({
       activateElement,
+      editColumn: (request: Parameters<NonNullable<BaseSchemaDiagramProps["onEditColumn"]>>[0]) =>
+        onEditColumn?.(request),
       toggleGroup: onToggleGroup,
       showEdgeLabels: shouldShowDiagramEdgeLabels(displayProjection.edges.length),
     }),
-    [activateElement, displayProjection.edges.length, onToggleGroup],
+    [activateElement, displayProjection.edges.length, onEditColumn, onToggleGroup],
   );
   const handleFlowInit = useCallback(
     (instance: ReactFlowInstance<SchemaDiagramNode, SchemaDiagramEdge>) => {

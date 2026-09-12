@@ -556,7 +556,7 @@ describe("column visual source patches", () => {
     const result = await expectSuccess(
       withCheck,
       command({
-        kind: "UPDATE_COLUMN",
+        kind: "ALTER_COLUMN",
         targetTableKey: TABLE_KEY,
         targetColumnKey: ID_COLUMN_KEY,
         changes: {
@@ -581,7 +581,7 @@ describe("column visual source patches", () => {
     const result = await expectSuccess(
       quoted,
       command({
-        kind: "UPDATE_COLUMN",
+        kind: "ALTER_COLUMN",
         targetTableKey: qualifiedElementKey("table", "catalog", "contacts"),
         targetColumnKey: qualifiedElementKey("column", "catalog", "contacts", "email"),
         changes: {
@@ -604,7 +604,7 @@ describe("column visual source patches", () => {
     const result = await expectSuccess(
       composite,
       command({
-        kind: "RENAME_COLUMN",
+        kind: "ALTER_COLUMN",
         targetTableKey: TABLE_KEY,
         targetColumnKey: EMAIL_COLUMN_KEY,
         newName: "email_address",
@@ -616,11 +616,48 @@ describe("column visual source patches", () => {
     expect(result.source).toContain("catalog.users.(email_address, id)");
   });
 
+  it("atomically renames, updates, and reorders one column", async () => {
+    const result = await expectSuccess(
+      source,
+      command({
+        kind: "ALTER_COLUMN",
+        targetTableKey: TABLE_KEY,
+        targetColumnKey: EMAIL_COLUMN_KEY,
+        newName: "primary_email",
+        changes: {
+          type: "text",
+          unique: false,
+          notNull: true,
+          default: { type: "string", value: "unknown@example.test" },
+          note: "Primary contact",
+        },
+        beforeColumnKey: ID_COLUMN_KEY,
+      }),
+    );
+
+    expect(result.source.indexOf("primary_email text")).toBeLessThan(
+      result.source.indexOf("id bigint"),
+    );
+    expect(result.source).toContain(
+      'primary_email text [not null, default: "unknown@example.test", note: "Primary contact"]',
+    );
+    expect(result.source).toContain("primary_email [name:");
+    expect(result.source).toContain("catalog.users.primary_email");
+    expect(result.semanticDiff.renameCandidates).toEqual([
+      expect.objectContaining({
+        elementKind: "column",
+        beforeKey: EMAIL_COLUMN_KEY,
+        confidence: "HIGH",
+        reason: "UNIQUE_EXACT_STRUCTURE",
+      }),
+    ]);
+  });
+
   it("quotes a renamed column across structural references", async () => {
     const result = await expectSuccess(
       source,
       command({
-        kind: "RENAME_COLUMN",
+        kind: "ALTER_COLUMN",
         targetTableKey: TABLE_KEY,
         targetColumnKey: DISPLAY_COLUMN_KEY,
         newName: "full name",
@@ -635,7 +672,7 @@ describe("column visual source patches", () => {
     const result = await expectSuccess(
       source,
       command({
-        kind: "REORDER_COLUMN",
+        kind: "ALTER_COLUMN",
         targetTableKey: TABLE_KEY,
         targetColumnKey: DISPLAY_COLUMN_KEY,
         beforeColumnKey: EMAIL_COLUMN_KEY,
@@ -652,9 +689,49 @@ describe("column visual source patches", () => {
     const result = await expectSuccess(
       source,
       command({
-        kind: "REORDER_COLUMN",
+        kind: "ALTER_COLUMN",
         targetTableKey: TABLE_KEY,
         targetColumnKey: EMAIL_COLUMN_KEY,
+        beforeColumnKey: DISPLAY_COLUMN_KEY,
+      }),
+    );
+
+    expect(result).toMatchObject({
+      changed: false,
+      source,
+      edits: [],
+      semanticDiff: { changes: [], renameCandidates: [] },
+    });
+  });
+
+  it("applies only the changed part of a mixed ALTER_COLUMN payload", async () => {
+    const result = await expectSuccess(
+      source,
+      command({
+        kind: "ALTER_COLUMN",
+        targetTableKey: TABLE_KEY,
+        targetColumnKey: EMAIL_COLUMN_KEY,
+        newName: "email",
+        changes: { type: "varchar", unique: true, notNull: true },
+        beforeColumnKey: DISPLAY_COLUMN_KEY,
+      }),
+    );
+
+    expect(result.source).toContain("email varchar [unique, not null]");
+    expect(result.source).toContain("catalog.users.email");
+    expect(result.semanticDiff.renameCandidates).toEqual([]);
+    expect(result.edits).toHaveLength(1);
+  });
+
+  it("returns one durable no-op shape when every ALTER_COLUMN field is already satisfied", async () => {
+    const result = await expectSuccess(
+      source,
+      command({
+        kind: "ALTER_COLUMN",
+        targetTableKey: TABLE_KEY,
+        targetColumnKey: EMAIL_COLUMN_KEY,
+        newName: "email",
+        changes: { type: "varchar", unique: true },
         beforeColumnKey: DISPLAY_COLUMN_KEY,
       }),
     );
@@ -671,7 +748,7 @@ describe("column visual source patches", () => {
     const movedLater = await expectSuccess(
       source,
       command({
-        kind: "REORDER_COLUMN",
+        kind: "ALTER_COLUMN",
         targetTableKey: TABLE_KEY,
         targetColumnKey: ID_COLUMN_KEY,
         beforeColumnKey: DISPLAY_COLUMN_KEY,
@@ -687,7 +764,7 @@ describe("column visual source patches", () => {
     const movedLast = await expectSuccess(
       source,
       command({
-        kind: "REORDER_COLUMN",
+        kind: "ALTER_COLUMN",
         targetTableKey: TABLE_KEY,
         targetColumnKey: ID_COLUMN_KEY,
         beforeColumnKey: null,
@@ -706,7 +783,7 @@ describe("column visual source patches", () => {
     const result = await expectSuccess(
       crlf,
       command({
-        kind: "REORDER_COLUMN",
+        kind: "ALTER_COLUMN",
         targetTableKey: qualifiedElementKey("table", "catalog", "audit"),
         targetColumnKey: qualifiedElementKey("column", "catalog", "audit", "first"),
         beforeColumnKey: null,
@@ -782,7 +859,7 @@ Table catalog.events {
     const opaqueResult = await transformTableColumnCommand(
       opaque,
       command({
-        kind: "RENAME_COLUMN",
+        kind: "ALTER_COLUMN",
         targetTableKey: TABLE_KEY,
         targetColumnKey: EMAIL_COLUMN_KEY,
         newName: "email_address",
@@ -816,7 +893,7 @@ Table catalog.events {
     await expectFailureCode(
       withPartial,
       command({
-        kind: "REORDER_COLUMN",
+        kind: "ALTER_COLUMN",
         targetTableKey: events.key,
         targetColumnKey: id.key,
         beforeColumnKey: injected.key,
@@ -838,7 +915,7 @@ Table catalog.events {
     await expectFailureCode(
       source,
       command({
-        kind: "RENAME_COLUMN",
+        kind: "ALTER_COLUMN",
         targetTableKey: TABLE_KEY,
         targetColumnKey: EMAIL_COLUMN_KEY,
         newName: "id",
@@ -871,7 +948,7 @@ Table catalog.events {
     const result = await expectSuccess(
       literals,
       command({
-        kind: "RENAME_COLUMN",
+        kind: "ALTER_COLUMN",
         targetTableKey: qualifiedElementKey("table", "catalog", "messages"),
         targetColumnKey: qualifiedElementKey("column", "catalog", "messages", "email"),
         newName: "email_address",
@@ -885,7 +962,7 @@ Table catalog.events {
     const success = await expectSuccess(
       source,
       command({
-        kind: "UPDATE_COLUMN",
+        kind: "ALTER_COLUMN",
         targetTableKey: TABLE_KEY,
         targetColumnKey: EMAIL_COLUMN_KEY,
         changes: { note: "로그인 😀" },

@@ -133,7 +133,7 @@ services:
   er-diagram:
     environment:
       ER_DIAGRAM_STARTUP_MIGRATION: APPLY_WITH_BACKUP
-      ER_DIAGRAM_STARTUP_MIGRATION_BACKUP_OUTPUT: /data/pre-migration-v2
+      ER_DIAGRAM_STARTUP_MIGRATION_BACKUP_OUTPUT: /data/pre-migration-v3
 ```
 
 첫 successful startup 뒤에는 override를 제거한다. Backup directory는 자동 삭제되지 않는다.

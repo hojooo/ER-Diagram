@@ -75,6 +75,11 @@ hash를 재사용하지 말고 dry-run부터 다시 실행한다.
 
 지원되는 구버전 database를 migration하기 전에 다음 dry-run을 실행한다.
 
+현재 runtime의 storage schema는 version 3이다. Version 2 volume에는 historical column command receipt가
+그대로 남아 있으며 migration은 이를 삭제하거나 `ALTER_COLUMN`으로 변환하지 않고 version 3 allowlist table로
+복사한다. Production 기본값은 `MANUAL`이므로 version 2 volume은 아래 backup 동반 절차를 완료하기 전에는
+server가 열지 않는다.
+
 ```sh
 pnpm storage:migrate -- \
   --database /data/er-diagram.sqlite \

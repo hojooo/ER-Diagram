@@ -23,13 +23,11 @@ import { useProjectApi } from "../projects/project-api-context.js";
 import { projectQueryKeys } from "../projects/project-queries.js";
 import { useRuntimeResourceLimits } from "../runtime-config.js";
 import { createDbmlParserWorkerClient } from "../source-editor/parser-worker-client.js";
+import { WorkflowSteps } from "../workflow-steps.js";
 
-const buttonPrimary =
-  "inline-flex min-h-11 items-center justify-center rounded-lg bg-cyan-300 px-4 font-semibold text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50";
-const buttonSecondary =
-  "inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-700 px-4 font-semibold text-slate-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50";
-const inputClass =
-  "min-h-11 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-slate-100 focus:border-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-300";
+const buttonPrimary = "ui-button ui-button--primary";
+const buttonSecondary = "ui-button";
+const inputClass = "ui-input";
 
 type ImportMode = "NEW" | "REPLACE";
 type ReportStatus = "EXACT" | "NORMALIZED" | "PARTIAL" | "UNSUPPORTED" | "ERROR";
@@ -349,7 +347,7 @@ function SqlImportPage({
   }
 
   return (
-    <section aria-labelledby="sql-import-heading" className="space-y-6">
+    <section aria-labelledby="sql-import-heading" className="ui-document space-y-6">
       <div className="border-b border-slate-800 pb-6">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">
           {mode === "NEW" ? messages["sqlImport.newProject"] : messages["sqlImport.replaceProject"]}
@@ -362,11 +360,17 @@ function SqlImportPage({
         </p>
       </div>
 
+      <WorkflowSteps
+        steps={[
+          messages["sqlImport.source"],
+          messages["sqlImport.preview"],
+          messages["sqlImport.apply"],
+        ]}
+        current={busy === "APPLY" ? 2 : phase === "PREVIEW" ? 1 : 0}
+      />
+
       {phase === "EDIT" ? (
-        <form
-          className="grid gap-5 rounded-2xl border border-slate-800 bg-slate-900 p-6"
-          onSubmit={(event) => void handlePreview(event)}
-        >
+        <form className="grid gap-5 ui-surface p-6" onSubmit={(event) => void handlePreview(event)}>
           {mode === "NEW" ? (
             <label className="grid gap-2 text-sm font-semibold text-slate-200">
               {messages["projects.name"]}
@@ -434,7 +438,7 @@ function SqlImportPage({
             </span>
           </label>
           <PublicError error={error} />
-          <div className="flex flex-wrap justify-end gap-3">
+          <div className="ui-actions">
             <button className={buttonSecondary} type="button" onClick={cancelImport}>
               {messages["sqlImport.cancel"]}
             </button>
@@ -452,7 +456,7 @@ function SqlImportPage({
               {messages["sqlImport.source"]}
               <textarea
                 ref={sqlRef}
-                className={`${inputClass} min-h-80 py-3 font-mono text-xs`}
+                className={`${inputClass} min-h-80 py-3 font-mono text-sm`}
                 value={source}
                 readOnly
                 spellCheck={false}
@@ -461,7 +465,7 @@ function SqlImportPage({
             <label className="grid gap-2 text-sm font-semibold text-slate-200">
               {messages["sqlImport.generatedDbml"]}
               <textarea
-                className={`${inputClass} min-h-80 py-3 font-mono text-xs`}
+                className={`${inputClass} min-h-80 py-3 font-mono text-sm`}
                 value={preview.candidate?.dbml ?? messages["sqlImport.noCandidateDbml"]}
                 readOnly
                 spellCheck={false}
@@ -507,7 +511,7 @@ function SqlImportPage({
             </p>
           ) : null}
           <PublicError error={error} />
-          <div className="flex flex-wrap justify-end gap-3">
+          <div className="ui-actions">
             <button className={buttonSecondary} type="button" onClick={cancelImport}>
               {messages["sqlImport.cancel"]}
             </button>
@@ -556,10 +560,7 @@ function ReportPanel({
 }) {
   const { messages } = useUiLocale();
   return (
-    <section
-      className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
-      aria-labelledby="conversion-report-heading"
-    >
+    <section className="ui-surface p-5" aria-labelledby="conversion-report-heading">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="conversion-report-heading" className="text-xl font-semibold text-white">
@@ -596,7 +597,7 @@ function ReportPanel({
               onClick={() => onSelect(item.range)}
             >
               <span className="font-semibold text-cyan-200">{item.status}</span>{" "}
-              <span className="font-mono text-xs text-slate-300">{item.code}</span>
+              <span className="font-mono text-sm text-slate-300">{item.code}</span>
               <span className="ml-2 text-slate-400">
                 {messages["sqlImport.range"](item.range.startLine, item.range.startColumn)}
               </span>
@@ -631,10 +632,7 @@ function SemanticInventory({
   }, {});
   const visible = state.changes.slice(0, 200);
   return (
-    <section
-      className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
-      aria-labelledby="semantic-inventory-heading"
-    >
+    <section className="ui-surface p-5" aria-labelledby="semantic-inventory-heading">
       <h2 id="semantic-inventory-heading" className="text-xl font-semibold text-white">
         {messages["sqlImport.inventoryTitle"]}
       </h2>
@@ -643,7 +641,7 @@ function SemanticInventory({
           .map(([key, count]) => `${key}: ${count}`)
           .join(" · ") || messages["sqlImport.noSemanticChanges"]}
       </p>
-      <ol className="mt-3 grid gap-1 font-mono text-xs text-slate-400">
+      <ol className="mt-3 grid gap-1 font-mono text-sm text-slate-400">
         {visible.map((change) => (
           <li key={`${change.operation}:${change.key}`}>
             {change.operation} {change.elementKind} {change.key}

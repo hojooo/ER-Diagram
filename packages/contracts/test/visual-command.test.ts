@@ -67,9 +67,10 @@ const validCommands = [
   },
   {
     ...base,
-    kind: "UPDATE_COLUMN",
+    kind: "ALTER_COLUMN",
     targetTableKey: TABLE_KEY,
     targetColumnKey: COLUMN_KEY,
+    newName: "user id",
     changes: {
       type: "bigint",
       primaryKey: true,
@@ -79,19 +80,6 @@ const validCommands = [
       increment: true,
       note: null,
     },
-  },
-  {
-    ...base,
-    kind: "RENAME_COLUMN",
-    targetTableKey: TABLE_KEY,
-    targetColumnKey: COLUMN_KEY,
-    newName: "user id",
-  },
-  {
-    ...base,
-    kind: "REORDER_COLUMN",
-    targetTableKey: TABLE_KEY,
-    targetColumnKey: COLUMN_KEY,
     beforeColumnKey: OTHER_COLUMN_KEY,
   },
   {
@@ -221,9 +209,7 @@ describe("VisualCommand contract", () => {
       "RENAME_TABLE",
       "DELETE_TABLE",
       "CREATE_COLUMN",
-      "UPDATE_COLUMN",
-      "RENAME_COLUMN",
-      "REORDER_COLUMN",
+      "ALTER_COLUMN",
       "DELETE_COLUMN",
       "CREATE_REFERENCE",
       "UPDATE_REFERENCE",
@@ -259,9 +245,12 @@ describe("VisualCommand contract", () => {
       { ...commandOfKind("RENAME_TABLE"), newName: "bad\nname" },
       { ...commandOfKind("DELETE_TABLE"), targetTableKey: COLUMN_KEY },
       { ...createColumn, column: { ...createColumn.column, type: "text; DROP" } },
-      { ...commandOfKind("UPDATE_COLUMN"), changes: {} },
-      { ...commandOfKind("RENAME_COLUMN"), newName: "bad\rname" },
-      { ...commandOfKind("REORDER_COLUMN"), beforeColumnKey: COLUMN_KEY },
+      {
+        ...commandOfKind("ALTER_COLUMN"),
+        newName: undefined,
+        changes: undefined,
+        beforeColumnKey: undefined,
+      },
       { ...commandOfKind("DELETE_COLUMN"), targetColumnKey: TABLE_KEY },
       {
         ...createReference,
@@ -300,6 +289,44 @@ describe("VisualCommand contract", () => {
       expect(visualCommandSchema.safeParse(command).success).toBe(false);
     }
   });
+
+  it("accepts atomic column name, attribute, and order combinations", () => {
+    const alterColumn = commandOfKind("ALTER_COLUMN");
+    const common = {
+      ...base,
+      kind: "ALTER_COLUMN" as const,
+      targetTableKey: TABLE_KEY,
+      targetColumnKey: COLUMN_KEY,
+    };
+
+    expect(visualCommandSchema.safeParse({ ...common, newName: "member_id" }).success).toBe(true);
+    expect(visualCommandSchema.safeParse({ ...common, changes: { notNull: true } }).success).toBe(
+      true,
+    );
+    expect(visualCommandSchema.safeParse({ ...common, beforeColumnKey: null }).success).toBe(true);
+    expect(visualCommandSchema.safeParse(alterColumn).success).toBe(true);
+    expect(visualCommandSchema.safeParse({ ...common, beforeColumnKey: COLUMN_KEY }).success).toBe(
+      false,
+    );
+    expect(visualCommandSchema.safeParse({ ...common, changes: {} }).success).toBe(false);
+  });
+
+  it.each(["UPDATE_COLUMN", "RENAME_COLUMN", "REORDER_COLUMN"])(
+    "rejects the removed %s wire command",
+    (kind) => {
+      expect(
+        visualCommandSchema.safeParse({
+          ...base,
+          kind,
+          targetTableKey: TABLE_KEY,
+          targetColumnKey: COLUMN_KEY,
+          newName: "member_id",
+          changes: { notNull: true },
+          beforeColumnKey: null,
+        }).success,
+      ).toBe(false);
+    },
+  );
 
   it("rejects invalid envelopes and unknown fields at every trust boundary", () => {
     const command = commandOfKind("CREATE_TABLE");

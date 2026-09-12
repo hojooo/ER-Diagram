@@ -15,6 +15,13 @@
       "when": 1788051600000,
       "tag": "0001_visual_command_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788483600000,
+      "tag": "0002_atomic_column_command",
+      "breakpoints": true
     }
   ]
 }

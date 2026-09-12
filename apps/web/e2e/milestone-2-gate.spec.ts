@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { expect, type Page, test } from "./test-fixture.js";
 import {
   computeSqlImportCreatePreviewHash,
   computeSqlImportPreviewHash,
@@ -13,8 +12,8 @@ import {
   type SqlInterchangeGateFixture,
   sqlInterchangeGateFixtures,
 } from "@er-diagram/test-fixtures";
-
 import { createControlledLayoutApi } from "./controlled-layout-api.js";
+import { expect, type Page, test } from "./test-fixture.js";
 
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-0123456789ab";
 const REVISION_1_ID = "019d3f4e-7b6c-7def-9abc-0123456789ab";
@@ -41,7 +40,7 @@ test("M2-GATE creates PostgreSQL from reported DDL-only import and downloads ver
   await page.getByRole("button", { name: "Apply import" }).click();
 
   await expect(page).toHaveURL(`/projects/${PROJECT_ID}`);
-  await expect(page.getByText("Revision 1 · Parser 9.1.1")).toBeVisible();
+  await expect(page.getByTestId("workspace-command-bar").getByText(/revision 1$/)).toBeVisible();
   expect(api.createCalls()).toBe(1);
   expect(api.currentState()?.currentRevision.origin).toBe("SQL_IMPORT");
   await verifyExportDownload(page, fixture);
@@ -69,7 +68,7 @@ test("M2-GATE replaces MySQL only after independent loss and data acknowledgemen
   await page.getByRole("button", { name: "Apply import" }).click();
 
   await expect(page).toHaveURL(`/projects/${PROJECT_ID}`);
-  await expect(page.getByText("Revision 2 · Parser 9.1.1")).toBeVisible();
+  await expect(page.getByTestId("workspace-command-bar").getByText(/revision 2$/)).toBeVisible();
   expect(api.applyCalls()).toBe(1);
   expect(api.currentState()?.currentRevision.origin).toBe("SQL_IMPORT");
   await verifyExportDownload(page, fixture);

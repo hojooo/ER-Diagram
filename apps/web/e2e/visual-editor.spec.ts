@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { expect, type Page, test } from "./test-fixture.js";
-
 import { createControlledLayoutApi } from "./controlled-layout-api.js";
+import { expect, type Page, test } from "./test-fixture.js";
+import { openWorkspaceInspector, openWorkspaceTab } from "./workspace-panels.js";
 
 const PROJECT_ID = "019d3f4e-7b6c-7abc-8def-7123456789ab";
 const CREATED_AT = "2026-08-30T01:02:03.004Z";
@@ -55,8 +55,8 @@ test("applies inspector commands through authoritative state without a draft PUT
   await expect(page.getByTestId("base-diagram-layout-status")).toHaveText("Diagram layout ready", {
     timeout: 20_000,
   });
-  await page.getByRole("button", { name: "Inspector", exact: true }).click();
-  await expect(page.locator("#workspace-inspector-surface")).toHaveCSS("opacity", "1");
+  await openWorkspaceInspector(page);
+  await expect(page.getByTestId("workspace-inspector-scroll")).toBeVisible();
 
   await page.getByRole("button", { name: "Create table" }).click();
   await page.getByLabel("Table name").fill("audit_log");
@@ -70,13 +70,13 @@ test("applies inspector commands through authoritative state without a draft PUT
     expectedSchemaRevisionNo: 1,
   });
   await expect(page.getByText("Selected table public.audit_log")).toBeVisible({ timeout: 20_000 });
-  await page.getByRole("button", { name: "Outline", exact: true }).click();
+  await openWorkspaceTab(page, "Outline");
   await expect(
     page.locator("#workspace-outline-surface").getByRole("button", {
       name: "Focus public.audit_log in diagram",
     }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Source", exact: true }).click();
+  await openWorkspaceTab(page, "Source");
   await expectEditorContains(page, "Table public.audit_log");
 
   await page.getByRole("button", { name: "Create column" }).click();
@@ -89,7 +89,7 @@ test("applies inspector commands through authoritative state without a draft PUT
     expectedSchemaRevisionNo: 2,
     column: { name: "event_name", type: "varchar(120)" },
   });
-  await page.getByRole("button", { name: "Outline", exact: true }).click();
+  await openWorkspaceTab(page, "Outline");
   await expect(
     page.locator("#workspace-outline-surface").getByRole("button", {
       name: "Focus column event_name in diagram",
@@ -106,6 +106,63 @@ test("applies inspector commands through authoritative state without a draft PUT
   await page.getByRole("button", { name: "Open partial definition" }).click();
   await expect(page.getByRole("textbox", { name: "DBML source editor" })).toBeFocused();
 
+  expect(api.draftWrites).toEqual([]);
+  expect(browserErrors).toEqual([]);
+});
+
+test("opens the atomic column editor from the canvas above the workspace tools", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const browserErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") browserErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const api = await installVisualCommandApi(page);
+
+  await page.goto(`/projects/${PROJECT_ID}`);
+  await expect(page.getByTestId("base-diagram-layout-status")).toHaveText("Diagram layout ready", {
+    timeout: 20_000,
+  });
+
+  const users = page.getByRole("article", { name: "Table public.users" });
+  await users.getByRole("button", { name: /id, bigint, PK/ }).dblclick();
+
+  const editor = page.getByTestId("canvas-column-inline-editor");
+  const nameInput = editor.getByLabel("Column name");
+  await expect(editor).toBeVisible();
+  await expect(nameInput).toBeFocused();
+  const [editorBox, toolsBox, inputBox] = await Promise.all([
+    editor.boundingBox(),
+    page.getByTestId("workspace-right-tool-dock").boundingBox(),
+    nameInput.boundingBox(),
+  ]);
+  expect(editorBox).not.toBeNull();
+  expect(toolsBox).not.toBeNull();
+  expect(inputBox).not.toBeNull();
+  if (!editorBox || !toolsBox || !inputBox) throw new Error("Missing workspace geometry.");
+  expect(editorBox.x + editorBox.width).toBeLessThanOrEqual(toolsBox.x);
+  const inputReceivesPointer = await nameInput.evaluate(
+    (input, { x, y }) => document.elementFromPoint(x, y) === input,
+    { x: inputBox.x + inputBox.width / 2, y: inputBox.y + inputBox.height / 2 },
+  );
+  expect(inputReceivesPointer).toBe(true);
+
+  await nameInput.fill("user_id");
+  await editor.getByRole("button", { name: "Apply command" }).click();
+  await expect.poll(() => api.commands.length).toBe(1);
+  expect(api.commands[0]).toMatchObject({
+    kind: "ALTER_COLUMN",
+    newName: "user_id",
+    expectedSchemaRevisionNo: 1,
+  });
+  await expect(editor).toBeHidden({ timeout: 20_000 });
+  await expect(
+    page
+      .getByRole("article", { name: "Table public.users" })
+      .getByRole("button", { name: /user_id, bigint, PK/ }),
+  ).toBeVisible({ timeout: 20_000 });
   expect(api.draftWrites).toEqual([]);
   expect(browserErrors).toEqual([]);
 });
@@ -212,6 +269,11 @@ function applyControlledCommand(source: string, command: Record<string, unknown>
     const column = command.column as { name: string; type: string };
     const marker = "Table public.audit_log {\n";
     return source.replace(marker, `${marker}  ${column.name} ${column.type}\n`);
+  }
+  if (command.kind === "ALTER_COLUMN") {
+    const newName = typeof command.newName === "string" ? command.newName : "id";
+    const changes = command.changes as { type?: string } | undefined;
+    return source.replace("  id bigint [pk]", `  ${newName} ${changes?.type ?? "bigint"} [pk]`);
   }
   throw new Error(`Unsupported controlled visual command ${String(command.kind)}.`);
 }

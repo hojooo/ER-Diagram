@@ -77,7 +77,7 @@ export function DiagramWorkspaceControls({
         <label htmlFor={`${listboxId}-view`}>{messages["diagram.view"]}</label>
         <select
           id={`${listboxId}-view`}
-          className="min-h-10 w-full min-w-0 max-w-full rounded-lg border border-slate-600 bg-slate-950 px-3 text-sm text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+          className="ui-input min-w-0 w-full max-w-full"
           value={viewKey}
           disabled={disabled}
           aria-describedby={sidebar ? `${listboxId}-current-view` : undefined}
@@ -114,7 +114,7 @@ export function DiagramWorkspaceControls({
         <label htmlFor={`${listboxId}-input`}>{messages["diagram.search"]}</label>
         <input
           id={`${listboxId}-input`}
-          className="min-h-10 w-full min-w-0 max-w-full rounded-lg border border-slate-600 bg-slate-950 px-3 text-sm text-slate-100 placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+          className="ui-input min-w-0 w-full max-w-full"
           type="search"
           role="combobox"
           autoComplete="off"
@@ -189,7 +189,7 @@ export function DiagramWorkspaceControls({
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => activateResult(result)}
                 >
-                  <span className="mr-2 text-[0.65rem] font-bold uppercase tracking-wide text-cyan-300">
+                  <span className="mr-2 text-xs font-bold uppercase tracking-wide text-cyan-300">
                     {result.kind}
                   </span>
                   <span>{result.qualifiedLabel}</span>
@@ -218,7 +218,7 @@ export function DiagramWorkspaceControls({
       >
         {messages["diagram.detailLevel"]}
         <select
-          className="min-h-10 w-full min-w-0 max-w-full rounded-lg border border-slate-600 bg-slate-950 px-3 text-sm text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+          className="ui-input min-w-0 w-full max-w-full"
           value={detailLevel}
           disabled={disabled}
           onChange={(event) => onDetailLevelChange(event.target.value as DiagramLod)}

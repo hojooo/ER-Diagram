@@ -10,9 +10,7 @@ const TABLE_COLUMN_KINDS = new Set<VisualCommand["kind"]>([
   "RENAME_TABLE",
   "DELETE_TABLE",
   "CREATE_COLUMN",
-  "UPDATE_COLUMN",
-  "RENAME_COLUMN",
-  "REORDER_COLUMN",
+  "ALTER_COLUMN",
   "DELETE_COLUMN",
 ]);
 
