@@ -576,6 +576,7 @@ export function BaseSchemaDiagram({
           nodesDraggable={
             !interactionDisabled && layoutStatus === "READY" && tableInlineRename === null
           }
+          autoPanOnNodeDrag={false}
           nodesConnectable={false}
           nodesFocusable={false}
           edgesReconnectable={false}
